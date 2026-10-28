@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-receipt</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:720px;padding:28px}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tab{padding:8px 14px;border-radius:8px;border:1px solid #e6e2da;font-weight:700;font-size:13px}
+.tab.on{background:#3B4F6E;color:#fff;border-color:#3B4F6E}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">استلام الصادر</div>
+    <div class="sub">ص/2026/000150 — توثيق التسليم اليدوي</div>
+    <div class="tabs"><div class="tab on">الاستلام</div><div class="tab">تغيير حالة التسليم</div></div>
+    <div class="row">
+      <div><label>اسم المستلم كاملاً *</label><input value="محمد عبدالله" readonly></div>
+      <div><label>تاريخ الاستلام *</label><input value="2026-09-08" readonly></div>
+    </div>
+    <div class="row">
+      <div><label>رقم الهاتف</label><input value="05xxxxxxxx" readonly></div>
+      <div><label>صورة سند التسليم</label><input value="سند.pdf" readonly><div class="hint">اختياري — حتى 8 ميجا</div></div>
+    </div>
+    <div class="actions"><button class="btn" type="button">حفظ بيانات المستلم وتسجيل التسليم</button></div>
+  </div>
+</body>
+</html>

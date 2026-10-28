@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-outgoing</title>
+<style>
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Regular.otf') format('opentype');font-weight:400}
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Bold.otf') format('opentype');font-weight:700}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;font-family:'GretaArabic',Arial,sans-serif;background:#f8f6f2;color:#3B4F6E}
+body{display:flex;align-items:center;justify-content:center;
+background-image:radial-gradient(ellipse at 15% 10%,rgba(249,241,235,.95),transparent 55%),radial-gradient(ellipse at 85% 90%,rgba(59,79,110,.08),transparent 50%)}
+.card{width:720px;background:#fff;border:1px solid #e6e2da;border-top:4px solid #3B4F6E;border-radius:16px;padding:28px;box-shadow:0 12px 40px rgba(59,79,110,.12)}
+.h{font-size:22px;font-weight:700;margin-bottom:4px}
+.sub{font-size:13px;color:#6b7280;margin-bottom:18px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+input,select,textarea{width:100%;border:1px solid #e6e2da;border-radius:8px;padding:10px 12px;font:inherit;font-size:14px;color:#3B4F6E;background:#fff}
+textarea{min-height:90px;resize:none}
+.actions{display:flex;gap:10px;justify-content:flex-start;margin-top:8px}
+.btn{border:0;border-radius:8px;background:#3B4F6E;color:#fff;font:inherit;font-weight:700;padding:11px 22px}
+.btn2{border:1px solid #e6e2da;border-radius:8px;background:#fff;color:#3B4F6E;font:inherit;font-weight:700;padding:11px 22px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="h">صادر جديد</div>
+    <div class="sub">مؤسسة الملك فيصل الخيرية — نظام الصادر والوارد</div>
+    <div class="row">
+      <div><label>الموضوع</label><input value="طلب تعاون" readonly></div>
+      <div><label>التاريخ</label><input value="2026-09-08" readonly></div>
+    </div>
+    <div class="row">
+      <div><label>الجهة المستلمة</label><input value="جهة المراسلة" readonly></div>
+      <div><label>القسم</label><input value="قسم المستخدم" readonly></div>
+    </div>
+    <div style="margin-bottom:14px"><label>ملاحظات</label><textarea readonly>نص مختصر للمعاملة</textarea></div>
+    <div class="actions">
+      <button class="btn" type="button">حفظ</button>
+      <button class="btn2" type="button">إرفاق ملف</button>
+    </div>
+  </div>
+</body>
+</html>

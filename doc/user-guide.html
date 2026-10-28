@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>دليل المستخدم — نظام الصادر والوارد والداخلي</title>
+  <style>
+    @font-face {
+      font-family: 'GretaArabic';
+      src: url('images/user-guide/GretaArabic-Regular.otf') format('opentype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'GretaArabic';
+      src: url('images/user-guide/GretaArabic-Bold.otf') format('opentype');
+      font-weight: 700;
+      font-style: normal;
+    }
+    :root {
+      --kff-accent: #3B4F6E;
+      --kff-accent-dark: #2c3e50;
+      --kff-bg: #f8f6f2;
+      --kff-cream: #f9f1eb;
+      --kff-card: #ffffff;
+      --kff-text: #3B4F6E;
+      --kff-muted: #6b7280;
+      --kff-border: #e6e2da;
+      --shadow: 0 8px 24px rgba(59, 79, 110, 0.07);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'GretaArabic', 'Greta Arabic', Arial, sans-serif;
+      background-color: var(--kff-bg);
+      background-image:
+        radial-gradient(ellipse at 15% 10%, rgba(249,241,235,.95), transparent 55%),
+        radial-gradient(ellipse at 85% 90%, rgba(59,79,110,.08), transparent 50%);
+      color: var(--kff-text);
+      line-height: 1.8;
+      font-size: 15px;
+    }
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 28px 18px 56px;
+    }
+    .hero {
+      background: var(--kff-card);
+      color: var(--kff-text);
+      border-radius: 16px;
+      padding: 28px 24px 24px;
+      text-align: center;
+      margin-bottom: 18px;
+      border: 1px solid var(--kff-border);
+      border-top: 4px solid var(--kff-accent);
+      box-shadow: var(--shadow);
+    }
+    .hero-logo {
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    .hero-logo img {
+      width: 140px;
+      max-width: 160px;
+      height: auto;
+      max-height: 100px;
+      object-fit: contain;
+      display: block;
+    }
+    .hero h1 {
+      margin: 10px 0 6px;
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: var(--kff-accent);
+    }
+    .hero .sub {
+      margin: 0;
+      color: var(--kff-muted);
+      font-size: .95rem;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .toolbar button,
+    .toolbar a {
+      appearance: none;
+      border: 1px solid var(--kff-border);
+      background: #fff;
+      color: var(--kff-accent);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 700;
+      box-shadow: 0 4px 10px rgba(59,79,110,0.08);
+    }
+    .toolbar .primary {
+      background: var(--kff-accent);
+      border-color: var(--kff-accent);
+      color: #fff;
+      box-shadow: 0 4px 10px rgba(59,79,110,0.16);
+    }
+    .toolbar .primary:hover {
+      background: var(--kff-accent-dark);
+      border-color: var(--kff-accent-dark);
+    }
+    .toc {
+      background: var(--kff-card);
+      border: 1px solid var(--kff-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+    .toc h2 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+      color: var(--kff-accent);
+    }
+    .toc ol {
+      margin: 0;
+      padding-inline-start: 1.3rem;
+      columns: 2;
+      gap: 18px;
+    }
+    .toc a {
+      color: var(--kff-accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .toc a:hover { color: var(--kff-accent-dark); text-decoration: underline; }
+    section {
+      background: var(--kff-card);
+      border: 1px solid var(--kff-border);
+      border-radius: 14px;
+      padding: 20px 20px 16px;
+      margin-bottom: 14px;
+      border-top: 3px solid var(--kff-accent);
+      box-shadow: var(--shadow);
+    }
+    section h2 {
+      margin: 0 0 10px;
+      font-size: 1.18rem;
+      color: var(--kff-accent);
+      border-bottom: 1px solid var(--kff-border);
+      padding-bottom: 8px;
+    }
+    section h3 {
+      margin: 14px 0 6px;
+      font-size: 1rem;
+      color: var(--kff-accent);
+    }
+    ol, ul { margin: 8px 0 12px; padding-inline-start: 1.35rem; }
+    li { margin: 5px 0; }
+    .note {
+      background: var(--kff-cream);
+      border: 1px solid var(--kff-border);
+      border-right: 4px solid var(--kff-accent);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--kff-muted);
+      font-size: .93rem;
+    }
+    figure {
+      margin: 14px 0 6px;
+      text-align: center;
+    }
+    figure img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid var(--kff-border);
+      border-radius: 12px;
+      background: #fff;
+    }
+    figcaption {
+      margin-top: 6px;
+      font-size: .85rem;
+      color: var(--kff-muted);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 4px;
+      font-size: .95rem;
+    }
+    th, td {
+      border: 1px solid var(--kff-border);
+      padding: 8px 10px;
+      text-align: right;
+    }
+    th { background: var(--kff-bg); color: var(--kff-accent); }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .steps-4 { grid-template-columns: repeat(4, 1fr); }
+    .step {
+      background: var(--kff-bg);
+      border: 1px solid var(--kff-border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+    .step b {
+      display: block;
+      color: var(--kff-accent);
+      margin-bottom: 4px;
+    }
+    footer.doc-foot {
+      text-align: center;
+      color: var(--kff-muted);
+      font-size: .85rem;
+      margin-top: 10px;
+      padding-top: 8px;
+    }
+    @media (max-width: 720px) {
+      .toc ol { columns: 1; }
+      .steps, .steps-4 { grid-template-columns: 1fr; }
+    }
+    @page {
+      size: A4;
+      /* margin:0 يخفي ترويسة/تذييل المتصفح */
+      margin: 0;
+    }
+    .print-page-num {
+      display: none;
+    }
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html, body {
+        background: #fff !important;
+        background-image: none !important;
+        width: auto !important;
+        min-height: 0 !important;
+      }
+      body {
+        margin: 0;
+        padding: 10mm 12mm 14mm;
+        font-size: 11pt;
+        line-height: 1.55;
+        color: #3B4F6E;
+      }
+      .toolbar { display: none !important; }
+      .wrap {
+        max-width: none;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* لا تُمنع الأقسام الكاملة من التقسيم (تسبب فراغاً أو قصّاً) */
+      .hero, .toc, section {
+        box-shadow: none !important;
+        border-radius: 0;
+        background: #fff !important;
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+      .hero {
+        border: 1px solid #e6e2da;
+        border-top: 3pt solid #3B4F6E;
+        padding: 8mm 6mm;
+        margin: 0 0 6mm;
+        break-after: avoid;
+        page-break-after: avoid;
+      }
+      .toc {
+        border: 1px solid #e6e2da;
+        padding: 4mm 5mm;
+        margin: 0 0 6mm;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .toc ol {
+        columns: 2;
+        gap: 8mm;
+      }
+      section {
+        border: none;
+        border-top: 2pt solid #3B4F6E;
+        padding: 4mm 0 2mm;
+        margin: 0 0 5mm;
+      }
+      section h2,
+      section h3 {
+        break-after: avoid;
+        page-break-after: avoid;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        orphans: 3;
+        widows: 3;
+      }
+      p, li {
+        orphans: 3;
+        widows: 3;
+      }
+      li {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* إبقاء الصورة والجدول والملاحظة متماسكة */
+      figure {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 4mm 0;
+        text-align: center;
+      }
+      figure img {
+        max-width: 100% !important;
+        width: auto !important;
+        max-height: 145mm !important;
+        height: auto !important;
+        object-fit: contain;
+        border-radius: 0;
+        display: block;
+        margin: 0 auto;
+      }
+      figcaption {
+        break-before: avoid;
+        page-break-before: avoid;
+      }
+      table {
+        width: 100%;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        font-size: 10pt;
+      }
+      thead { display: table-header-group; }
+      tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .note {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 3mm 0;
+      }
+      .steps, .steps-4 {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 3mm;
+      }
+      .step {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      footer.doc-foot {
+        margin-top: 6mm;
+        padding-top: 3mm;
+        border-top: 1px solid #e6e2da;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* رقم واحد فقط: أسفل الصفحة على اليسار */
+      .print-page-num {
+        display: block;
+        position: absolute;
+        left: 12mm;
+        right: auto;
+        width: auto;
+        text-align: left;
+        direction: ltr;
+        font-size: 9pt;
+        line-height: 1;
+        color: #5a6577;
+        font-family: Arial, sans-serif;
+        pointer-events: none;
+        z-index: 9999;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="hero-logo">
+        <img src="images/user-guide/logo.png" alt="شعار الجهة">
+      </div>
+      <h1>دليل المستخدم الشامل</h1>
+      <p class="sub">نظام الصادر والوارد والداخلي</p>
+    </header>
+
+    <div class="toolbar">
+      <button class="primary" type="button">طباعة / حفظ PDF</button>
+    </div>
+
+    <nav class="toc" aria-label="فهرس">
+      <h2>المحتويات</h2>
+      <ol>
+        <li><a href="#login">تسجيل الدخول</a></li>
+        <li><a href="#topbar">الشريط العلوي</a></li>
+        <li><a href="#home">الصفحة الرئيسية</a></li>
+        <li><a href="#menu">القائمة الجانبية</a></li>
+        <li><a href="#lists">البحث والفلترة</a></li>
+        <li><a href="#outgoing">الصادر</a></li>
+        <li><a href="#bulk">صادر جماعي</a></li>
+        <li><a href="#incoming">الوارد</a></li>
+        <li><a href="#internal">المعاملات الداخلية</a></li>
+        <li><a href="#priority">الأولوية والسرية</a></li>
+        <li><a href="#attach">المرفقات</a></li>
+        <li><a href="#send">الإرسال</a></li>
+        <li><a href="#receipt">تسجيل الاستلام</a></li>
+        <li><a href="#refer">الإحالة</a></li>
+        <li><a href="#comments">التعليقات</a></li>
+        <li><a href="#brief">ورقة العرض</a></li>
+        <li><a href="#print">الطباعة والملصق والحراري وQR</a></li>
+        <li><a href="#cancel">إلغاء / سحب الصادر</a></li>
+        <li><a href="#close">إغلاق المعاملة</a></li>
+        <li><a href="#actions">يحتاج إجراء</a></li>
+        <li><a href="#reports">التقارير</a></li>
+        <li><a href="#circulars">التعاميم</a></li>
+        <li><a href="#archive">أرشيف الوثائق</a></li>
+        <li><a href="#entities">جهات المراسلة</a></li>
+        <li><a href="#groups">مجموعات الجهات</a></li>
+        <li><a href="#templates">قوالب الخطاب</a></li>
+        <li><a href="#verify">التحقق بـ QR</a></li>
+        <li><a href="#profile">الملف الشخصي</a></li>
+        <li><a href="#tips">نصائح</a></li>
+      </ol>
+    </nav>
+
+    <section id="login">
+      <h2>1) تسجيل الدخول</h2>
+      <ol>
+        <li>افتح رابط النظام من رسالة الدعوة أو من متصفحك على شبكة الجهة.</li>
+        <li>أدخل <strong>البريد الإلكتروني</strong> (هو اسم الدخول).</li>
+        <li>أدخل <strong>كلمة المرور</strong>.</li>
+        <li>اضغط <strong>دخول</strong>.</li>
+        <li>يُفضّل من <strong>ملفي الشخصي</strong> تغيير كلمة المرور في أول دخول.</li>
+      </ol>
+      <figure>
+        <img src="images/user-guide/01-login.png" alt="شاشة تسجيل الدخول">
+        <figcaption>شاشة الدخول</figcaption>
+      </figure>
+      <p class="note">نسيت كلمة المرور؟ استخدم رابط «نسيت كلمة المرور؟» أسفل حقل كلمة المرور واتبع تعليمات البريد.</p>
+    </section>
+
+    <section id="topbar">
+      <h2>2) الشريط العلوي</h2>
+      <figure>
+        <img src="images/user-guide/06-topbar.png" alt="الشريط العلوي والإشعارات">
+        <figcaption>اللغة · جرس الإشعارات · الملف الشخصي</figcaption>
+      </figure>
+
+      <ul>
+        <li><strong>ع / EN</strong> — تبديل لغة الواجهة فوراً (عربي أو إنجليزي).</li>
+        <li><strong>جرس الإشعارات</strong> — تنبيهات مثل: وارد جديد، إحالة جديدة، اقتراب موعد الرد. النقر يعلّم الإشعار مقروءاً ويفتح المعاملة.</li>
+        <li>من قائمة الإشعارات يمكن <strong>عرض الكل</strong> أو <strong>تعيين الكل مقروءاً</strong>.</li>
+        <li>اسمك / صورتك — الوصول السريع إلى <strong>ملفي الشخصي</strong> و<strong>خروج</strong>.</li>
+      </ul>
+      <p class="note">راجع الجرس يومياً مع قائمة «يحتاج إجراء» حتى لا يفوتك موعد رد أو إحالة.</p>
+    </section>
+
+    <section id="home">
+      <h2>3) الصفحة الرئيسية</h2>
+      <p>بعد الدخول تظهر لوحة ملخص لعمل يومك:</p>
+      <ul>
+        <li>إحصاءات الصادر والوارد والداخلي (إن ظهرت لك)</li>
+        <li>بطاقات <strong>يحتاج إجراء</strong> و<strong>آخر المعاملات</strong> والمتأخر لكل نوع ظاهر</li>
+        <li>روابط سريعة: تعاميم، إحالات، أرشيف، تقارير، مرفقات</li>
+        <li>زر سريع <strong>داخلي جديد</strong> عند توفر الصلاحية</li>
+      </ul>
+      <figure>
+        <img src="images/user-guide/02-home.png" alt="الصفحة الرئيسية">
+        <figcaption>مثال توضيحي للصفحة الرئيسية</figcaption>
+      </figure>
+      <p class="note">تظهر لك المعاملات حسب القسم والصلاحيات المسندة لحسابك.</p>
+    </section>
+
+    <section id="menu">
+      <h2>4) القائمة الجانبية</h2>
+      <figure>
+        <img src="images/user-guide/23-menu.png" alt="القائمة الجانبية">
+        <figcaption>مثال قائمة مشرف القسم</figcaption>
+      </figure>
+
+      <p>قد تختلف البنود قليلاً حسب صلاحيتك (<strong>مشرف القسم</strong> / <strong>مشرف الأرشيف</strong> / مشاهد). البنود الشائعة:</p>
+      <table>
+        <thead>
+          <tr><th>القائمة</th><th>الاستخدام</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>الرئيسية</td><td>الملخص والمتابعات</td></tr>
+          <tr><td>الوارد</td><td>تسجيل ومتابعة الوارد</td></tr>
+          <tr><td>الصادر</td><td>إنشاء ومتابعة الصادر</td></tr>
+          <tr><td>المعاملات الداخلية</td><td>مراسلات بين الأقسام مع إحالة تلقائية</td></tr>
+          <tr><td>يحتاج إجراء</td><td>ما ينتظر خطوة منك/من قسمك</td></tr>
+          <tr><td>الإحالات</td><td>المعاملات المحالة بين الأقسام</td></tr>
+          <tr><td>التعاميم</td><td>التعاميم الداخلية</td></tr>
+          <tr><td>أرشيف الوثائق</td><td>وثائق أرشيفية مستقلة</td></tr>
+          <tr><td>مرفقات المعاملات</td><td>البحث في كل المرفقات المرفوعة</td></tr>
+          <tr><td>جهات المراسلة</td><td>بيانات الجهات</td></tr>
+          <tr><td>مجموعات الجهات</td><td>تجميع مستلمين متكررين</td></tr>
+          <tr><td>قوالب الخطاب</td><td>نصوص جاهزة للإرسال/الطباعة</td></tr>
+          <tr><td>التقارير</td><td>تقارير وإحصاءات وتصدير Excel</td></tr>
+          <tr><td>ملفي الشخصي</td><td>الاسم والصورة وكلمة المرور</td></tr>
+        </tbody>
+      </table>
+      <p class="note">إعدادات الإدارة (المستخدمون، النسخ الاحتياطي، السجلات…) ليست جزءاً من هذا الدليل.</p>
+    </section>
+
+    <section id="lists">
+      <h2>5) البحث والفلترة في القوائم</h2>
+      <figure>
+        <img src="images/user-guide/07-lists.png" alt="بحث وتصفية القوائم">
+        <figcaption>تصفية قائمة الوارد ثم عرض النتائج</figcaption>
+      </figure>
+
+      <p>من <strong>الوارد</strong> أو <strong>الصادر</strong> أو <strong>المعاملات الداخلية</strong> استخدم شريط التصفية ثم اضغط زر العرض/التصفية:</p>
+      <table>
+        <thead>
+          <tr><th>الفلتر</th><th>المعنى</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>بحث</td><td>رقم المعاملة أو الموضوع أو الجهة</td></tr>
+          <tr><td>الحالة</td><td>مثل: جديدة، قيد الإجراء، مغلقة…</td></tr>
+          <tr><td>يحتاج متابعة</td><td>ما ينتظر إجراءً</td></tr>
+          <tr><td>القسم</td><td>إن ظهر حسب صلاحيتك</td></tr>
+          <tr><td>الفترة</td><td>من/إلى تاريخ (ميلادي أو هجري)</td></tr>
+          <tr><td>الاستلام (صادر)</td><td>بدون استلام / تم التسجيل / متأخر بلا استلام</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>في الوارد تظهر أعمدة موعد الرد والمتأخر وشارة المرفق.</li>
+        <li>في الصادر قد يظهر تنبيه أعلى الصفحة عند وجود صادر متأخر بلا استلام.</li>
+        <li>تصدير Excel للقوائم الكاملة من صفحة <strong>التقارير</strong> (وليس من قائمة الوارد/الصادر).</li>
+      </ul>
+    </section>
+
+    <section id="outgoing">
+      <h2>6) الصادر (مفرد)</h2>
+      <h3>إنشاء صادر جديد</h3>
+      <ol>
+        <li>من القائمة: <strong>الصادر</strong> ← <strong>صادر جديد</strong>.</li>
+        <li>اكتب <strong>الموضوع</strong>.</li>
+        <li>اختر <strong>الجهة المستلمة</strong> من جهات المراسلة.</li>
+        <li>راجع القسم / جهة التوقيع والتاريخ والأولوية والسرية.</li>
+        <li>أرفق ملفاً إن لزم، ثم احفظ.</li>
+      </ol>
+      <figure>
+        <img src="images/user-guide/03-outgoing.png" alt="نموذج إنشاء صادر">
+        <figcaption>مثال توضيحي لنموذج الصادر</figcaption>
+      </figure>
+      <p class="note">بعد الحفظ يُمنح الصادر رقماً تلقائياً (مثل: ص/2026/000001) مع إمكانية الطباعة والإرسال.</p>
+      <h3>من صفحة عرض الصادر يمكنك</h3>
+      <ul>
+        <li>تعديل البيانات (حسب الصلاحية وحالة المعاملة)</li>
+        <li>رفع المرفقات، التعليقات، الإحالة</li>
+        <li>الإرسال بالبريد أو واتساب</li>
+        <li>تسجيل الاستلام / سند التسليم</li>
+        <li><strong>ربط بوارد</strong> إن كان الصادر رداً على وارد مسجّل</li>
+        <li>قائمة <strong>طباعة</strong> (نموذج التسليم / ملصق الظرف / ملصق حراري)</li>
+        <li>إقفال المعاملة، و<strong>إلغاء / سحب</strong> إن لزم</li>
+        <li>على الجوال: الأزرار الثانوية خلف <strong>المزيد</strong></li>
+        <li>عرض الدفعة إن كان جزءاً من صادر جماعي</li>
+      </ul>
+      <p class="note">يمكن إدخال «مرجع وارد» كنص خارجي دون ربط تلقائي بسجل وارد في النظام.</p>
+
+      <h3>المراجعة والاعتماد قبل الإصدار</h3>
+      <p>إذا فعّل مدير النظام موافقة الصادر، لا يُطبع الصادر ولا يُرسل قبل اعتماده. وإذا فعّل مرحلة المراجعة، يمرّ الصادر بالمراجعة أولاً.</p>
+      <ol>
+        <li>من صفحة عرض الصادر اضغط <strong>إرسال للمراجعة</strong> (أو <strong>طلب موافقة الإصدار</strong> إن كانت المراجعة غير مفعّلة).</li>
+        <li>يصل الصادر إلى <strong>المراجع الأول</strong>، ويظهر عنده في «يحتاج إجراء» ← <strong>يحتاج مراجعة</strong>. إذا انتهت مهلته دون قرار يُحوَّل إلى <strong>المراجع الثاني</strong>.</li>
+        <li>يختار المراجع <strong>مطابقة — إحالة للاعتماد</strong> فينتقل الصادر إلى المعتمد الأول، أو <strong>إعادة بملاحظات</strong> فيرجع إليك للتصحيح ثم تضغط <strong>إعادة الإرسال للمراجعة</strong>.</li>
+        <li>بعد المراجعة يعتمد المعتمدون بالتسلسل (الأول، ثم الثاني بعد مهلته، ثم الثالث بسبب إلزامي)، ثم يصبح الصادر جاهزاً للإصدار.</li>
+      </ol>
+      <p><strong>ما يُراجَع:</strong> البيانات، والجهة، والمرفقات، والصيغة.</p>
+      <p><strong>قرارات المراجع:</strong> مطابقة ← بانتظار الاعتماد، أو إعادة بملاحظات ← المسودة.</p>
+      <p><strong>الضوابط:</strong></p>
+      <ul>
+        <li>المراجعة للشكل والإجراء فقط، والمضمون والقرار للمعتمد.</li>
+        <li>الإعادة تكون بملاحظات مكتوبة إلزامية.</li>
+        <li>من أعدّ المعاملة لا يراجعها، ومن راجعها لا يعتمدها.</li>
+        <li>أي تعديل بعد المراجعة يعيد المعاملة للمراجعة.</li>
+        <li>تعمل المراجعة ضمن مسار موافقة الإصدار، فيلزم تفعيله وتحديد المعتمد الأول.</li>
+        <li>إن لم يوجد مراجع مؤهَّل (غير المُعِدّ) تنتقل المعاملة مباشرة إلى المعتمد الأول.</li>
+      </ul>
+      <p class="note">يحدد مدير النظام المراجع الأول والثاني والمهلة من الإعدادات ← الصادر. إن تُركا فارغين يراجع أي مستخدم من «الاتصالات الإدارية».</p>
+    </section>
+
+    <section id="bulk">
+      <h2>7) صادر جماعي</h2>
+      <figure>
+        <img src="images/user-guide/08-bulk.png" alt="صادر جماعي">
+        <figcaption>اختيار المستلمين من مجموعة وإصدار الدفعة</figcaption>
+      </figure>
+
+      <p>لإرسال خطاب واحد لعدة مستلمين دفعة واحدة (كل مستلم يحصل على رقم صادر وQR مستقل).</p>
+      <ol>
+        <li>من <strong>الصادر</strong> اختر <strong>صادر جماعي</strong>.</li>
+        <li>اكتب الموضوع واختر المستلمين (من <strong>مجموعة جهات</strong> أو يدوياً) — حد أدنى مستلمَين تقريباً وحتى حد أقصى للنظام.</li>
+        <li>حدد التاريخ والقسم والأولوية والسرية.</li>
+        <li>اختياري: نص الخطاب أو <strong>إدراج قالب</strong>.</li>
+        <li>أكّد <strong>إصدار الصادر للجميع</strong>.</li>
+      </ol>
+      <h3>من صفحة نتائج الدفعة</h3>
+      <ul>
+        <li>إرسال بريد / واتساب / تسجيل التسليم (مجموعة إرسال)</li>
+        <li>قائمة <strong>طباعة</strong>: نموذج التسليم، الخطابات، الملصقات، حراري، كشف المرسل إليهم</li>
+        <li>تصدير Word/CSV من الشريط أو من <strong>المزيد</strong> على الجوال</li>
+      </ul>
+      <p class="note">تأكد من صحة جوال وبريد الجهات قبل الإرسال الجماعي. المعاملة الملغاة لا تُطبع ضمن طباعة الخطابات.</p>
+    </section>
+
+    <section id="incoming">
+      <h2>8) الوارد</h2>
+      <h3>تسجيل وارد جديد</h3>
+      <ol>
+        <li><strong>الوارد</strong> ← وارد جديد.</li>
+        <li>أدخل <strong>الموضوع</strong> و<strong>تاريخ الاستلام</strong>.</li>
+        <li>اختر <strong>الجهة المرسلة</strong> (أو اكتب الاسم يدوياً).</li>
+        <li>أدخل <strong>رقم خطاب الجهة</strong>: رقمهم الخارجي على الخطاب.</li>
+        <li>اختياري: <strong>ربط بصادر</strong> — ابحث عن صادر سابق واربطه.</li>
+        <li>حدد القسم وموعد الرد والأولوية/السرية عند الحاجة.</li>
+        <li>المرفق اختياري عند الحفظ (مثلاً ظرف مغلق) — يمكن رفع المسح لاحقاً من صفحة العرض.</li>
+      </ol>
+      <table>
+        <thead>
+          <tr><th>الحقل</th><th>المعنى</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>الجهة المرسلة</td><td>من أرسل الخطاب إليكم</td></tr>
+          <tr><td>رقم خطاب الجهة</td><td>رقمهم الخارجي على الورقة</td></tr>
+          <tr><td>ربط بصادر</td><td>ربط اختياري بصادر مسجّل</td></tr>
+          <tr><td>موعد الرد</td><td>آخر موعد متوقع للرد</td></tr>
+          <tr><td>رقم الوارد</td><td>يُنشأ تلقائياً بعد الحفظ</td></tr>
+        </tbody>
+      </table>
+      <figure>
+        <img src="images/user-guide/05-incoming.png" alt="نموذج الوارد والإجراءات">
+        <figcaption>حقول الوارد الأساسية ثم المتابعة بعد الحفظ</figcaption>
+      </figure>
+      <h3>ربط بصادر</h3>
+      <ol>
+        <li>من حقل <strong>ربط بصادر</strong> اضغط للبحث.</li>
+        <li>ابحث برقم الصادر أو الموضوع أو الجهة واختر السجل.</li>
+        <li>يمكن مسح الربط لاحقاً إن أُنشئ بالخطأ.</li>
+      </ol>
+      <h3>متابعة الوارد بعد الحفظ</h3>
+      <ul>
+        <li>رفع المرفقات / المسح</li>
+        <li>الإحالة، التعليقات، ورقة العرض</li>
+        <li><strong>إنشاء رد</strong> (صادر مرتبط بهذا الوارد)</li>
+        <li>قائمة <strong>طباعة</strong> (نموذج الاستلام / ملصق الظرف / <strong>ملصق حراري</strong>) حتى الإغلاق</li>
+      </ul>
+    </section>
+
+    <section id="internal">
+      <h2>9) المعاملات الداخلية</h2>
+      <p>لمراسلات <strong>بين الأقسام</strong> داخل الجهة (ليست جهة خارجية). عند الحفظ تُنشأ إحالة تلقائية للقسم المستلم.</p>
+      <h3>إنشاء معاملة داخلية</h3>
+      <ol>
+        <li><strong>المعاملات الداخلية</strong> ← <strong>معاملة داخلية جديدة</strong> (أو من الرئيسية: داخلي جديد).</li>
+        <li>أدخل <strong>الموضوع</strong>.</li>
+        <li>حدّد المسار: <strong>من قسم</strong> → <strong>إلى قسم</strong> (لا يجوز أن يكونا نفس القسم).</li>
+        <li>التاريخ، موعد الرد إن لزم، الأولوية والسرية، وملاحظات اختيارية.</li>
+        <li>أرفق ملفاً اختياريًا ثم <strong>حفظ وإحالة</strong>.</li>
+        <li>يُمنح رقماً تلقائياً ببادئة الداخلي (مثل: د/2026/…) وتُحال للقسم المستلم.</li>
+      </ol>
+      <h3>القائمة والعرض</h3>
+      <ul>
+        <li>القائمة: الرقم، الموضوع، <strong>من → إلى</strong>، التاريخ، موعد الرد، القسم المستلم، الحالة.</li>
+        <li>من العرض: قائمة <strong>طباعة</strong> (نموذج التسليم / ملصق الظرف / ملصق حراري)، ورقة عرض، مرفقات، تعليقات، إحالات، تغيير الحالة، إقفال.</li>
+        <li>على الجوال: الأزرار الثانوية خلف <strong>المزيد</strong>؛ والإجراءات الحساسة (إقفال / تعديل) في مجموعة منفصلة.</li>
+        <li>أسماء مديري الأقسام (الموجّه من / إلى) تُحفظ مع المعاملة عند الإنشاء؛ تعديل بطاقة القسم لاحقاً لا يغيّر المعاملات القديمة.</li>
+        <li><strong>لا تعديل</strong> بعد الإنشاء من الواجهة، و<strong>لا إلغاء/سحب</strong> (خاص بالصادر).</li>
+      </ul>
+      <table>
+        <thead>
+          <tr><th></th><th>داخلي</th><th>وارد</th><th>صادر</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>الطرف</td><td>قسم → قسم</td><td>جهة خارجية</td><td>جهة خارجية</td></tr>
+          <tr><td>عند الحفظ</td><td>إحالة تلقائية</td><td>تسجيل وارد</td><td>إعداد/إرسال</td></tr>
+          <tr><td>ورقة العرض</td><td>نعم</td><td>نعم</td><td>لا</td></tr>
+          <tr><td>ملصق الظرف</td><td>بيانات القسم المستلم</td><td>من الجهة</td><td>إلى الجهة</td></tr>
+          <tr><td>ملصق حراري</td><td>رقم + تواريخ + QR</td><td>نفس المحتوى</td><td>نفس المحتوى</td></tr>
+          <tr><td>إلغاء/سحب</td><td>لا</td><td>لا</td><td>نعم</td></tr>
+        </tbody>
+      </table>
+      <p class="note">قد يُخفى بند المعاملات الداخلية من الشريط الجانبي إذا أخفاه المدير من <strong>إدارة القائمة الجانبية</strong> (إخفاء عام للجميع)، أو إذا أُلغي ظهوره لبعض الأدوار من تعديل العنصر.</p>
+    </section>
+
+    <section id="priority">
+      <h2>10) الأولوية والسرية</h2>
+      <figure>
+        <img src="images/user-guide/25-priority.png" alt="الأولوية والسرية">
+        <figcaption>اختيار الأولوية والسرية في النموذج</figcaption>
+      </figure>
+
+      <p>تظهر في نماذج الوارد والصادر والداخلي والصادر الجماعي (والسرية أيضاً في الأرشيف):</p>
+      <ul>
+        <li><strong>الأولوية</strong> (افتراضي): عادي / عاجل</li>
+        <li><strong>السرية</strong> (افتراضي): عادي / سري</li>
+      </ul>
+      <p class="note">القيم أعلاه هي الافتراضية الحالية في النظام. يمكن للإدارة تعديلها أو إضافة بنود من <strong>مسميات القوائم</strong>. المعاملات القديمة قد تحتفظ بقيم أُزيلت من القائمة.</p>
+    </section>
+
+    <section id="attach">
+      <h2>11) المرفقات ومرفقات المعاملات</h2>
+      <h3>الرفع من المعاملة</h3>
+      <ol>
+        <li>افتح الوارد أو الصادر أو الداخلي.</li>
+        <li>من قسم المرفقات اختر <strong>PDF أو صورة</strong> وارفع.</li>
+        <li>احذف المرفق الخاطئ بعد التأكيد (حسب صلاحيتك).</li>
+      </ol>
+      <figure>
+        <img src="images/user-guide/04-attach-send.png" alt="إرفاق وإرسال وطباعة">
+        <figcaption>مسار: إرفاق ← إرسال ← طباعة</figcaption>
+      </figure>
+      <h3>قائمة مرفقات المعاملات</h3>
+      <figure>
+        <img src="images/user-guide/21-documents.png" alt="مرفقات المعاملات">
+        <figcaption>البحث في فهرس المرفقات</figcaption>
+      </figure>
+      <ol>
+        <li>من القائمة: <strong>مرفقات المعاملات</strong>.</li>
+        <li>ابحث باسم الملف أو رقم المعاملة ثم افتح الملف أو انتقل للمعاملة.</li>
+      </ol>
+      <p class="note">هذه الصفحة للفهرسة والبحث فقط — الرفع يتم من صفحة عرض المعاملة.</p>
+    </section>
+
+    <section id="send">
+      <h2>12) إرسال الصادر</h2>
+      <div class="steps">
+        <div class="step"><b>1</b>أكمل البيانات والمرفق</div>
+        <div class="step"><b>2</b>من صفحة الصادر اختر القناة</div>
+        <div class="step"><b>3</b>بريد أو واتساب ثم أكّد</div>
+      </div>
+      <figure>
+        <img src="images/user-guide/24-send.png" alt="إرسال الصادر">
+        <figcaption>اختيار البريد أو واتساب</figcaption>
+      </figure>
+      <ul>
+        <li>تأكد أن بطاقة الجهة تحوي بريداً أو جوالاً صحيحاً قبل الإرسال.</li>
+        <li>في الصادر الجماعي يمكن إرسال المحددين دفعة واحدة من صفحة النتائج.</li>
+      </ul>
+      <p class="note">إن فشل الإرسال تحقق من بيانات الجهة أو تواصل مع مدير النظام بخصوص إعدادات البريد/واتساب.</p>
+    </section>
+
+    <section id="receipt">
+      <h2>13) تسجيل استلام الصادر</h2>
+      <figure>
+        <img src="images/user-guide/09-receipt.png" alt="تسجيل استلام الصادر">
+        <figcaption>اسم المستلم وتاريخ الاستلام وسند التسليم</figcaption>
+      </figure>
+
+      <p>بعد التسليم اليدوي (أو عند الحاجة لتوثيق الاستلام):</p>
+      <ol>
+        <li>افتح الصادر ← بطاقة <strong>استلام الصادر</strong>.</li>
+        <li>أدخل <strong>اسم المستلم كاملاً</strong> و<strong>تاريخ الاستلام</strong> ورقم الهاتف إن وُجد.</li>
+        <li>اختياري: أرفق صورة سند التسليم.</li>
+        <li>احفظ — تُسجَّل حالة التسليم تلقائياً.</li>
+      </ol>
+      <p class="note">يمكن تصحيح حالة التسليم إدارياً من التبويب المخصص دون إدخال مستلم. رفع سند جديد يستبدل السابق.</p>
+    </section>
+
+    <section id="refer">
+      <h2>14) الإحالة</h2>
+      <figure>
+        <img src="images/user-guide/22-refer-close.png" alt="إحالة وإغلاق">
+        <figcaption>إحالة إلى قسم · إقفال المعاملة</figcaption>
+      </figure>
+
+      <ol>
+        <li>افتح المعاملة ← <strong>إحالة إلى قسم</strong>.</li>
+        <li>حدد القسم المستلم وأضف ملاحظة إن لزم.</li>
+        <li>نفّذ الإحالة وتابع من قائمة <strong>الإحالات</strong>.</li>
+      </ol>
+      <p class="note">القسم المحال إليه يرى المعاملة ضمن نطاقه ويصله إشعار عادة.</p>
+    </section>
+
+    <section id="comments">
+      <h2>15) التعليقات والملاحظات</h2>
+      <figure>
+        <img src="images/user-guide/10-comments.png" alt="التعليقات">
+        <figcaption>تعليقات سريعة وإضافة ملاحظة إدارية</figcaption>
+      </figure>
+
+      <ol>
+        <li>من عرض المعاملة افتح بطاقة <strong>التعليقات والملاحظات الإدارية</strong>.</li>
+        <li>اختر تعليقاً سريعاً (مثل: يرجى الإفادة / تمت المراجعة / يعتمد / يحتاج تعديل) أو اكتب نصاً.</li>
+        <li>اضغط <strong>إضافة تعليق</strong>.</li>
+      </ol>
+      <p class="note">التعليق يوثّق المتابعة ولا يغيّر حالة المعاملة وحده. يلزم صلاحية تعديل معاملات.</p>
+    </section>
+
+    <section id="brief">
+      <h2>16) ورقة العرض (وارد وداخلي)</h2>
+      <figure>
+        <img src="images/user-guide/11-brief.png" alt="ورقة العرض">
+        <figcaption>حفظ · تسجيل التوجيه · طباعة أو تصدير ورد</figcaption>
+      </figure>
+
+      <p>من عرض <strong>الوارد</strong> أو <strong>الداخلي</strong>: <strong>إنشاء ورقة عرض</strong>.</p>
+      <ol>
+        <li>عبّئ الترويسة، أساس المعاملة، الدراسة، التوصية، خيارات التوجيه، المعتمِد.</li>
+        <li>احفظ ورقة العرض.</li>
+        <li>عند الاعتماد: <strong>تسجيل التوجيه</strong> (تُقفل الورقة كـ «مُؤشَّر عليها»).</li>
+        <li><strong>طباعة ورقة العرض</strong> أو <strong>تصدير ورد</strong>.</li>
+      </ol>
+      <p class="note">ورقة العرض لا تغيّر رقم المعاملة ولا حالتها الإدارية. الحالات: مسودة عرض / مُؤشَّر عليها. غير متاحة للصادر.</p>
+    </section>
+
+    <section id="print">
+      <h2>17) الطباعة وملصق الظرف والملصق الحراري ورمز QR</h2>
+      <figure>
+        <img src="images/user-guide/12-print-qr.png" alt="الطباعة وملصق الظرف وQR">
+        <figcaption>قائمة طباعة ▾ · نموذج التسليم/الاستلام · ملصق الظرف</figcaption>
+      </figure>
+
+      <h3>شريط أزرار صفحة العرض</h3>
+      <ol>
+        <li>رجوع و<strong>طباعة ▾</strong> ظاهران دائماً.</li>
+        <li>قائمة <strong>طباعة</strong> تضم: نموذج التسليم/الاستلام، ملصق الظرف، والملصق الحراري (ونموذج الإقفال عند الحاجة).</li>
+        <li>على الجوال: باقي الأزرار خلف <strong>المزيد</strong>.</li>
+        <li>الإجراءات الحساسة (<strong>إقفال</strong> / <strong>إلغاء</strong> / <strong>تعديل</strong>) في مجموعة منفصلة بلون أوضح.</li>
+        <li>بجانب العنوان تظهر <strong>شارة الحالة</strong> (مثل مقفلة / ملغاة / محالة).</li>
+      </ol>
+      <h3>طباعة المعاملة</h3>
+      <ol>
+        <li>من صفحة العرض افتح قائمة <strong>طباعة</strong>.</li>
+        <li>اختر <strong>طباعة نموذج التسليم</strong> (صادر/داخلي) أو <strong>طباعة نموذج الاستلام</strong> (وارد).</li>
+        <li>راجع الرقم والموضوع وموجهة إلى/من وQR إن وُجد.</li>
+        <li>اختر ورق مناسباً (غالباً <strong>A4</strong>) في نافذة الطباعة.</li>
+      </ol>
+      <h3>ملصق الظرف (ستيكرز)</h3>
+      <ol>
+        <li>من قائمة <strong>طباعة</strong> → <strong>ملصق الظرف</strong> (وارد أو صادر أو <strong>داخلي</strong>، أو من نتائج الدفعة).</li>
+        <li>اختر <strong>قالب الورقة</strong> (Letter 8.5×11): 10 ملصقات (2×5) أو 8 (2×4) أو ملصق كبير.</li>
+        <li>حدّد <strong>البدء من الملصق</strong> لاستكمال ورقة مستخدمة جزئياً.</li>
+        <li><strong>عدد النسخ</strong> يكرر الملصق في الخانات التالية على <strong>نفس الورقة فقط</strong> ثم اضغط <strong>تطبيق</strong>.</li>
+        <li>اضبط عند الحاجة: <strong>نوع الخط</strong> (ينعكس على الاسم والتاريخ ورقم المعاملة) و<strong>حجم الحقول %</strong> (لقب، اسم، وظيفة، جهة العمل/قسم).</li>
+        <li>اطبع بورق <strong>Letter</strong>؛ الهوامش مضمّنة في القالب (مثل 12 مم أعلى/أسفل و5 مم يمين/يسار و2 مم بين العمودين للقالب 2×5).</li>
+      </ol>
+      <p class="note">الموضوع لا يُطبع على الملصق. في الداخلي تظهر بيانات <strong>القسم المستلم</strong>. غير متاح للمعاملة الملغاة.</p>
+      <h3>ملصق حراري (حفظ فيزيائي)</h3>
+      <p>لوضع رقم المعاملة على الملف الورقي — <strong>ليس</strong> ملصق الظرف. من قائمة <strong>طباعة</strong> اختر <strong>طباعة ملصق حراري</strong>.</p>
+      <ol>
+        <li>اختر <strong>القالب</strong>: 50×25 ملم أو 44×22 ملم.</li>
+        <li>حدّد <strong>عدد النسخ</strong> (1–20). كل نسخة صفحة مستقلة بمقاس الملصق.</li>
+        <li><strong>طباعة</strong> — في نافذة الطابعة اختر المقاس المطابق للملصق.</li>
+      </ol>
+      <p class="note">المحتوى: رقم المعاملة، التاريخ الهجري ثم الميلادي، وQR. لا يُطبع النوع ولا الموضوع.</p>
+      <h3>رمز QR على الصفحة</h3>
+      <ul>
+        <li>من لوحة QR: <strong>نسخ الرقم</strong>، <strong>نسخ QR</strong>، <strong>تنزيل QR</strong> للتحقق الخارجي.</li>
+      </ul>
+    </section>
+
+    <section id="cancel">
+      <h2>18) إلغاء / سحب الصادر</h2>
+      <figure>
+        <img src="images/user-guide/27-cancel.png" alt="إلغاء أو سحب الصادر">
+        <figcaption>ملغى أو مسحوب — مع سبب · الرقم يبقى محجوزاً</figcaption>
+      </figure>
+      <p>من عرض <strong>الصادر</strong> (غير الملغى مسبقاً) اختر <strong>إلغاء / سحب</strong> عند الحاجة لوقف المعاملة.</p>
+      <table>
+        <thead>
+          <tr><th>النوع</th><th>متى؟</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>ملغى</strong></td><td>لم يُعتمد الإرسال — الرقم يبقى محجوزاً ولا يُعاد استخدامه</td></tr>
+          <tr><td><strong>مسحوب</strong></td><td>سُحب بعد الإصدار أو التسليم — الرقم يبقى في السجل</td></tr>
+        </tbody>
+      </table>
+      <ol>
+        <li>اختر النوع (ملغى أو مسحوب).</li>
+        <li>اكتب <strong>سبب الإلغاء</strong> (مطلوب).</li>
+        <li>أكّد — لا يمكن التراجع.</li>
+      </ol>
+      <p class="note">بعد التأكيد: لا تعديل ولا إرسال. صفحة التحقق تظهر المعاملة غير سارية. في الصادر الجماعي لا تُطبع الخطابات الملغاة ضمن طباعة الدفعة. غير متاح للوارد أو الداخلي.</p>
+    </section>
+
+    <section id="close">
+      <h2>19) إغلاق المعاملة</h2>
+      <ol>
+        <li>افتح <strong>إقفال المعاملة</strong>.</li>
+        <li>اكتب الإجراء المتخذ والنتيجة، وأرفق مستندات الإغلاق إن لزم.</li>
+        <li>احفظ — تصبح الحالة <strong>مغلقة</strong>.</li>
+        <li>يمكن طباعة <strong>نموذج إغلاق المعاملة</strong> من قائمة <strong>طباعة</strong> أو من شريط الإجراءات.</li>
+      </ol>
+      <p class="note">بعد الإقفال يظهر في صفحة العرض <strong>ملخص الإقفال</strong> (نص مختصر) مع رابط نصي <strong>عرض التفاصيل</strong> لفتح نموذج الإقفال. تأكد من اكتمال الرد/التسليم قبل الإغلاق. ينطبق على الوارد والصادر والداخلي حسب الصلاحية.</p>
+    </section>
+
+    <section id="actions">
+      <h2>20) يحتاج إجراء</h2>
+      <figure>
+        <img src="images/user-guide/19-actions.png" alt="يحتاج إجراء">
+        <figcaption>قائمة ما ينتظر خطوة يومياً</figcaption>
+      </figure>
+      <p>هذه الصفحة <strong>ليست</strong> إقفالاً جماعياً. راجعها يومياً: المعاملة تظهر لأن خطوة ناقصة، وتخرج عندما تُستكمل تلك الخطوة أو عندما تُقفل / تُلغى.</p>
+      <p>للإقفال الرسمي من بطاقة المعاملة: <strong>إقفال المعاملة</strong> ← اكتب الإجراء المتخذ واختر النتيجة (منتهية / تم التنفيذ / للحفظ) ← أكّد. الحالة تصبح <strong>مغلقة</strong> فتخرج من كل القوائم.</p>
+      <table>
+        <thead>
+          <tr><th>القائمة</th><th>الإجراء المتبع</th><th>أو الإقفال</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>وارد بلا إحالة</td><td>أنشئ إحالة من بطاقة الوارد، أو غيّر الحالة من «جديدة / قيد الإجراء»</td><td>إقفال المعاملة</td></tr>
+          <tr><td>وارد بلا رد صادر</td><td>أنشئ رداً صادراً مربوطاً بهذا الوارد، أو اربط صادراً قائماً</td><td>إقفال أو وصول الحالة إلى «تم الرد»</td></tr>
+          <tr><td>وارد بلا مسح</td><td>ارفع المسح / المرفق من بطاقة الوارد</td><td>إقفال أو إخراجها من الحالات المفتوحة</td></tr>
+          <tr><td>صادر بلا إرسال</td><td>أرسل الخطاب (بريد / واتساب / تسجيل إرسال)</td><td>إقفال أو تسليم أو إلغاء</td></tr>
+          <tr><td>صادر بلا استلام</td><td>سجّل الاستلام (الاسم والتاريخ) بعد مدة التنبيه (افتراضي 7 أيام)</td><td>إقفال أو تسليم أو إلغاء</td></tr>
+          <tr><td>داخلي معلّق</td><td>أكمل مسارها؛ تخرج عند: تم الرد / تم التسليم / مغلقة / ملغاة</td><td>الإقفال هو المسار المعتاد</td></tr>
+          <tr><td>داخلي بلا مسح</td><td>ارفع المرفق</td><td>إقفال أو إخراجها من الحالات المفتوحة</td></tr>
+          <tr><td>موعد رد قريب</td><td>أنجز الرد أو التسليم (الموعد خلال اليوم أو يومين)</td><td>إقفال / إلغاء / تسوية الحالة</td></tr>
+        </tbody>
+      </table>
+      <div class="steps steps-4">
+        <div class="step"><b>وارد</b>إحالة أو رد أو مسح</div>
+        <div class="step"><b>صادر</b>إرسال أو استلام</div>
+        <div class="step"><b>داخلي</b>متابعة ثم إقفال</div>
+        <div class="step"><b>إغلاق</b>عند اكتمال العمل</div>
+      </div>
+      <p class="note">المعاملة الواحدة قد تظهر في أكثر من قائمة. يكفي علاج السبب، أو الإقفال لإخراجها من الكل.</p>
+    </section>
+
+    <section id="reports">
+      <h2>21) التقارير</h2>
+      <figure>
+        <img src="images/user-guide/13-reports.png" alt="التقارير">
+        <figcaption>فلترة ثم عرض أو طباعة أو تصدير Excel</figcaption>
+      </figure>
+
+      <p>من القائمة: <strong>التقارير</strong> — ملخص وإحصاءات الصادر والوارد والداخلي خلال فترة تختارها.</p>
+      <h3>الفلترة</h3>
+      <ol>
+        <li>النوع: الكل / وارد / صادر / داخلي.</li>
+        <li>القسم (حسب صلاحيتك).</li>
+        <li>من تاريخ — إلى تاريخ.</li>
+        <li>اضغط <strong>عرض</strong>.</li>
+      </ol>
+      <p>بعد العرض: بطاقات إحصائية، توزيع حسب الحالة والقسم، وجدول التفاصيل.</p>
+      <h3>الطباعة</h3>
+      <ol>
+        <li>طبّق الفلترة ← <strong>طباعة</strong> ← طابعة أو حفظ PDF.</li>
+      </ol>
+      <p class="note">الطباعة قد تقتصر على عدد محدود من السجلات. للقائمة الكاملة استخدم Excel.</p>
+      <h3>تصدير Excel</h3>
+      <ol>
+        <li>نفس الفلاتر ← <strong>تصدير Excel</strong>.</li>
+        <li>الملف يحوي: الرقم، النوع، الموضوع، الجهة، التاريخ، موعد الرد، الحالة، القسم.</li>
+      </ol>
+    </section>
+
+    <section id="circulars">
+      <h2>22) التعاميم</h2>
+      <figure>
+        <img src="images/user-guide/14-circulars.png" alt="التعاميم">
+        <figcaption>استعراض التعاميم الموجّهة لقسمك</figcaption>
+      </figure>
+
+      <h3>لمشرف القسم</h3>
+      <ol>
+        <li>من <strong>التعاميم</strong> استعرض التعاميم الصادرة الموجّهة لقسمك أو للجميع.</li>
+        <li>افتح للعرض والمرفقات والطباعة.</li>
+      </ol>
+      <h3>لمشرف الأرشيف (أو من لديه صلاحية الإصدار)</h3>
+      <ol>
+        <li><strong>تعميم جديد</strong> → حفظ مسودة أو <strong>إصدار داخلياً</strong>.</li>
+        <li>ارفع مرفقاً (PDF/صورة) قبل الإصدار عند الطلب.</li>
+        <li>حدد الجمهور: جميع الموظفين أو أقسام محددة.</li>
+      </ol>
+      <p class="note">التعميم مستقل عن مسار الصادر/الوارد/الداخلي. بعد الإصدار يُقفل الرقم والموضوع والجمهور عادة.</p>
+    </section>
+
+    <section id="archive">
+      <h2>23) أرشيف الوثائق</h2>
+      <figure>
+        <img src="images/user-guide/15-archive.png" alt="أرشيف الوثائق">
+        <figcaption>إضافة وثيقة أرشيفية مستقلة</figcaption>
+      </figure>
+
+      <p>لحفظ وثائق تاريخية مستقلة عن حركة الصادر/الوارد اليومية.</p>
+      <ol>
+        <li><strong>أرشيف الوثائق</strong> ← <strong>وثيقة جديدة</strong>.</li>
+        <li>أدخل العنوان والنوع والتاريخ والجهة/الشخص ورقم مرجعي قديم وكلمات مفتاحية.</li>
+        <li>اختياري: ربط بمعاملة، السرية، القسم.</li>
+        <li>ارفع الملفات الممسوحة ثم احفظ.</li>
+        <li>لاحقاً: تعديل، رفع ملفات إضافية، بحث، طباعة.</li>
+      </ol>
+      <p class="note">أنواع شائعة: خطاب قديم، مراسلة، إيصال، عقد، قرار… القسم يرى نطاق قسمه. الحذف غالباً للأدوار العليا.</p>
+    </section>
+
+    <section id="entities">
+      <h2>24) جهات المراسلة</h2>
+      <figure>
+        <img src="images/user-guide/16-entities.png" alt="جهات المراسلة">
+        <figcaption>بطاقة جهة مع معاينة «موجهة إلى»</figcaption>
+      </figure>
+
+      <ol>
+        <li>من <strong>جهات المراسلة</strong> ← <strong>جهة جديدة</strong> (لجهات قسمك).</li>
+        <li>الاسم عربي مطلوب؛ أضف اللقب والتكريم والوظيفة والجوال والبريد والعنوان.</li>
+        <li>احفظ ثم استخدم الجهة في الوارد/الصادر/الجماعي.</li>
+      </ol>
+      <ul>
+        <li>الجهات <strong>العامة</strong> للعرض والاستخدام عادةً (يديرها المسؤول).</li>
+        <li>جهات <strong>قسمك</strong> قابلة للتعديل من حسابك إن رُبط بقسم.</li>
+        <li>لا تحذف جهة مرتبطة بمعاملات — عطّلها إن لزم.</li>
+      </ul>
+      <p class="note">تعديل بطاقة الجهة يُطبَّق على <strong>المعاملات الجديدة فقط</strong>؛ المعاملات السابقة تبقى بالأسماء كما حُفظت وقت إنشائها. راجع الجوال والبريد قبل الإرسال.</p>
+    </section>
+
+    <section id="groups">
+      <h2>25) مجموعات الجهات</h2>
+      <figure>
+        <img src="images/user-guide/17-groups.png" alt="مجموعات الجهات">
+        <figcaption>إنشاء مجموعة واختيار الأعضاء</figcaption>
+      </figure>
+
+      <p>لتجميع مستلمين متكررين (مثل مجلس أو لجنة) واستخدامهم في الصادر الجماعي.</p>
+      <ol>
+        <li><strong>مجموعات الجهات</strong> ← <strong>مجموعة جديدة</strong>.</li>
+        <li>اسم المجموعة ← اختيار الأعضاء (بحث / تحديد الكل).</li>
+        <li>احفظ. عدّل أو احذف مجموعات قسمك لاحقاً.</li>
+      </ol>
+      <p class="note">يلزم ربط الحساب بقسم. المجموعات العامة قد تظهر للاستخدام دون تعديلها.</p>
+    </section>
+
+    <section id="templates">
+      <h2>26) قوالب الخطاب</h2>
+      <figure>
+        <img src="images/user-guide/18-templates.png" alt="قوالب الخطاب">
+        <figcaption>نص القالب مع حقول المستلم</figcaption>
+      </figure>
+
+      <ol>
+        <li><strong>قوالب الخطاب</strong> ← <strong>قالب جديد</strong>.</li>
+        <li>الاسم ونص القالب (عربي/إنجليزي) مع إمكانية إدراج حقول المستلم (لقب، اسم، تكريم…).</li>
+        <li>معاينة ثم حفظ.</li>
+        <li>لاحقاً: <strong>إدراج قالب</strong> من الصادر الجماعي أو شاشات الخطاب ذات الصلة.</li>
+      </ol>
+      <p class="note">النص قد يظهر في البريد وواتساب والطباعة وصفحة التحقق حسب إعداد الإرسال.</p>
+    </section>
+
+    <section id="verify">
+      <h2>27) التحقق بـ QR (للمستلم / الزائر)</h2>
+      <figure>
+        <img src="images/user-guide/20-verify.png" alt="التحقق بـ QR">
+        <figcaption>صفحة التحقق العامة بعد مسح الرمز</figcaption>
+      </figure>
+
+      <ul>
+        <li>بمسح رمز QR على الخطاب أو بإدخال الرمز في صفحة التحقق العامة.</li>
+        <li>تظهر أصالة المعاملة والرقم والنوع؛ وقد يظهر نص الخطاب أو RSVP للصادر عند التفعيل.</li>
+        <li>لا تُعرض المرفقات السرية. المعاملة الملغاة تظهر كملغاة.</li>
+      </ul>
+      <p class="note">صفحة التحقق عامة ولا تتطلب دخول النظام. فيها أيضاً تبديل ع / EN.</p>
+    </section>
+
+    <section id="profile">
+      <h2>28) الملف الشخصي</h2>
+      <figure>
+        <img src="images/user-guide/26-profile.png" alt="الملف الشخصي">
+        <figcaption>تحديث الاسم والصورة وكلمة المرور</figcaption>
+      </figure>
+      <ul>
+        <li>تحديث الاسم العربي/الإنجليزي والصورة.</li>
+        <li>تغيير كلمة المرور (الحالية + الجديدة + التأكيد).</li>
+        <li>البريد هو معرف الدخول — لا تغيّره إلا عند الحاجة وبتنسيق صحيح.</li>
+        <li>تبديل اللغة من الشريط العلوي وليس من داخل الملف الشخصي.</li>
+      </ul>
+    </section>
+
+    <section id="tips">
+      <h2>29) نصائح سريعة</h2>
+      <ul>
+        <li>الدخول بالبريد الإلكتروني فقط.</li>
+        <li>لا تشارك كلمة المرور؛ من جهاز مشترك اضغط <strong>خروج</strong>.</li>
+        <li>راجع «يحتاج إجراء» والجرس يومياً (وارد / صادر / داخلي).</li>
+        <li>صحّح بيانات الجهة قبل الإرسال أو الصادر الجماعي.</li>
+        <li>للتصدير الشامل استخدم التقارير ← Excel.</li>
+        <li>لا تُلغِ صادراً إلا بعد التأكد — الإلغاء لا يُراجع والرقم يبقى محجوزاً.</li>
+        <li>في ملصق الظرف: ابدأ من الخانة الصحيحة واطبع بورق Letter حسب القالب.</li>
+        <li>في الملصق الحراري: اختر مقاس الطابعة المطابق للقالب (50×25 أو 44×22 ملم).</li>
+        <li>للمساعدة التقنية أو إعادة الدعوة: تواصل مع مدير النظام.</li>
+      </ul>
+    </section>
+
+    <footer class="doc-foot">
+      نظام الصادر والوارد والداخلي · دليل المستخدم الشامل
+    </footer>
+  </div>
+  <script>
+    (function () {
+      function clearPrintPageNums() {
+        document.querySelectorAll('.print-page-num').forEach(function (el) {
+          el.remove();
+        });
+      }
+
+      function stampPrintPageNums() {
+        clearPrintPageNums();
+
+        /* ارتفاع ورقة A4 بوحدة CSS px عند 96dpi */
+        var pagePx = 297 * 96 / 25.4;
+        var total = Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight
+        );
+        var count = Math.max(1, Math.ceil(total / pagePx));
+        /* مسافة من أسفل الورقة لموضع الرقم */
+        var fromBottom = 7 * 96 / 25.4;
+
+        for (var i = 1; i <= count; i++) {
+          var el = document.createElement('div');
+          el.className = 'print-page-num';
+          el.setAttribute('aria-hidden', 'true');
+          el.textContent = String(i);
+          el.style.top = (i * pagePx - fromBottom) + 'px';
+          document.body.appendChild(el);
+        }
+      }
+
+      window.addEventListener('beforeprint', stampPrintPageNums);
+      window.addEventListener('afterprint', clearPrintPageNums);
+
+      var btn = document.querySelector('.toolbar .primary');
+      if (btn) {
+        btn.addEventListener('click', function () {
+          stampPrintPageNums();
+          window.print();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-login</title>
+<style>
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Regular.otf') format('opentype');font-weight:400}
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Bold.otf') format('opentype');font-weight:700}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;font-family:'GretaArabic',Arial,sans-serif;background:#f8f6f2;color:#3B4F6E}
+body{display:flex;align-items:center;justify-content:center;
+background-image:radial-gradient(ellipse at 15% 10%,rgba(249,241,235,.95),transparent 55%),radial-gradient(ellipse at 85% 90%,rgba(59,79,110,.08),transparent 50%)}
+.card{width:420px;background:#fff;border:1px solid #e6e2da;border-top:4px solid #3B4F6E;border-radius:16px;padding:32px 28px;box-shadow:0 12px 40px rgba(59,79,110,.12);text-align:center}
+.logo{width:110px;height:auto;margin:0 auto 14px;display:block}
+.org{font-weight:700;font-size:20px;margin:0 0 4px}
+.org-en{font-family:Arial,sans-serif;font-size:12px;color:#6b7280;direction:ltr;margin:0 0 8px}
+.sys{font-weight:700;font-size:16px;margin:0 0 22px}
+label{display:block;text-align:right;font-size:14px;margin:0 0 6px;font-weight:700}
+.field{margin:0 0 14px;text-align:right}
+input{width:100%;border:1px solid #e6e2da;border-radius:8px;padding:11px 12px;font:inherit;font-size:14px;color:#3B4F6E;background:#fff}
+.btn{margin-top:8px;width:100%;border:0;border-radius:8px;background:#3B4F6E;color:#fff;font:inherit;font-weight:700;font-size:15px;padding:12px;cursor:default}
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="logo.png" alt="">
+    <div class="org">مؤسسة الملك فيصل الخيرية</div>
+    <div class="org-en">King Faisal Foundation</div>
+    <div class="sys">نظام الصادر والوارد</div>
+    <div class="field"><label>البريد الإلكتروني</label><input value="name@example.com" readonly></div>
+    <div class="field"><label>كلمة المرور</label><input type="password" value="password" readonly></div>
+    <button class="btn" type="button">دخول</button>
+  </div>
+</body>
+</html>

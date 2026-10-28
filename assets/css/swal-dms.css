@@ -1,0 +1,146 @@
+/* SweetAlert2 — هوية DMS (مثل نظام الدعوات: نافذة مركزية) */
+
+.swal2-popup.dms-swal-popup,
+.swal2-popup {
+  border-radius: 16px !important;
+  border: 1px solid #e6e2da;
+  box-shadow: 0 18px 40px rgba(59, 79, 110, 0.16) !important;
+  padding: 1.4rem 1.2rem 1.2rem !important;
+  font-family: 'GretaArabic', 'Amiri', sans-serif !important;
+  color: #3B4F6E;
+}
+
+.swal2-title.dms-swal-title,
+.swal2-title {
+  color: #3B4F6E !important;
+  font-weight: 700 !important;
+  font-size: 1.35rem !important;
+}
+
+.swal2-html-container.dms-swal-text,
+.swal2-html-container {
+  color: #6b7280 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+}
+
+.swal2-actions {
+  gap: 0.55rem;
+}
+
+.swal2-styled.swal2-confirm,
+.dms-swal-confirm,
+button.dms-swal-confirm {
+  background: #3B4F6E !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  font-family: inherit !important;
+  padding: 0.65rem 1.4rem !important;
+  box-shadow: 0 4px 10px rgba(59, 79, 110, 0.28);
+}
+
+.swal2-styled.swal2-confirm:hover,
+.dms-swal-confirm:hover,
+button.dms-swal-confirm:hover {
+  background: #2c3e50 !important;
+}
+
+.dms-swal-confirm--danger,
+button.dms-swal-confirm.dms-swal-confirm--danger,
+.swal2-styled.swal2-confirm.dms-swal-confirm--danger {
+  background: #dc3545 !important;
+  box-shadow: 0 4px 10px rgba(220, 53, 69, 0.28);
+}
+
+.dms-swal-confirm--danger:hover,
+button.dms-swal-confirm.dms-swal-confirm--danger:hover {
+  background: #c82333 !important;
+}
+
+.swal2-styled.swal2-cancel,
+.swal2-styled.swal2-deny,
+.dms-swal-cancel,
+button.dms-swal-cancel {
+  background: #6c757d !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  font-family: inherit !important;
+  padding: 0.65rem 1.4rem !important;
+}
+
+.swal2-timer-progress-bar.dms-swal-timer,
+.swal2-timer-progress-bar {
+  background: rgba(59, 79, 110, 0.55) !important;
+}
+
+.swal2-icon.dms-swal-success-icon,
+.swal2-icon.dms-swal-error-icon,
+.swal2-icon.dms-swal-warning-icon,
+.swal2-icon.dms-swal-info-icon {
+  border: none !important;
+  width: 4.5em !important;
+  height: 4.5em !important;
+  margin: 0.6em auto 0.35em !important;
+  border-radius: 50% !important;
+}
+
+.swal2-icon.dms-swal-success-icon {
+  color: #3B4F6E !important;
+  background: rgba(59, 79, 110, 0.14) !important;
+}
+
+.swal2-icon.dms-swal-error-icon {
+  color: #dc3545 !important;
+  background: rgba(220, 53, 69, 0.12) !important;
+}
+
+.swal2-icon.dms-swal-warning-icon {
+  color: #b45309 !important;
+  background: rgba(180, 83, 9, 0.12) !important;
+}
+
+.swal2-icon.dms-swal-info-icon {
+  color: #3B4F6E !important;
+  background: rgba(59, 79, 110, 0.12) !important;
+}
+
+.swal2-icon.dms-swal-success-icon .swal2-icon-content,
+.swal2-icon.dms-swal-error-icon .swal2-icon-content,
+.swal2-icon.dms-swal-warning-icon .swal2-icon-content,
+.swal2-icon.dms-swal-info-icon .swal2-icon-content {
+  font-size: 2.1em !important;
+  line-height: 1 !important;
+}
+
+.swal2-icon.swal2-success {
+  border-color: #3B4F6E !important;
+  color: #3B4F6E !important;
+}
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: #3B4F6E !important;
+}
+.swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(59, 79, 110, 0.35) !important;
+}
+.swal2-icon.swal2-success .swal2-success-fix-outline {
+  border-color: rgba(59, 79, 110, 0.35) !important;
+}
+.swal2-icon.swal2-warning {
+  border-color: #b45309 !important;
+  color: #b45309 !important;
+}
+.swal2-icon.swal2-info {
+  border-color: #3B4F6E !important;
+  color: #3B4F6E !important;
+}
+.swal2-loader {
+  border-color: #3B4F6E transparent #3B4F6E transparent !important;
+}
+
+.swal2-container.swal2-backdrop-show {
+  background: rgba(59, 79, 110, 0.35) !important;
+}

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>مقترح الصلاحيات ودورة المعاملة — نظام الصادر والوارد والداخلي</title>
+  <style>
+    @font-face {
+      font-family: 'GretaArabic';
+      src: url('images/user-guide/GretaArabic-Regular.otf') format('opentype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'GretaArabic';
+      src: url('images/user-guide/GretaArabic-Bold.otf') format('opentype');
+      font-weight: 700;
+      font-style: normal;
+    }
+    :root {
+      --accent: #3B4F6E;
+      --accent-2: #4A7A8C;
+      --accent-3: #8A6D3B;
+      --bg: #F8F6F2;
+      --card: #FFFFFF;
+      --text: #212529;
+      --muted: #6b7280;
+      --border: #e6e2da;
+      --ok: #2f6b4f;
+      --warn: #9a6a12;
+      --bad: #9b2c2c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'GretaArabic', 'Greta Arabic', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.8;
+      font-size: 15px;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 28px 18px 56px; }
+
+    .hero {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--accent);
+      border-radius: 14px;
+      padding: 26px 24px 20px;
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .hero img { width: 140px; max-height: 90px; object-fit: contain; }
+    .hero h1 { margin: 10px 0 4px; font-size: 1.55rem; color: var(--text); }
+    .hero .sub { color: var(--muted); margin: 0; }
+    .meta {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px;
+      margin-top: 12px; font-size: .88rem; color: var(--muted);
+    }
+    .meta b { color: var(--accent); font-weight: 700; }
+
+    .toc, section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      margin-bottom: 18px;
+    }
+    .toc ol { margin: 6px 0 0; padding-inline-start: 22px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    h2 {
+      margin: 0 0 12px; font-size: 1.25rem; color: var(--accent);
+      padding-bottom: 8px; border-bottom: 2px solid var(--border);
+    }
+    h3 { margin: 18px 0 8px; font-size: 1.05rem; color: var(--text); }
+    p { margin: 6px 0; }
+    ul { margin: 6px 0; padding-inline-start: 22px; }
+    li { margin: 3px 0; }
+
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .9rem; }
+    th, td { border: 1px solid var(--border); padding: 7px 9px; vertical-align: top; text-align: right; }
+    th { background: #f1eee8; color: var(--accent); font-weight: 700; }
+    td:first-child { font-weight: 700; color: var(--accent); white-space: nowrap; }
+    tr.span td { background: #faf9f6; }
+
+    .note {
+      border-inline-start: 4px solid var(--accent);
+      background: #f4f6f9;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin: 10px 0;
+    }
+    .note.warn { border-color: var(--warn); background: #fbf6ec; }
+
+    /* مخطط الدورة */
+    .flow { margin: 12px 0 6px; }
+    .step {
+      display: flex; gap: 12px; align-items: flex-start;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    .step .num {
+      flex: 0 0 auto;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .9rem;
+    }
+    .step.s2 .num { background: var(--accent-2); }
+    .step.s3 .num { background: var(--accent-3); }
+    .step.end .num { background: #4b5563; }
+    .step .body { flex: 1 1 auto; min-width: 0; }
+    .step .title { font-weight: 700; }
+    .actor {
+      display: inline-block; font-size: .78rem; font-weight: 700;
+      padding: 1px 9px; border-radius: 999px;
+      background: #eef1f6; color: var(--accent);
+      margin-inline-start: 6px; vertical-align: middle;
+    }
+    .step .desc { color: #374151; font-size: .9rem; margin-top: 2px; }
+    .branches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .br {
+      font-size: .8rem; padding: 2px 9px; border-radius: 6px;
+      border: 1px dashed var(--border); background: #faf9f6; color: #374151;
+    }
+    .br.back { border-color: #c9a86a; color: var(--warn); }
+    .br.bad { border-color: #d9a3a3; color: var(--bad); }
+    .br.ok { border-color: #9cc3ae; color: var(--ok); }
+    .arrow {
+      text-align: center; color: var(--muted); font-size: 1.1rem; line-height: 1.2;
+      margin: 3px 0;
+    }
+    .sub-flow {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .sub-flow .step { padding: 8px 10px; }
+    @media (max-width: 640px) { .sub-flow { grid-template-columns: 1fr; } }
+
+    .rules li { margin: 5px 0; }
+    .phase { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+    .phase .num {
+      flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: .82rem; background: var(--accent);
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .phase .num.p2 { background: var(--accent-2); }
+    .phase .num.p3 { background: var(--accent-3); }
+
+    footer { text-align: center; color: var(--muted); font-size: .82rem; margin-top: 10px; }
+
+    @media print {
+      @page { size: A4; margin: 14mm 12mm; }
+      body { background: #fff; font-size: 12.5px; }
+      .wrap { max-width: none; padding: 0; }
+      .hero, .toc, section { border-radius: 0; border-color: #ccc; }
+      .toc { display: none; }
+      section { break-inside: auto; page-break-inside: auto; }
+      section.page { break-before: page; page-break-before: always; }
+      .step, tr, .note { break-inside: avoid; page-break-inside: avoid; }
+      th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .step .num, .actor, .br { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <img src="images/user-guide/logo.png" alt="شعار المؤسسة">
+    <h1>مقترح الصلاحيات ودورة المعاملة</h1>
+    <p class="sub">نظام الصادر والوارد والمعاملات الداخلية — إطار الحوكمة</p>
+    <div class="meta">
+      <span>الحالة: <b>مقترح للنقاش</b></span>
+      <span>التاريخ: <b>27/09/2026</b></span>
+      <span>النطاق: <b>الصادر، الوارد، المعاملات الداخلية، التعميم</b></span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <b>المحتويات</b>
+    <ol>
+      <li><a href="#principles">المبادئ الأساسية</a></li>
+      <li><a href="#matrix">مصفوفة الصلاحيات المقترحة</a></li>
+      <li><a href="#outgoing">دورة الصادر</a></li>
+      <li><a href="#incoming">دورة الوارد</a></li>
+      <li><a href="#internal">دورة المعاملة الداخلية</a></li>
+      <li><a href="#common">ضوابط مشتركة</a></li>
+      <li><a href="#gap">الفجوة مع النظام الحالي ومراحل التنفيذ</a></li>
+    </ol>
+  </nav>
+
+  <section id="principles">
+    <h2>1. المبادئ الأساسية</h2>
+    <ul class="rules">
+      <li><b>فصل المهام:</b> من يُعدّ المعاملة غير من يراجعها، وغير من يعتمدها، وغير من يؤرشفها.</li>
+      <li><b>المراجعة غير الاعتماد:</b> الاتصالات الإدارية تراجع <u>الشكل والإجراء</u> (البيانات، الجهة، المرفقات، الصيغة)، والمعتمد يعتمد <u>المضمون والقرار</u>.</li>
+      <li><b>المساءلة الفردية:</b> كل دور يُمنح لموظفين بأسمائهم وحساباتهم، ولا تُستخدم حسابات مشتركة.</li>
+      <li><b>الأثر الكامل:</b> كل انتقال بين مرحلتين يُسجَّل: من، ومتى، ومن أي حالة إلى أي حالة، والسبب إن وُجد.</li>
+      <li><b>لا صلاحية غير محددة:</b> عبارة «حسب الصلاحية» تتحول دائماً إلى قاعدة مكتوبة.</li>
+    </ul>
+  </section>
+
+  <section id="matrix" class="page">
+    <h2>2. مصفوفة الصلاحيات المقترحة</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:15%">الدور</th>
+          <th>الصادر</th>
+          <th>الوارد</th>
+          <th>المعاملات الداخلية</th>
+          <th>التعميم</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>مستخدم القسم</td>
+          <td>إنشاء، مرفقات، تعديل قبل المراجعة أو عند الإعادة، إرسال للمراجعة</td>
+          <td>—</td>
+          <td>إنشاء، إحالة، متابعة وتنفيذ</td>
+          <td>إعداد مسودة ورفعها للاعتماد</td>
+        </tr>
+        <tr>
+          <td>مدير الجهة<br><small>(مشرف القسم)</small></td>
+          <td>اطلاع على صادر جهته</td>
+          <td>استلام الموجَّه لجهته وإحالته للمختص</td>
+          <td>اعتماد المعاملة المرسلة، توجيه وإحالة، إغلاق معاملات جهته</td>
+          <td>رفع التعميم للاعتماد</td>
+        </tr>
+        <tr>
+          <td>الاتصالات الإدارية</td>
+          <td>مراجعة شكلية وإجرائية أو إعادة بملاحظات؛ بعد الاعتماد: الترقيم والطباعة الرسمية والإرسال ومتابعة الاستلام</td>
+          <td>تسجيل واستلام، تحقق من البيانات والمرفقات، توجيه للجهة المختصة</td>
+          <td>مراجعة شكلية اختيارية قبل اعتماد مدير الجهة (معطّلة افتراضياً)</td>
+          <td>تسجيل ونشر بعد الاعتماد</td>
+        </tr>
+        <tr>
+          <td>المعتمد<br><small>(الأول، الثاني، الثالث)</small></td>
+          <td>اعتماد أو رفض أو إعادة، بالتسلسل والمهل</td>
+          <td>اعتماد التوجيه للوارد المصنَّف سرياً أو مهماً فقط، بالتسلسل والمهل (أول، ثانٍ، ثالث)</td>
+          <td>الأول مدير الجهة المرسلة تلقائياً، ثم الثاني والثالث من الإعدادات عند انقضاء المهلة</td>
+          <td>اعتماد إلزامي قبل النشر</td>
+        </tr>
+        <tr>
+          <td>المستلم / المختص</td>
+          <td>—</td>
+          <td>تنفيذ المطلوب وإعداد الرد (الرد يدخل دورة الصادر)</td>
+          <td>استلام وتنفيذ</td>
+          <td>اطلاع وتنفيذ ما يخصه</td>
+        </tr>
+        <tr>
+          <td>مسؤول الأرشيف</td>
+          <td>بعد تأكيد الإرسال والاستلام: إغلاق وأرشفة دون تعديل المحتوى</td>
+          <td>تحقق نهائي، إغلاق، أرشفة</td>
+          <td>أرشفة بعد إغلاقها من الجهة</td>
+          <td>أرشفة بعد النشر</td>
+        </tr>
+        <tr class="span">
+          <td>مدير النظام</td>
+          <td colspan="4">المستخدمون والصلاحيات والإعدادات فقط — لا يعتمد ولا يُصدر ولا يعدّل محتوى المعاملات</td>
+        </tr>
+        <tr class="span">
+          <td>المدقق</td>
+          <td colspan="4">اطلاع وتقارير وسجل التدقيق فقط — بلا أي تعديل</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="outgoing" class="page">
+    <h2>3. دورة الصادر</h2>
+
+    <div class="flow">
+      <div class="step">
+        <span class="num">1</span>
+        <div class="body">
+          <div class="title">مسودة <span class="actor">مستخدم القسم</span></div>
+          <div class="desc">إعداد الخطاب والمرفقات والجهة. التعديل مسموح في هذه المرحلة فقط.</div>
+          <div class="branches"><span class="br ok">إرسال للمراجعة ←</span></div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">2</span>
+        <div class="body">
+          <div class="title">قيد المراجعة <span class="actor">المراجع المعيَّن</span></div>
+          <div class="desc">مراجعة البيانات والجهة والمرفقات والصيغة، دون الحكم على المضمون.</div>
+          <div class="sub-flow" style="margin-top:8px">
+            <div class="step"><span class="num">أ</span><div class="body"><div class="title">المراجع الأول</div><div class="desc">خلال مهلته</div></div></div>
+            <div class="step s2"><span class="num">ب</span><div class="body"><div class="title">المراجع الثاني</div><div class="desc">بعد مهلة الأول (إن كان مفعّلاً)، أو مباشرة إن كان الأول هو مُعِدّ المعاملة</div></div></div>
+          </div>
+          <div class="branches">
+            <span class="br ok">مطابقة ← بانتظار الاعتماد</span>
+            <span class="br back">↩ إعادة بملاحظات ← المسودة</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">3</span>
+        <div class="body">
+          <div class="title">بانتظار الاعتماد <span class="actor">المعتمدون بالتسلسل</span></div>
+          <div class="desc">يُعرض على المعتمد الأول، ويُصعَّد تلقائياً عند انتهاء كل مهلة.</div>
+          <div class="sub-flow" style="margin-top:8px">
+            <div class="step"><span class="num">أ</span><div class="body"><div class="title">المعتمد الأول</div><div class="desc">خلال مهلته</div></div></div>
+            <div class="step s2"><span class="num">ب</span><div class="body"><div class="title">المعتمد الثاني</div><div class="desc">بعد مهلة الأول (إن كان مفعّلاً)</div></div></div>
+            <div class="step s3"><span class="num">ج</span><div class="body"><div class="title">المعتمد الثالث</div><div class="desc">بعد مهلة الثاني، وبسبب إلزامي</div></div></div>
+          </div>
+          <div class="branches">
+            <span class="br ok">اعتماد ← جاهزة للإصدار</span>
+            <span class="br back">↩ إعادة بسبب ← المسودة</span>
+            <span class="br bad">✕ رفض بسبب ← إغلاق وأرشفة</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">4</span>
+        <div class="body">
+          <div class="title">الإصدار <span class="actor">الاتصالات الإدارية</span></div>
+          <div class="desc">الترقيم النهائي، ثم الطباعة الرسمية أو الإرسال الإلكتروني.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">5</span>
+        <div class="body">
+          <div class="title">بانتظار الاستلام <span class="actor">الاتصالات الإدارية</span></div>
+          <div class="desc">متابعة تأكيد الاستلام من الجهة أو إثبات الإرسال.</div>
+          <div class="branches"><span class="br ok">تأكيد الاستلام ← مكتملة</span></div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step end">
+        <span class="num">6</span>
+        <div class="body">
+          <div class="title">الإغلاق والأرشفة <span class="actor">مسؤول الأرشيف</span></div>
+          <div class="desc">تحقق نهائي من الاكتمال، ثم الإغلاق والأرشفة دون تعديل المحتوى.</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>ضوابط المراجعة</h3>
+    <ul class="rules">
+      <li><b>من يراجع:</b> المراجع الأول ثم المراجع الثاني (ويمكن إيقاف الثاني)، ويُحدَّدان من الإعدادات (تبويب الصادر) من أي مستخدم. إن تُركا فارغين يراجع أي مستخدم من «الاتصالات الإدارية».</li>
+      <li><b>ما يُراجَع:</b> البيانات، والجهة، والمرفقات، والصيغة.</li>
+      <li><b>قرارات المراجع:</b> «مطابقة» فتنتقل إلى بانتظار الاعتماد، أو «إعادة بملاحظات» فترجع إلى المسودة.</li>
+      <li>المراجعة للشكل والإجراء فقط، والمضمون والقرار للمعتمد.</li>
+      <li>الإعادة تكون بملاحظات مكتوبة إلزامية.</li>
+      <li>من أعدّ المعاملة لا يراجعها، ومن راجعها لا يعتمدها.</li>
+      <li>أي تعديل بعد المراجعة يعيد المعاملة للمراجعة.</li>
+      <li>تعمل المراجعة ضمن مسار موافقة الإصدار، فيلزم تفعيله وتحديد المعتمد الأول.</li>
+      <li>إن لم يوجد مراجع مؤهَّل (غير المُعِدّ) تنتقل المعاملة مباشرة إلى المعتمد الأول.</li>
+    </ul>
+
+    <h3>ضوابط الصادر</h3>
+    <ul class="rules">
+      <li><b>قفل التعديل:</b> أي تعديل بعد المراجعة يعيد المعاملة للمراجعة، وأي تعديل بعد الاعتماد يُسقط الاعتماد.</li>
+      <li><b>الأسباب:</b> الإعادة والرفض بسبب مكتوب دائماً. الرفض يغلق المعاملة ويؤرشفها بسببها، والإعادة ترجعها للتصحيح.</li>
+      <li><b>الترقيم عند الإصدار لا عند الإنشاء:</b> حتى لا تظهر أرقام مهدرة لمسودات لم تصدر.</li>
+      <li><b>الإلغاء بعد الإصدار:</b> بطلب مسبَّب واعتماد، ويبقى الصادر في السجل بحالة «ملغاة» ولا يُحذف.</li>
+      <li><b>الاستثناء:</b> المعتمد الثالث يبتّ فقط بعد انتهاء المهلة وبسبب إلزامي يُحفظ مع القرار.</li>
+    </ul>
+  </section>
+
+  <section id="incoming" class="page">
+    <h2>4. دورة الوارد</h2>
+
+    <div class="flow">
+      <div class="step">
+        <span class="num">1</span>
+        <div class="body">
+          <div class="title">الاستلام والتسجيل <span class="actor">الاتصالات الإدارية</span></div>
+          <div class="desc">رقم وارد وتاريخ الاستلام، ومسح المرفقات، والتحقق من الجهة والبيانات.</div>
+          <div class="branches"><span class="br">معاملة سرية أو مهمة؟ ← اعتماد التوجيه أولاً</span></div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step s2">
+        <span class="num">2</span>
+        <div class="body">
+          <div class="title">اعتماد التوجيه <span class="actor">معتمدو الوارد بالتسلسل</span></div>
+          <div class="desc">للوارد الذي تصنّفه الاتصالات الإدارية سرياً أو مهماً فقط، وغيره ينتقل مباشرة للتوجيه. يعمل بآلية الصادر نفسها: معتمد أول ثم ثانٍ ثم ثالث، بمهل أقصر (بالساعات) وتصعيد تلقائي.</div>
+          <div class="sub-flow" style="margin-top:8px">
+            <div class="step"><span class="num">أ</span><div class="body"><div class="title">المعتمد الأول</div><div class="desc">خلال مهلته</div></div></div>
+            <div class="step s2"><span class="num">ب</span><div class="body"><div class="title">المعتمد الثاني</div><div class="desc">بعد مهلة الأول (إن كان مفعّلاً)</div></div></div>
+            <div class="step s3"><span class="num">ج</span><div class="body"><div class="title">المعتمد الثالث</div><div class="desc">بعد مهلة الثاني، وبسبب إلزامي</div></div></div>
+          </div>
+          <div class="branches">
+            <span class="br ok">اعتماد التوجيه كما هو</span>
+            <span class="br">تعديل التوجيه أو إضافة جهة</span>
+            <span class="br">إضافة تأشيرة (توجيهات مكتوبة)</span>
+            <span class="br">حفظ للعلم دون إجراء</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">3</span>
+        <div class="body">
+          <div class="title">التوجيه <span class="actor">الاتصالات الإدارية</span></div>
+          <div class="desc">تحويل المعاملة إلى الجهة المختصة.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">4</span>
+        <div class="body">
+          <div class="title">الاستلام في الجهة <span class="actor">مدير الجهة</span></div>
+          <div class="desc">إحالة المعاملة للمختص.</div>
+          <div class="branches">
+            <span class="br ok">إحالة ← المختص</span>
+            <span class="br back">↩ ليست من اختصاصنا (بسبب) ← الاتصالات الإدارية</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">5</span>
+        <div class="body">
+          <div class="title">التنفيذ <span class="actor">المختص</span></div>
+          <div class="desc">تنفيذ المطلوب. إذا احتاجت رداً يُنشأ صادر مرتبط بها ويمر بدورة الصادر كاملة.</div>
+          <div class="branches">
+            <span class="br">يحتاج رداً ← صادر مرتبط</span>
+            <span class="br">إجراء فقط ← توثيق الإجراء</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">6</span>
+        <div class="body">
+          <div class="title">تأكيد اكتمال المعالجة <span class="actor">مدير الجهة</span></div>
+          <div class="desc">يؤكد أن المعالجة انتهت.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step end">
+        <span class="num">7</span>
+        <div class="body">
+          <div class="title">التحقق النهائي والإغلاق والأرشفة <span class="actor">مسؤول الأرشيف</span></div>
+          <div class="desc">يتحقق أن الرد صدر أو أن الإجراء موثّق، ثم يغلق ويؤرشف.</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>ضوابط الوارد</h3>
+    <ul class="rules">
+      <li><b>مهلة معالجة:</b> لكل وارد مهلة؛ عند اقترابها يُنبَّه المختص، وعند تجاوزها تُصعَّد لمدير الجهة.</li>
+      <li><b>لا إغلاق قبل الرد:</b> المعاملة التي تحتاج رداً لا تُغلق قبل صدور ردها.</li>
+      <li><b>إعادة التوجيه بسبب:</b> رفض الجهة للمعاملة لعدم الاختصاص يكون بسبب مكتوب، وتعيد الاتصالات الإدارية توجيهها.</li>
+    </ul>
+
+    <h3>اعتماد التوجيه في الوارد</h3>
+    <ul class="rules">
+      <li><b>النطاق:</b> يمر بالاعتماد فقط الوارد الذي تصنّفه الاتصالات الإدارية سرياً أو مهماً عند التسجيل، أما العادي فيُوجَّه مباشرة، حتى لا يصبح المعتمد عنق زجاجة لكل البريد. ويمكن اختيار «كل الوارد» في الإعدادات ليمر كل وارد بالاعتماد.</li>
+      <li><b>الآلية:</b> مثل الصادر تماماً: معتمد أول ثم ثانٍ ثم ثالث، ولكل مرحلة مهلة وتصعيد تلقائي، ويمكن تفعيل المعتمد الثاني والثالث أو إيقافهما.</li>
+      <li><b>المعتمدون:</b> إعداد مستقل لمعتمدي الوارد في صفحة الإعدادات (تبويب الوارد).</li>
+      <li><b>المهل:</b> مستقلة عن مهل الصادر، وأقصر عادةً (بالساعات) لأن الوارد غالباً مستعجل.</li>
+      <li><b>القرار:</b> لا يوجد «رفض» في الوارد لأن الخطاب وصل فعلاً. خيارات المعتمد: اعتماد التوجيه كما هو، أو تعديله أو إضافة جهة، أو إضافة تأشيرة، أو الحفظ للعلم.</li>
+      <li><b>الاستثناء:</b> المعتمد الثالث يبتّ فقط بعد انتهاء المهلة وبسبب إلزامي، كما في الصادر.</li>
+      <li><b>فصل المهام:</b> من سجّل الوارد في الاتصالات الإدارية لا يعتمد توجيهه.</li>
+    </ul>
+  </section>
+
+  <section id="internal" class="page">
+    <h2>5. دورة المعاملة الداخلية</h2>
+
+    <div class="flow">
+      <div class="step">
+        <span class="num">1</span>
+        <div class="body">
+          <div class="title">الإنشاء <span class="actor">مستخدم القسم</span></div>
+          <div class="desc">إعداد المعاملة ومرفقاتها.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">2</span>
+        <div class="body">
+          <div class="title">المراجعة (اختيارية) <span class="actor">المراجع المعيَّن</span></div>
+          <div class="desc">مراجعة شكلية للبيانات والجهة المستلمة والمرفقات والصيغة، وتعمل فقط إذا فُعّلت في الإعدادات. يراجعها المراجع الأول ثم الثاني المحددان في الإعدادات (وإن تُركا فارغين: أي مستخدم من «الاتصالات الإدارية»). عند إيقافها تنتقل المعاملة مباشرة إلى الاعتماد.</div>
+          <div class="branches">
+            <span class="br ok">مطابقة ← الاعتماد</span>
+            <span class="br back">↩ إعادة بملاحظات ← الإنشاء</span>
+          </div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step s2">
+        <span class="num">3</span>
+        <div class="body">
+          <div class="title">الاعتماد <span class="actor">مدير الجهة المرسلة ثم التصعيد</span></div>
+          <div class="desc">إلزامي إذا كانت المعاملة موجّهة لجهة أخرى. المعتمد الأول هو مدير الجهة المرسلة تلقائياً، وعند انقضاء مهلته تُحوَّل إلى المعتمد الثاني ثم الثالث المحددين في الإعدادات.</div>
+          <div class="branches"><span class="br back">↩ إعادة بسبب ← الإنشاء</span></div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">4</span>
+        <div class="body">
+          <div class="title">الاستلام <span class="actor">مدير الجهة المستلمة</span></div>
+          <div class="desc">إحالة المعاملة للمختص.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">5</span>
+        <div class="body">
+          <div class="title">التنفيذ <span class="actor">المختص</span></div>
+          <div class="desc">تنفيذ المطلوب والرد داخلياً (رد مرتبط بالمعاملة).</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step">
+        <span class="num">6</span>
+        <div class="body">
+          <div class="title">الإغلاق <span class="actor">الجهة المنشئة</span></div>
+          <div class="desc">تؤكد أن المطلوب تحقق، ثم تغلق المعاملة.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+
+      <div class="step end">
+        <span class="num">7</span>
+        <div class="body">
+          <div class="title">الأرشفة <span class="actor">تلقائياً أو مسؤول الأرشيف</span></div>
+          <div class="desc">بعد الإغلاق.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">دور الاتصالات الإدارية في المعاملات الداخلية مراجعة شكلية اختيارية فقط (معطّلة افتراضياً)، ولا تتدخل في المضمون أو التوجيه.</div>
+  </section>
+
+  <section id="common">
+    <h2>6. ضوابط مشتركة بين الدورات</h2>
+    <ul class="rules">
+      <li><b>السجل:</b> كل انتقال بين مرحلتين يُسجَّل: من قام به، ومتى، ومن أي حالة إلى أي حالة.</li>
+      <li><b>الأسباب:</b> كل إعادة أو رفض أو استثناء يكون بسبب مكتوب يُحفظ مع الإجراء.</li>
+      <li><b>فصل المهام:</b> لا يجمع شخص واحد بين الإعداد والمراجعة والاعتماد على المعاملة نفسها.</li>
+      <li><b>لا حذف:</b> المعاملات لا تُحذف، بل تُلغى بسبب وتبقى في السجل.</li>
+      <li><b>الأرشيف ومدير النظام:</b> لا يعدّلان محتوى أي معاملة.</li>
+      <li><b>الإعدادات والصلاحيات:</b> كل تغيير فيها يُسجَّل: من غيّر، وماذا غيّر، والقيمة قبل التغيير وبعده.</li>
+      <li><b>إيقاف الرقابة:</b> إذا أُوقف مسار الاعتماد يظهر تنبيه واضح في الإعدادات وفي صفحات المعاملات، ويُسجَّل الإيقاف.</li>
+    </ul>
+  </section>
+
+  <section id="gap" class="page">
+    <h2>7. الفجوة مع النظام الحالي ومراحل التنفيذ</h2>
+
+    <h3>الوضع الحالي</h3>
+    <table>
+      <thead><tr><th style="width:30%">البند</th><th>الوضع الحالي</th><th>المطلوب</th></tr></thead>
+      <tbody>
+        <tr><td>الأدوار</td><td>مدير النظام، الاتصالات الإدارية (أُضيف)، مشرف الأرشيف، مشرف القسم، مشاهد</td><td>إضافة «المدقق»</td></tr>
+        <tr><td>مشرف الأرشيف</td><td>صلاحيات واسعة قريبة من مدير النظام</td><td>تضييقها إلى الاستلام والإغلاق والأرشفة</td></tr>
+        <tr><td>مرحلة المراجعة</td><td>الصادر: مُنفّذة — مراجع أساسي ومراجع بديل يُحدَّدان من الإعدادات (أي مستخدم) مع مهلة وتصعيد، وإن تُركا فارغين يراجع أي مستخدم من «الاتصالات الإدارية»؛ تمرير أو إعادة بملاحظات، فردياً وللصادر الجماعي، مع قائمة «يحتاج مراجعة». الوارد: مُنفّذة بنفس الآلية وبإعدادات تبويب الوارد. الداخلية: مُنفّذة بنفس الآلية وبإعدادات تبويب المعاملات الداخلية (اختيارية ومعطّلة افتراضياً)</td><td>—</td></tr>
+        <tr><td>الاعتماد</td><td>موجود: ثلاثة معتمدين بالتسلسل والمهل، مع فصل الصلاحيات</td><td>إضافة خيار «إعادة» بجانب الاعتماد والرفض</td></tr>
+        <tr><td>التعديل بعد الاعتماد</td><td>الصادر: مُنفّذ — تعديل البيانات أثناء الاعتماد أو بعده (قبل الإرسال) يُسقط الاعتماد ويعيد المسار من بدايته. لا يشمل رفع المرفقات أو حذفها منفردة</td><td>شمول تعديل المرفقات</td></tr>
+        <tr><td>الإصدار</td><td>منشئ المعاملة</td><td>الاتصالات الإدارية</td></tr>
+        <tr><td>اعتماد توجيه الوارد</td><td>مُنفَّذ حسب تبويب الوارد: يُحجز الوارد الخاضع للاعتماد عن الجهة عند تسجيله، ويمر بالمراجعة (تمرير أو إعادة بملاحظات) ثم المعتمدين بالتسلسل والمهل. قرار المعتمد: اعتماد التوجيه مع تأشيرة اختيارية، أو الحفظ للعلم، أو الإعادة للمنشئ بملاحظات. تغيير القسم من صلاحية المنشئ فقط عند الإعادة، ثم يعيد الإرسال فيمر بالمراجعة من جديد. لا تُشعَر الجهة ولا تُتاح الإحالة إلا بعد الاعتماد</td><td>—</td></tr>
+        <tr><td>اعتماد المعاملة الداخلية</td><td>مُنفَّذ حسب تبويب المعاملات الداخلية: تُحجز المعاملة عند إنشائها عن الجهة المستلمة، وتمر بالمراجعة الاختيارية ثم مدير الجهة المرسلة (مستخدم بدور «مشرف القسم» في القسم المرسل)، ثم التصعيد للمعتمد الثاني فالثالث حسب المهل. إن لم يوجد مدير للجهة أو كان هو المنشئ تذهب مباشرة للمعتمد الثاني. قرار المعتمد: اعتماد وإحالة للجهة المستلمة (مع ملاحظة تظهر في الإحالة)، أو إعادة للمنشئ بملاحظات إلزامية، فيغيّر المنشئ الجهة المستلمة إن لزم ثم يعيد الإرسال. قبل الاعتماد تُعطَّل الطباعة وملصق الظرف والإقفال وتغيير الحالة والإحالة، ويظهر سبب التعطيل كتلميح عند التأشير على الزر</td><td>—</td></tr>
+        <tr><td>سجل الإعدادات</td><td>غير موجود</td><td>تسجيل كل تغيير في الصلاحيات والإعدادات</td></tr>
+        <tr><td>التصعيد</td><td>يحدث عند دخول أي مستخدم للنظام</td><td>مهمة مجدولة تعمل كل بضع دقائق</td></tr>
+      </tbody>
+    </table>
+
+    <h3>مراحل التنفيذ المقترحة</h3>
+    <div class="phase"><span class="num">1</span>
+      <div><b>الصادر:</b> مرحلة المراجعة، والإصدار بيد الاتصالات الإدارية، وقفل التعديل، وسجل الإعدادات. <small>(الأعلى قيمة من ناحية الحوكمة)</small></div></div>
+    <div class="phase"><span class="num p2">2</span>
+      <div><b>الوارد:</b> التسجيل والتصنيف والتوجيه عبر الاتصالات الإدارية ومدير الجهة، واعتماد التوجيه للسري والمهم بثلاثة معتمدين، ومهل المعالجة.</div></div>
+    <div class="phase"><span class="num p3">3</span>
+      <div><b>التعميم والأرشفة:</b> صلاحيات مسؤول الأرشيف والمدقق، ودورة التعميم.</div></div>
+
+    <div class="note warn">هذه الوثيقة مقترح للنقاش والاعتماد، ولا تعكس الوضع الحالي للنظام إلا في قسم «الوضع الحالي».</div>
+  </section>
+
+  <footer>نظام الصادر والوارد والمعاملات الداخلية — مقترح الصلاحيات ودورة المعاملة</footer>
+</div>
+</body>
+</html>

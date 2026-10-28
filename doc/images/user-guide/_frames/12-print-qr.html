@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-print</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center;gap:24px}
+.sheet{width:420px;height:560px;padding:28px;position:relative}
+.qr{width:88px;height:88px;border:2px solid #3B4F6E;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin:18px auto}
+.label{width:340px;height:200px;padding:22px;display:flex;flex-direction:column;justify-content:center}
+.lab{font-size:12px;color:#6b7280;margin-bottom:4px}
+.val{font-size:18px;font-weight:700;margin-bottom:12px}
+</style>
+</head>
+<body>
+  <div class="card sheet" style="width:280px;height:auto;padding:18px">
+    <div style="font-weight:700;margin-bottom:10px">شريط العرض</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <button class="btn2" type="button">رجوع</button>
+      <button class="btn" type="button">طباعة ▾</button>
+      <button class="btn2" type="button">المزيد ▾</button>
+    </div>
+    <div style="font-size:12px;color:#6b7280;line-height:1.7">
+      قائمة الطباعة:<br>
+      · نموذج التسليم / الاستلام<br>
+      · ملصق الظرف<br>
+      · ملصق حراري<br>
+      · كشف المرسل إليهم (دفعة)
+    </div>
+  </div>
+  <div class="card sheet">
+    <div style="text-align:center;font-weight:700;font-size:18px;margin-bottom:6px">مؤسسة الملك فيصل الخيرية</div>
+    <div style="text-align:center;font-size:13px;color:#6b7280;margin-bottom:18px">ورقة طباعة المعاملة</div>
+    <div><strong>الرقم:</strong> ص/2026/000150</div>
+    <div style="margin-top:8px"><strong>الموضوع:</strong> دعوة اجتماع</div>
+    <div style="margin-top:8px"><strong>موجهة إلى:</strong> سعادة المدير…</div>
+    <div style="margin-top:8px"><strong>موجهة من:</strong> الإدارة العامة</div>
+    <div class="qr">QR</div>
+    <div style="text-align:center;font-size:12px;color:#6b7280">امسح للتحقق</div>
+  </div>
+  <div class="card label">
+    <div class="lab">ملصق الظرف</div>
+    <div class="val">سعادة / أ. خالد …</div>
+    <div class="lab">الجهة</div>
+    <div class="val">مجلس الأمناء</div>
+    <div class="hint">من قائمة طباعة · Letter · الموضوع لا يُطبع</div>
+  </div>
+</body>
+</html>

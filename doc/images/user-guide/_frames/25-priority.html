@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-priority</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:680px;padding:28px}
+.opts{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
+.opts span{border:1px solid #e6e2da;border-radius:999px;padding:7px 14px;font-weight:700;font-size:13px;background:#fff}
+.opts .on{background:#3B4F6E;color:#fff;border-color:#3B4F6E}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">الأولوية والسرية</div>
+    <div class="sub">حقول تصنيف في نماذج الوارد والصادر والجماعي (والسرية في الأرشيف)</div>
+    <label>الأولوية</label>
+    <div class="opts"><span>عادي</span><span class="on">عاجل</span></div>
+    <label>السرية</label>
+    <div class="opts"><span class="on">عادي</span><span>سري</span></div>
+    <p class="hint">القيم الافتراضية الحالية: أولوية عادي/عاجل — سرية عادي/سري. يمكن للإدارة تعديل المسميات من «مسميات القوائم».</p>
+  </div>
+</body>
+</html>

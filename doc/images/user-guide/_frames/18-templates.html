@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-templates</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:860px;padding:28px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.tools span{background:#eef1f5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">قالب خطاب جديد</div>
+    <div class="sub">يُدرج لاحقاً في الصادر الجماعي والبريد وواتساب</div>
+    <div class="row">
+      <div><label>الاسم عربي *</label><input value="قالب الدعوة" readonly></div>
+      <div><label>الرمز</label><input value="invite" readonly></div>
+    </div>
+    <label>نص القالب</label>
+    <div class="tools"><span>+ اللقب</span><span>+ الاسم</span><span>+ التكريم</span><span>+ الوظيفة</span></div>
+    <textarea rows="4" readonly>السلام عليكم ورحمة الله،
+سعادة {التكريم} {الاسم}…
+نتشرف بدعوتكم لحضور…</textarea>
+    <div class="actions"><button class="btn" type="button">حفظ</button><button class="btn2" type="button">معاينة</button></div>
+  </div>
+</body>
+</html>

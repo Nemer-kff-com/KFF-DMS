@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-cancel</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:720px;padding:28px}
+.kinds{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.k{border:1px solid #e6e2da;border-radius:12px;padding:14px}
+.k.on{border-color:#dc3545;background:#fff8f8}
+.k strong{display:block;margin-bottom:6px;color:#dc3545}
+.banner{background:#fde8e8;color:#b42318;border-radius:10px;padding:10px 12px;font-weight:700;margin-bottom:14px;text-align:center}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">إلغاء / سحب الصادر</div>
+    <div class="sub">ص/2026/000150 — لا يمكن التراجع · الرقم يبقى محجوزاً</div>
+    <div class="banner">ملغى / مسحوب — لا تعديل ولا إرسال بعد التأكيد</div>
+    <div class="kinds">
+      <div class="k on"><strong>ملغى</strong><div class="hint">لم يُعتمد الإرسال. الرقم محجوز ولا يُعاد استخدامه.</div></div>
+      <div class="k"><strong>مسحوب</strong><div class="hint">سُحب بعد الإصدار أو التسليم. الرقم يبقى في السجل.</div></div>
+    </div>
+    <label>سبب الإلغاء *</label>
+    <textarea rows="2" readonly>خطأ في المستلم — استبدال برقم لاحق</textarea>
+    <div class="actions">
+      <button class="btn" type="button" style="background:#dc3545">تأكيد الإلغاء</button>
+      <button class="btn2" type="button">رجوع</button>
+    </div>
+  </div>
+</body>
+</html>

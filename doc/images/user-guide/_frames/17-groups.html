@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-groups</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:820px;padding:28px}
+.list{border:1px solid #e6e2da;border-radius:10px;padding:12px;max-height:220px;overflow:hidden}
+.li{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f0ece6}
+.check{width:16px;height:16px;border:2px solid #3B4F6E;border-radius:3px;background:#3B4F6E}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">مجموعة جهات</div>
+    <div class="sub">لتجميع مستلمين متكررين واستخدامهم في الصادر الجماعي</div>
+    <label>اسم المجموعة *</label>
+    <input value="مجلس الأمناء" readonly style="margin-bottom:14px">
+    <label>الأعضاء</label>
+    <div class="list">
+      <div class="li"><span class="check"></span> أ. خالد — مجلس الأمناء</div>
+      <div class="li"><span class="check"></span> د. سارة — مجلس الأمناء</div>
+      <div class="li"><span class="check"></span> م. فهد — مجلس الأمناء</div>
+      <div class="li"><span class="check"></span> أ. نورة — مجلس الأمناء</div>
+    </div>
+    <div class="actions"><button class="btn" type="button">حفظ المجموعة</button><button class="btn2" type="button">تحديد الكل</button></div>
+  </div>
+</body>
+</html>

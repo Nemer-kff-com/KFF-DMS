@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-home</title>
+<style>
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Regular.otf') format('opentype');font-weight:400}
+@font-face{font-family:'GretaArabic';src:url('GretaArabic-Bold.otf') format('opentype');font-weight:700}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;font-family:'GretaArabic',Arial,sans-serif;background:#f8f6f2;color:#3B4F6E}
+body{display:flex;
+background-image:radial-gradient(ellipse at 15% 10%,rgba(249,241,235,.95),transparent 55%),radial-gradient(ellipse at 85% 90%,rgba(59,79,110,.08),transparent 50%)}
+.side{width:228px;background:#fff;border-left:1px solid #e6e2da;padding:18px 14px;display:flex;flex-direction:column;gap:10px}
+.brand{text-align:center;border-bottom:3px solid #3B4F6E;padding-bottom:12px;margin-bottom:8px}
+.brand img{width:72px;display:block;margin:0 auto 8px}
+.brand .o{font-weight:700;font-size:14px}
+.brand .s{font-size:12px;color:#6b7280;margin-top:2px}
+.nav{padding:10px 12px;border-radius:8px;font-weight:700;font-size:14px}
+.nav.on{background:#3B4F6E;color:#fff}
+.main{flex:1;padding:24px 28px}
+.h{font-size:22px;font-weight:700;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:#fff;border:1px solid #e6e2da;border-top:3px solid #3B4F6E;border-radius:12px;padding:18px;min-height:120px;box-shadow:0 8px 24px rgba(59,79,110,.07)}
+.card .t{font-weight:700;font-size:16px;margin-bottom:8px}
+.card .v{font-size:28px;font-weight:700}
+.card .d{font-size:13px;color:#6b7280;margin-top:6px}
+</style>
+</head>
+<body>
+  <aside class="side">
+    <div class="brand">
+      <img src="logo.png" alt="">
+      <div class="o">مؤسسة الملك فيصل الخيرية</div>
+      <div class="s">نظام الصادر والوارد</div>
+    </div>
+    <div class="nav on">الرئيسية</div>
+    <div class="nav">الوارد</div>
+    <div class="nav">الصادر</div>
+    <div class="nav">يحتاج إجراء</div>
+    <div class="nav">الإحالات</div>
+  </aside>
+  <main class="main">
+    <div class="h">الصفحة الرئيسية</div>
+    <div class="grid">
+      <div class="card"><div class="t">صادر</div><div class="v">12</div><div class="d">اليوم / قيد الإجراء</div></div>
+      <div class="card"><div class="t">وارد</div><div class="v">9</div><div class="d">اليوم / قيد الإجراء</div></div>
+      <div class="card"><div class="t">يحتاج إجراء</div><div class="v">5</div><div class="d">معاملات تنتظر خطوة</div></div>
+      <div class="card"><div class="t">آخر المعاملات</div><div class="v">20</div><div class="d">أحدث الصادر والوارد</div></div>
+    </div>
+  </main>
+</body>
+</html>

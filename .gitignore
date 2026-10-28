@@ -1,0 +1,53 @@
+﻿.env
+.env.*
+!.env.example
+config.local.php
+secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+uploads/
+logs/
+*.log
+*.bak
+*.backup
+*.dump
+*.sql
+
+# DMS private configuration and credentials
+/config/db.local.php
+/config/_settings_org.php
+/config/backup/
+
+# Uploaded documents and runtime data
+/storage/uploads/
+/storage/*
+!/storage/.htaccess
+!/storage/schema_bootstrap.version
+
+/sessions/*
+!/sessions/.htaccess
+
+/var/*
+!/var/.htaccess
+
+# Local and generated data
+*.log
+*.tmp
+*.bak
+*.backup
+*.dump
+*.sqlite
+*.sqlite3
+
+# Private application configuration
+/config/db.local.php
+/config/_settings_org.php
+/config/email_settings.php
+/config/whatsapp_settings.php
+
+# Backup scheduler local state and settings
+/tools/backup-maintenance/scheduler_state.json
+/tools/backup-maintenance/ui_settings.json
+

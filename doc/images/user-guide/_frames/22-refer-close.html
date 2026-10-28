@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-refer-close</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center;gap:22px}
+.wrap{width:460px;padding:24px}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">إحالة إلى قسم</div>
+    <div class="sub">و/2026/000210</div>
+    <label>القسم المستلم</label>
+    <input value="الشؤون الإدارية" readonly style="margin-bottom:12px">
+    <label>ملاحظة</label>
+    <textarea rows="3" readonly>للدراسة والإفادة خلال أسبوع.</textarea>
+    <div class="actions"><button class="btn" type="button">تنفيذ الإحالة</button></div>
+  </div>
+  <div class="card wrap">
+    <div class="h">إقفال المعاملة</div>
+    <div class="sub">تصبح الحالة: مغلقة</div>
+    <label>الإجراء المتخذ / النتيجة</label>
+    <textarea rows="3" readonly>تم الرد وإغلاق المعاملة بعد التسليم.</textarea>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn" type="button">حفظ الإغلاق</button>
+      <button class="btn2" type="button">طباعة نموذج الإغلاق</button>
+    </div>
+  </div>
+</body>
+</html>

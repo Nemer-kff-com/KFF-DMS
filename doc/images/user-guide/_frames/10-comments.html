@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-comments</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:780px;padding:28px}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.q{border:1px solid #e6e2da;border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;background:#f8f6f2}
+.item{border:1px solid #e6e2da;border-radius:10px;padding:12px;margin-bottom:10px}
+.item .m{font-size:12px;color:#6b7280;margin-top:4px}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">التعليقات والملاحظات الإدارية</div>
+    <div class="sub">و/2026/000210 — لا يغيّر الحالة وحده</div>
+    <div class="quick">
+      <span class="q">يرجى الإفادة.</span>
+      <span class="q">تمت المراجعة.</span>
+      <span class="q">يعتمد.</span>
+      <span class="q">يحتاج تعديل.</span>
+    </div>
+    <label>تعليق جديد</label>
+    <textarea rows="3" readonly>يرجى إكمال المرفقات قبل الإحالة.</textarea>
+    <div class="actions"><button class="btn" type="button">إضافة تعليق</button></div>
+    <div style="margin-top:18px">
+      <div class="item"><strong>أحمد</strong> — يرجى الإفادة.<div class="m">اليوم 10:20</div></div>
+      <div class="item"><strong>سارة</strong> — تمت المراجعة.<div class="m">أمس 14:05</div></div>
+    </div>
+  </div>
+</body>
+</html>

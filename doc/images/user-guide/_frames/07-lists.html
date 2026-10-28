@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-lists</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex}
+.main{flex:1;padding:22px 24px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;background:#fff;border:1px solid #e6e2da;border-radius:12px;padding:14px}
+.filters .f{min-width:150px;flex:1}
+.tag{display:inline-block;background:#fde8e8;color:#b42318;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+</style>
+</head>
+<body>
+  <aside class="side">
+    <div class="brand"><img src="logo.png" alt=""><div class="o">مؤسسة الملك فيصل الخيرية</div><div class="s">نظام الصادر والوارد</div></div>
+    <div class="nav">الرئيسية</div>
+    <div class="nav on">الوارد</div>
+    <div class="nav">الصادر</div>
+    <div class="nav">يحتاج إجراء</div>
+  </aside>
+  <main class="main">
+    <div class="h">الوارد</div>
+    <div class="sub">بحث وتصفية القائمة ثم عرض النتائج</div>
+    <div class="filters">
+      <div class="f"><label>بحث</label><input value="تعاون" readonly></div>
+      <div class="f"><label>الحالة</label><input value="قيد الإجراء" readonly></div>
+      <div class="f"><label>من تاريخ</label><input value="2026-09-01" readonly></div>
+      <div class="f"><label>إلى تاريخ</label><input value="2026-09-08" readonly></div>
+      <button class="btn" type="button">تصفية</button>
+    </div>
+    <table>
+      <thead><tr><th>الرقم</th><th>الموضوع</th><th>الجهة</th><th>موعد الرد</th><th>الحالة</th></tr></thead>
+      <tbody>
+        <tr><td>و/2026/000210</td><td>طلب تعاون</td><td>جهة أ</td><td>2026-09-20 <span class="tag">متأخر</span></td><td>قيد الإجراء</td></tr>
+        <tr><td>و/2026/000198</td><td>استفسار</td><td>جهة ب</td><td>2026-09-12</td><td>قيد الإجراء</td></tr>
+        <tr><td>و/2026/000180</td><td>دعوة</td><td>جهة ج</td><td>—</td><td>مغلقة</td></tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

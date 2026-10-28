@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-bulk</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:980px;padding:26px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{background:#eef1f5;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="h">صادر جماعي</div>
+    <div class="sub">خطاب واحد لعدة مستلمين — رقم وQR مستقل لكل مستلم</div>
+    <div class="row">
+      <div><label>الموضوع</label><input value="دعوة لحضور الاجتماع" readonly></div>
+      <div><label>التاريخ</label><input value="2026-09-08" readonly></div>
+    </div>
+    <div class="row">
+      <div>
+        <label>اختيار المستلمين</label>
+        <input value="مجموعة: مجلس الأمناء (12)" readonly>
+        <div class="chips">
+          <span class="chip">أ. خالد</span><span class="chip">د. سارة</span><span class="chip">م. فهد</span><span class="chip">+9</span>
+        </div>
+      </div>
+      <div>
+        <label>نص الخطاب / قالب</label>
+        <textarea rows="3" readonly>السلام عليكم… (مدرج من قالب الدعوة)</textarea>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button">إصدار الصادر للجميع</button>
+      <button class="btn2" type="button">إدراج قالب</button>
+      <button class="btn2" type="button">ملصقات الظروف</button>
+    </div>
+  </div>
+</body>
+</html>

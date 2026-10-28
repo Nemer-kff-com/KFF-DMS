@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-profile</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center}
+.wrap{width:560px;padding:28px}
+.av{width:72px;height:72px;border-radius:50%;background:#eef1f5;border:2px solid #3B4F6E;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="card wrap">
+    <div class="av">أ</div>
+    <div class="h" style="text-align:center">ملفي الشخصي</div>
+    <div class="sub" style="text-align:center">تحديث الاسم والصورة وكلمة المرور</div>
+    <div class="row">
+      <div><label>الاسم عربي</label><input value="أحمد …" readonly></div>
+      <div><label>الاسم English</label><input value="Ahmad" readonly></div>
+    </div>
+    <div class="row">
+      <div><label>كلمة المرور الحالية</label><input type="password" value="******" readonly></div>
+      <div><label>كلمة المرور الجديدة</label><input type="password" value="******" readonly></div>
+    </div>
+    <div class="actions" style="justify-content:center"><button class="btn" type="button">حفظ</button></div>
+    <p class="hint" style="text-align:center;margin-top:10px">تبديل اللغة من الشريط العلوي (ع / EN)</p>
+  </div>
+</body>
+</html>

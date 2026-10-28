@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>frame-topbar</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+body{display:flex;flex-direction:column}
+.main{flex:1;padding:28px;display:flex;gap:18px}
+.panel{flex:1;padding:18px}
+.notif{border:1px solid #e6e2da;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff}
+.notif .t{font-weight:700;font-size:14px}
+.notif .d{font-size:12px;color:#6b7280;margin-top:4px}
+.lang{display:flex;gap:6px}
+.lang span{border:1px solid #e6e2da;border-radius:6px;padding:4px 10px;font-weight:700;font-size:13px}
+.lang .on{background:#3B4F6E;color:#fff;border-color:#3B4F6E}
+.bell{font-size:22px}
+.tools{display:flex;align-items:center;gap:14px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div style="font-weight:700">نظام الصادر والوارد</div>
+    <div class="tools">
+      <div class="lang"><span class="on">ع</span><span>EN</span></div>
+      <div class="bell">🔔 <span class="badge">3</span></div>
+      <div style="font-weight:700;font-size:14px">أحمد · ملفي الشخصي</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card panel">
+      <div class="h">الإشعارات</div>
+      <div class="sub">آخر التنبيهات — النقر يعلّم مقروءاً ويفتح المعاملة</div>
+      <div class="notif"><div class="t">وارد جديد لقسمكم</div><div class="d">و/2026/000210 — منذ 10 دقائق</div></div>
+      <div class="notif"><div class="t">إحالة جديدة</div><div class="d">ص/2026/000088 أُحيل إليكم</div></div>
+      <div class="notif"><div class="t">موعد الرد يقترب</div><div class="d">و/2026/000198 — غداً</div></div>
+      <div class="actions"><button class="btn2" type="button">تعيين الكل مقروءاً</button><button class="btn" type="button">عرض الكل</button></div>
+    </div>
+  </div>
+</body>
+</html>

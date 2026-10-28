@@ -1,0 +1,23 @@
+Options -Indexes
+
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>
+
+# MIME للخطوط — يمنع اختفاء الأيقونات/الخطوط على بعض السيرفرات بعد النقل
+<IfModule mod_mime.c>
+    AddType font/woff2 .woff2
+    AddType font/woff .woff
+    AddType font/otf .otf
+    AddType font/ttf .ttf
+    AddType application/font-sfnt .otf .ttf
+    AddType text/css .css
+    AddType application/javascript .js
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(woff2|woff|otf|ttf)$">
+        Header set Access-Control-Allow-Origin "*"
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

@@ -1,0 +1,460 @@
+/* ملصق حراري — Greta فقط (بدون Amiri / Tajawal / بقية الخطوط) */
+@font-face {
+  font-family: 'GretaArabic';
+  src: url('../fonts/GretaArabic-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'GretaArabic';
+  src: url('../fonts/GretaArabic-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.btn-kff {
+  background: #3B4F6E;
+  border-color: #3B4F6E;
+  color: #fff;
+}
+.btn-kff:hover,
+.btn-kff:focus {
+  background: #2c3e50;
+  border-color: #2c3e50;
+  color: #fff;
+}
+
+.print-label-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 12px auto 14px;
+  padding: 14px 18px 12px;
+  background: #fff;
+  border: 1px solid #d7dde6;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(31, 42, 55, .07);
+  font-family: 'GretaArabic', sans-serif;
+}
+.print-label-toolbar-main {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+.print-label-toolbar-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: .5rem .75rem;
+  width: 100%;
+  margin: 0 0 .45rem;
+  direction: ltr;
+}
+.print-label-toolbar-top .print-toolbar-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1f2a37;
+  line-height: 1.35;
+  text-align: center;
+  min-width: 0;
+}
+.print-label-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .45rem;
+}
+.print-label-toolbar-actions-ghost { visibility: hidden; }
+.print-label-hint {
+  margin: 0;
+  font-size: .86rem;
+  color: #5a6577;
+  text-align: center;
+}
+.print-label-toolbar-controls { width: 100%; }
+.print-label-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: .65rem .85rem;
+}
+.print-label-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  min-width: 7rem;
+}
+.print-label-field > span {
+  font-size: .8rem;
+  color: #5a6577;
+  font-weight: 600;
+}
+.print-label-field .form-select,
+.print-label-field .form-control {
+  min-height: 32px;
+  font-size: .9rem;
+}
+.print-label-form-actions {
+  display: flex;
+  align-items: flex-end;
+}
+.print-label-form-actions .btn { min-height: 32px; }
+
+/* ===== ملصق حراري ===== */
+.print-thermal-page {
+  margin: 0;
+  padding: 0;
+  background: #eceae4;
+  color: #111;
+  font-family: 'GretaArabic', sans-serif;
+  min-height: 100vh;
+}
+.print-thermal-page.print-thermal-page .print-label-toolbar {
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 12px auto 16px;
+  border: 1px solid #d7dde6;
+  border-radius: 10px;
+}
+.print-thermal-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 12px 32px;
+}
+.print-thermal-sheet { box-sizing: border-box; }
+.print-thermal-sticker {
+  box-sizing: border-box;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px dashed #c5ced8;
+  box-shadow: 0 2px 10px rgba(31, 42, 55, .08);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  direction: rtl;
+  gap: .5mm;
+  padding: .4mm 1.4mm 1.2mm;
+  font-family: 'GretaArabic', sans-serif;
+}
+.print-thermal-page.is-50x25 .print-thermal-sticker {
+  width: 50mm;
+  height: 25mm;
+  padding: .15mm 1.4mm .8mm;
+  gap: .35mm;
+}
+.print-thermal-page.is-44x22 .print-thermal-sticker {
+  width: 44mm;
+  height: 22mm;
+  padding: .3mm 1.1mm 1mm;
+  gap: .35mm;
+}
+.print-thermal-logo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-height: 14.2mm;
+  line-height: 0;
+}
+.print-thermal-page.is-50x25 .print-thermal-logo {
+  max-height: 12.2mm;
+  margin-top: -0.3mm;
+}
+.print-thermal-page.is-44x22 .print-thermal-logo { max-height: 9.6mm; }
+.print-thermal-logo-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 46mm;
+  max-height: 14.2mm;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+  filter: grayscale(1) contrast(1.25);
+  -webkit-filter: grayscale(1) contrast(1.25);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-thermal-logo-img.is-thermal-ready,
+.print-thermal-logo-img[data-thermal-black="1"] {
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+.print-thermal-page.is-50x25 .print-thermal-logo-img {
+  max-width: 45mm;
+  max-height: 12.2mm;
+}
+.print-thermal-page.is-44x22 .print-thermal-logo-img {
+  max-width: 38mm;
+  max-height: 9.6mm;
+}
+.print-thermal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  direction: rtl;
+  gap: 1.2mm;
+  overflow: hidden;
+  padding-inline: 2.2mm;
+  box-sizing: border-box;
+}
+.print-thermal-page.is-50x25 .print-thermal-body {
+  flex: 0 0 auto;
+  min-height: 12mm;
+  padding-inline: 2mm;
+  padding-top: 0.3mm;
+  gap: 1.2mm;
+  overflow: visible;
+  align-items: center;
+}
+.print-thermal-page.is-50x25 .print-thermal-qr,
+.print-thermal-page.is-50x25 .print-thermal-sticker.has-logo .print-thermal-qr {
+  width: 11mm;
+  height: 11mm;
+  min-width: 11mm;
+  min-height: 11mm;
+  margin-top: 0;
+  align-self: center;
+}
+.print-thermal-page.is-44x22 .print-thermal-body {
+  padding-inline: 1.8mm;
+  gap: 1mm;
+}
+.print-thermal-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: .7mm;
+  overflow: hidden;
+  direction: rtl;
+  font-family: 'GretaArabic', sans-serif;
+}
+.print-thermal-sticker.has-logo .print-thermal-text { gap: .55mm; }
+.print-thermal-ref {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: .2em;
+  font-family: 'GretaArabic', sans-serif;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow: hidden;
+  text-overflow: clip;
+  text-align: right;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  color: #000;
+}
+.print-thermal-ref-label {
+  flex: 0 0 auto;
+  font-size: .82em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.print-thermal-ref-num {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 1.32em;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: .01em;
+  unicode-bidi: isolate;
+}
+.print-thermal-page.is-50x25 .print-thermal-ref { font-size: 11pt; }
+.print-thermal-page.is-50x25 .print-thermal-sticker.has-logo .print-thermal-ref { font-size: 10.5pt; }
+.print-thermal-page.is-44x22 .print-thermal-ref { font-size: 10pt; }
+.print-thermal-page.is-44x22 .print-thermal-sticker.has-logo .print-thermal-ref { font-size: 9.5pt; }
+.print-thermal-page.is-50x25 .print-thermal-sticker.has-qr .print-thermal-ref { font-size: 10.5pt; }
+.print-thermal-page.is-50x25 .print-thermal-sticker.has-qr.has-logo .print-thermal-ref { font-size: 10pt; }
+.print-thermal-page.is-44x22 .print-thermal-sticker.has-qr .print-thermal-ref { font-size: 9.5pt; }
+.print-thermal-page.is-44x22 .print-thermal-sticker.has-qr.has-logo .print-thermal-ref { font-size: 9pt; }
+.print-thermal-meta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  direction: rtl;
+  unicode-bidi: isolate;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.2em;
+  font-family: 'GretaArabic', sans-serif;
+  font-size: 10pt;
+  font-weight: 600;
+  color: #000;
+  line-height: 1.1;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  text-align: right;
+  overflow: hidden;
+}
+.print-thermal-page.is-50x25 .print-thermal-sticker.has-logo .print-thermal-meta { font-size: 10pt; }
+.print-thermal-page.is-44x22 .print-thermal-meta { font-size: 9.5pt; }
+.print-thermal-page.is-44x22 .print-thermal-sticker.has-logo .print-thermal-meta { font-size: 9pt; }
+.print-thermal-date {
+  display: inline-flex;
+  flex-direction: row;
+  direction: rtl;
+  unicode-bidi: isolate;
+  align-items: baseline;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  gap: 0;
+}
+.print-thermal-date-num {
+  display: inline-block;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.print-thermal-date-slash {
+  display: inline-block;
+  unicode-bidi: isolate;
+  margin: 0 .04em;
+}
+.print-thermal-date-sep {
+  display: inline-block;
+  unicode-bidi: isolate;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.print-thermal-page .print-label-mark {
+  display: inline-block;
+  unicode-bidi: isolate;
+}
+.print-thermal-qr {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  width: 12mm;
+  height: 12mm;
+  min-width: 12mm;
+  min-height: 12mm;
+  align-self: center;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0.45mm solid #fff;
+  background: #fff;
+  overflow: hidden;
+  line-height: 0;
+}
+.print-thermal-page.is-44x22 .print-thermal-qr {
+  width: 11mm;
+  height: 11mm;
+  min-width: 11mm;
+  min-height: 11mm;
+}
+.print-thermal-page.is-44x22 .print-thermal-sticker.has-logo .print-thermal-qr {
+  width: 10.5mm;
+  height: 10.5mm;
+  min-width: 10.5mm;
+  min-height: 10.5mm;
+}
+.print-thermal-qr img,
+.print-thermal-qr canvas,
+.print-thermal-qr table {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  image-rendering: pixelated !important;
+  image-rendering: -moz-crisp-edges !important;
+  image-rendering: crisp-edges !important;
+}
+.print-thermal-qr table td { padding: 0 !important; }
+
+@media print {
+  .no-print { display: none !important; }
+  html.print-thermal-html,
+  body.print-thermal-page {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    font-family: 'GretaArabic', sans-serif !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-thermal-toolbar,
+  .print-label-toolbar,
+  .print-thermal-page .no-print {
+    display: none !important;
+  }
+  .print-thermal-preview {
+    display: block;
+    padding: 0 !important;
+    gap: 0;
+  }
+  .print-thermal-sheet {
+    margin: 0 !important;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    overflow: hidden;
+  }
+  body.print-thermal-page.is-50x25 .print-thermal-sheet {
+    width: 50mm;
+    height: 25mm;
+  }
+  body.print-thermal-page.is-44x22 .print-thermal-sheet {
+    width: 44mm;
+    height: 22mm;
+  }
+  .print-thermal-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .print-thermal-sticker {
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-after: avoid;
+    break-after: avoid-page;
+    font-family: 'GretaArabic', sans-serif !important;
+  }
+  .print-thermal-ref,
+  .print-thermal-meta,
+  .print-thermal-text,
+  .print-thermal-date,
+  .print-label-mark {
+    font-family: 'GretaArabic', sans-serif !important;
+  }
+  .print-thermal-logo-img {
+    filter: grayscale(1) brightness(0) contrast(1.35) !important;
+    -webkit-filter: grayscale(1) brightness(0) contrast(1.35) !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
