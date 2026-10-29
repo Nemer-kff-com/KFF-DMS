@@ -1,6 +1,6 @@
     <div class="col-xl-4">
         <div class="corr-side">
-            <?php if (!empty($showOfficialRef)): ?>
+            <?php if (!empty($showThermalSide)): ?>
             <?php
             $stickerFile = preg_replace('/[^\p{L}\p{N}\-_]+/u', '-', (string) ($corr['ref_number'] ?? 'sticker'));
             $stickerFile = trim((string) $stickerFile, '-');
@@ -20,7 +20,7 @@
                     </button>
                 </div>
             </div>
-            <?php else: ?>
+            <?php elseif ($isOutgoing && empty($showOfficialRef)): ?>
             <div class="card-panel mb-3">
                 <div class="card-header"><i class="bi bi-qr-code me-1"></i><?= e(__('corr.qr')) ?></div>
                 <div class="card-body text-center p-4">

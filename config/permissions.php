@@ -27,7 +27,8 @@ function dms_permission_catalog(): array
             'outgoing.receipt' => $p('التسليم وحالة الصادر', 'Delivery & outgoing status', $edit, true),
             'outgoing.print_form' => $p('طباعة نموذج التسليم', 'Print delivery form', ['admin', 'communications'], true, ['admin', 'communications', 'archive', 'department', 'viewer']),
             'outgoing.print_envelope' => $p('طباعة ملصق الظرف', 'Print envelope label', ['admin', 'communications'], true, ['admin', 'communications', 'archive', 'department', 'viewer']),
-            'outgoing.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, ['admin', 'communications', 'archive', 'department', 'viewer']),
+            'outgoing.view_thermal' => $p('معاينة الملصق الحراري', 'View thermal sticker', ['admin', 'communications'], true, $printRoles),
+            'outgoing.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
             'view.confidential.outgoing' => $p('الاطلاع على المرفقات السرية', 'View confidential attachments', [], true, $printRoles),
         ]],
         'incoming' => ['label' => 'perm.group_incoming', 'icon' => 'bi-inbox', 'items' => [
@@ -35,7 +36,8 @@ function dms_permission_catalog(): array
             'incoming.edit' => $p('تعديل الوارد وحالته', 'Edit incoming & status', $edit, true),
             'incoming.print_form' => $p('طباعة نموذج الاستلام', 'Print receipt form', $printRoles, true, $printRoles),
             'incoming.print_envelope' => $p('طباعة ملصق الظرف', 'Print envelope label', $printRoles, true, $printRoles),
-            'incoming.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', $printRoles, true, $printRoles),
+            'incoming.view_thermal' => $p('معاينة الملصق الحراري', 'View thermal sticker', ['admin', 'communications'], true, $printRoles),
+            'incoming.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
             'view.confidential.incoming' => $p('الاطلاع على المرفقات السرية', 'View confidential attachments', [], true, $printRoles),
         ]],
         'internal' => ['label' => 'perm.group_internal', 'icon' => 'bi-building-gear', 'items' => [
@@ -43,7 +45,8 @@ function dms_permission_catalog(): array
             'internal.edit' => $p('تغيير حالة الداخلي', 'Change internal status', $edit, true),
             'internal.print_form' => $p('طباعة نموذج التسليم', 'Print delivery form', $printRoles, true, $printRoles),
             'internal.print_envelope' => $p('طباعة ملصق الظرف', 'Print envelope label', $printRoles, true, $printRoles),
-            'internal.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', $printRoles, true, $printRoles),
+            'internal.view_thermal' => $p('معاينة الملصق الحراري', 'View thermal sticker', ['admin', 'communications'], true, $printRoles),
+            'internal.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
             'view.confidential.internal' => $p('الاطلاع على المرفقات السرية', 'View confidential attachments', [], true, $printRoles),
         ]],
         'workflow' => ['label' => 'perm.group_workflow', 'icon' => 'bi-diagram-3', 'items' => [
@@ -61,7 +64,7 @@ function dms_permission_catalog(): array
             'circulars.issue' => $p('إصدار التعميم', 'Issue circular', $adminArchive, true, $edit),
             'circulars.edit' => $p('تعديل التعاميم ومرفقاتها', 'Edit circulars & files', $adminArchive, true, $edit),
             'circulars.print_form' => $p('طباعة التعميم', 'Print circular', $printRoles, true, $printRoles),
-            'circulars.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', $printRoles, true, $printRoles),
+            'circulars.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
         ]],
         'archive' => ['label' => 'perm.group_archive', 'icon' => 'bi-archive', 'items' => [
             'archive.scholarships.view' => $p('المنح — عرض', 'Scholarships — view', ['admin', 'communications', 'archive', 'department', 'viewer'], true),
@@ -148,12 +151,56 @@ function ensure_permissions_schema(): void
         );
         dms_permissions_seed_new_codes();
         dms_permissions_split_view_confidential();
+        dms_permissions_confine_thermal_to_comms();
         db()->exec("DELETE FROM `tblrole_permissions` WHERE perm_code = 'outgoing.print_dispatch'");
         ensure_user_permissions_schema();
         db()->exec("DELETE FROM `tbluser_permissions` WHERE perm_code = 'outgoing.print_dispatch'");
     } catch (Throwable $e) {
         $done = false;
         error_log('DMS permissions schema: ' . $e->getMessage());
+    }
+}
+
+/**
+ * يزيل تحديد الملصق الحراري الافتراضي عن الأدوار غير الاتصالات/المدير مرة واحدة،
+ * دون منع إعادة منحه لاحقاً من تعديل الأدوار أو استثناءات المستخدم.
+ */
+function dms_permissions_confine_thermal_to_comms(): void
+{
+    if ((string) setting('perm_thermal_comms_only', '') === '1') {
+        return;
+    }
+    $codes = [
+        'outgoing.print_thermal',
+        'incoming.print_thermal',
+        'internal.print_thermal',
+        'circulars.print_thermal',
+    ];
+    $marks = implode(',', array_fill(0, count($codes), '?'));
+    try {
+        $keepIds = db()->query(
+            "SELECT id FROM `tblroles` WHERE code IN ('admin', 'communications') OR base_role IN ('admin', 'communications')"
+        )->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $keepIds = array_values(array_unique(array_filter(array_map('intval', $keepIds))));
+        if ($keepIds === []) {
+            set_setting('perm_thermal_comms_only', '1', 'إلغاء تحديد الملصق الحراري الافتراضي لغير الاتصالات (داخلي)');
+            return;
+        }
+        $keep = implode(',', array_fill(0, count($keepIds), '?'));
+        db()->prepare(
+            "DELETE FROM `tblrole_permissions`
+             WHERE perm_code IN ($marks) AND role_id NOT IN ($keep)"
+        )->execute([...$codes, ...$keepIds]);
+        $ins = db()->prepare('INSERT IGNORE INTO `tblrole_permissions` (role_id, perm_code) VALUES (?, ?)');
+        foreach ($keepIds as $rid) {
+            foreach ($codes as $code) {
+                $ins->execute([$rid, $code]);
+            }
+        }
+        dms_role_permissions_map(true);
+        set_setting('perm_thermal_comms_only', '1', 'إلغاء تحديد الملصق الحراري الافتراضي لغير الاتصالات (داخلي)');
+    } catch (Throwable $e) {
+        error_log('DMS unset default thermal perms: ' . $e->getMessage());
     }
 }
 

@@ -2601,6 +2601,18 @@ function corr_user_can_print(string $type, string $kind, ?array $user = null): b
     return $user !== null && function_exists('user_can') && user_can(corr_print_perm($type, $kind), $user);
 }
 
+/** معاينة الملصق الحراري في صفحة العرض — أو ضمنياً إن وُجدت صلاحية طباعته. */
+function corr_user_can_view_thermal(string $type, ?array $user = null): bool
+{
+    $user = $user ?? (function_exists('current_user') ? current_user() : null);
+    if ($user === null || !function_exists('user_can')) {
+        return false;
+    }
+    $type = in_array($type, ['outgoing', 'incoming', 'internal'], true) ? $type : 'outgoing';
+
+    return user_can($type . '.view_thermal', $user) || user_can($type . '.print_thermal', $user);
+}
+
 function outgoing_require_print_perm(string $perm, array $user, string $backUrl): void
 {
     if (function_exists('user_can') && user_can($perm, $user)) {

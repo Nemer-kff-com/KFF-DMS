@@ -235,11 +235,16 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(user_display_name($target)) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-primary" href="<?= e(base_url('admin/user_permissions.php?id=' . (int) $id)) ?>"
+        <?php $ovCount = dms_user_permission_override_count($target); ?>
+        <a class="btn btn-outline-primary btn-with-count" href="<?= e(base_url('admin/user_permissions.php?id=' . (int) $id)) ?>"
            title="<?= e(__('perm.user_btn_tip')) ?>" data-bs-toggle="tooltip">
-            <i class="bi bi-shield-check me-1"></i><?= e(__('perm.user_title')) ?>
-            <?php $ovCount = dms_user_permission_override_count($target); ?>
-            <?php if ($ovCount > 0): ?><span class="badge text-bg-warning ms-1"><?= $ovCount ?></span><?php endif; ?>
+            <span class="btn-with-count-label">
+                <i class="bi bi-shield-check" aria-hidden="true"></i>
+                <span><?= e(__('perm.user_title')) ?></span>
+            </span>
+            <?php if ($ovCount > 0): ?>
+                <span class="btn-with-count-badge" title="<?= e(str_replace(':n', (string) $ovCount, __('perm.user_ov_count'))) ?>"><?= (int) $ovCount ?></span>
+            <?php endif; ?>
         </a>
         <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/users.php')) ?>">
             <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>

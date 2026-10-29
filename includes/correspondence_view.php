@@ -13,7 +13,10 @@ $isOutgoing = ($corr['type'] ?? '') === 'outgoing';
 $showOfficialRef = !$isOutgoing
     || !function_exists('outgoing_show_official_ref')
     || outgoing_show_official_ref($corr);
-$qrContent = $showOfficialRef ? dms_corr_qr_content($corr) : '';
+$showThermalSide = !empty($showOfficialRef)
+    && function_exists('corr_user_can_view_thermal')
+    && corr_user_can_view_thermal((string) ($corr['type'] ?? ''), $user);
+$qrContent = $showThermalSide ? dms_corr_qr_content($corr) : '';
 $isInternal = ($corr['type'] ?? '') === 'internal';
 $isIncoming = !$isOutgoing && !$isInternal;
 $canIssueActions = !$isOutgoing
@@ -586,10 +589,10 @@ $closeDetailsUrl = base_url('correspondence/close.php?id=' . (int) $corr['id']);
         <?php require __DIR__ . '/corr_view_side.php'; ?>
 <?php require __DIR__ . '/corr_view_modals.php'; ?>
 <?php
-$includeQrcodeJs = !empty($showOfficialRef);
+$includeQrcodeJs = !empty($showThermalSide);
 $stickerQrPx = (function_exists('org_logo_url') && org_logo_url() !== '') ? 192 : 208;
 $qrJs = '';
-if (!empty($showOfficialRef)) {
+if (!empty($showThermalSide)) {
     $qrJson = json_encode($qrContent, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $qrJs = 'if(document.getElementById("corr-sticker-qr")){'
         . 'if(typeof renderThermalQr==="function")renderThermalQr("corr-sticker-qr",' . $qrJson . ',' . (int) $stickerQrPx . ');'
