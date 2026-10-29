@@ -418,12 +418,13 @@ function correspondence_link_group(int $id, ?array $user = null, int $max = 40):
  * @param list<int> $excludeIds
  * @return list<array<string,mixed>>
  */
-function correspondence_same_subject_rows(string $subject, ?array $user = null, array $excludeIds = [], int $limit = 30): array
+function correspondence_same_subject_rows(string $subject, ?array $user = null, array $excludeIds = [], int $limit = 30, string $type = ''): array
 {
     $subject = trim($subject);
     if ($subject === '') {
         return [];
     }
+    $type = in_array($type, ['incoming', 'outgoing', 'internal'], true) ? $type : '';
     $excludeIds = array_values(array_unique(array_filter(array_map('intval', $excludeIds))));
     $limit = max(1, min(80, $limit));
     try {
@@ -435,6 +436,10 @@ function correspondence_same_subject_rows(string $subject, ?array $user = null, 
                 FROM `tblcorrespondence` c
                 WHERE c.subject = ? AND c.status <> 'cancelled'";
         $params = [$subject];
+        if ($type !== '') {
+            $sql .= ' AND c.type = ?';
+            $params[] = $type;
+        }
         if ($excludeIds !== []) {
             $ph = implode(',', array_fill(0, count($excludeIds), '?'));
             $sql .= " AND c.id NOT IN ($ph)";
@@ -556,12 +561,13 @@ function correspondence_linked_pair_list(?array $user = null, int $limit = 60): 
  *
  * @return list<array<string,mixed>>
  */
-function correspondence_topic_search(string $q, ?array $user = null, int $limit = 40): array
+function correspondence_topic_search(string $q, ?array $user = null, int $limit = 40, string $type = ''): array
 {
     $q = trim($q);
     if ($q === '' || mb_strlen($q) < 2) {
         return [];
     }
+    $type = in_array($type, ['incoming', 'outgoing', 'internal'], true) ? $type : '';
     $limit = max(5, min(80, $limit));
     try {
         [$scopeSql, $scopeParams] = function_exists('department_scope_sql')
@@ -571,8 +577,13 @@ function correspondence_topic_search(string $q, ?array $user = null, int $limit 
         $sql = "SELECT c.id, c.type, c.ref_number, c.subject, c.party_name, c.corr_date, c.status,
                        c.cancel_kind, c.outgoing_prep_status, c.linked_id
                 FROM `tblcorrespondence` c
-                WHERE (c.subject LIKE ? OR c.ref_number LIKE ?)";
+                WHERE (c.subject LIKE ? OR c.ref_number LIKE ?)
+                  AND c.status <> 'cancelled'";
         $params = [$like, $like];
+        if ($type !== '') {
+            $sql .= ' AND c.type = ?';
+            $params[] = $type;
+        }
         if ($scopeSql !== '') {
             $sql .= ' AND ' . $scopeSql;
             foreach ($scopeParams as $p) {

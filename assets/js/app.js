@@ -1727,3 +1727,52 @@ function bindCopyActions(root) {
     start();
   }
 })();
+/* بطاقة فلاتر القوائم: طي/إظهار مع حفظ التفضيل */
+(function () {
+  function syncToggle(card) {
+    var btn = card.querySelector('[data-list-filters-toggle]');
+    if (!btn) return;
+    var open = card.classList.contains('is-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var show = btn.getAttribute('data-show-label');
+    var hide = btn.getAttribute('data-hide-label');
+    if (show && hide) {
+      btn.setAttribute('title', open ? hide : show);
+      btn.setAttribute('aria-label', open ? hide : show);
+    }
+  }
+
+  function setOpen(card, open, persist) {
+    card.classList.toggle('is-open', !!open);
+    syncToggle(card);
+    if (persist === false) return;
+    if (card.getAttribute('data-force-open') === '1') return;
+    var key = card.getAttribute('data-storage-key');
+    if (!key) return;
+    try {
+      localStorage.setItem(key, open ? '1' : '0');
+    } catch (e) {}
+  }
+
+  function initCard(card) {
+    if (!card || card.getAttribute('data-list-filters-ready') === '1') return;
+    card.setAttribute('data-list-filters-ready', '1');
+    syncToggle(card);
+    var btn = card.querySelector('[data-list-filters-toggle]');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      setOpen(card, !card.classList.contains('is-open'), true);
+    });
+  }
+
+  function boot() {
+    document.querySelectorAll('[data-list-filters-card]').forEach(initCard);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();

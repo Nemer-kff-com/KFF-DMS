@@ -17,8 +17,17 @@ $filters = [
     'hijri_from' => trim((string) ($_GET['hijri_from'] ?? '')),
     'hijri_to' => trim((string) ($_GET['hijri_to'] ?? '')),
     'department_id' => $_GET['department_id'] ?? '',
+    'issuing_department_id' => $_GET['issuing_department_id'] ?? '',
+    'entity_id' => $_GET['entity_id'] ?? '',
     'prep' => trim((string) ($_GET['prep'] ?? '')),
 ];
+// ترحيل روابط قديمة: department_id كان يُستخدم كموجه من
+if (($filters['issuing_department_id'] === '' || $filters['issuing_department_id'] === '0')
+    && $filters['department_id'] !== '' && $filters['department_id'] !== '0'
+) {
+    $filters['issuing_department_id'] = $filters['department_id'];
+}
+$filters['department_id'] = '';
 $list = correspondence_list_page('outgoing', $filters, $user, dms_request_page());
 $rows = $list['rows'];
 $pagination = $list['pagination'];
@@ -107,19 +116,13 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="card-panel mb-3">
-    <div class="card-body p-3">
-        <form class="list-filters" method="get">
-            <?php render_correspondence_list_filters($user, $departments, $filters, [
-                'list_type' => 'outgoing',
-                'hidden' => [
-                    'status_group' => $filters['status_group'] ?? '',
-                    'prep' => $filters['prep'] ?? '',
-                ],
-            ]); ?>
-        </form>
-    </div>
-</div>
+<?php render_correspondence_filters_card($user, $departments, $filters, [
+    'list_type' => 'outgoing',
+    'hidden' => [
+        'status_group' => $filters['status_group'] ?? '',
+        'prep' => $filters['prep'] ?? '',
+    ],
+]); ?>
 
 <div class="card-panel" id="list-main" data-list-panel>
     <div class="list-panel-body">
@@ -132,11 +135,11 @@ require __DIR__ . '/../includes/header.php';
                     <th><?= e(__('corr.party_from')) ?></th>
                     <th><?= e(__('corr.party_to')) ?></th>
                     <th class="list-col-date"><?= e(__('corr.date')) ?></th>
-                    <th><?= e(__('corr.status')) ?></th>
+                    <th class="list-col-status"><?= e(__('corr.status')) ?></th>
                     <?php if ($showIssueAppr): ?>
-                    <th><?= e(__('issue_appr.col')) ?></th>
+                    <th class="list-col-appr"><?= e(__('issue_appr.col')) ?></th>
                     <?php endif; ?>
-                    <th><?= e(__('receipt.col')) ?></th>
+                    <th class="list-col-after-appr"><?= e(__('receipt.col')) ?></th>
                     <th><?= e(__('corr.linked')) ?></th>
                     <?php require __DIR__ . '/../includes/corr_linked_col_th.php'; ?>
                 </tr>
@@ -187,11 +190,12 @@ require __DIR__ . '/../includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td class="list-col-date"><?php render_corr_date_cell($r['corr_date'] ?? null); ?></td>
-                    <td><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
+                    <td class="list-col-status"><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
                     <?php if ($showIssueAppr): ?>
-                    <td><?= function_exists('outgoing_approval_badge') ? outgoing_approval_badge($r) : '' ?></td>
+                    <td class="list-col-appr"><?= function_exists('outgoing_approval_badge') ? outgoing_approval_badge($r) : '' ?></td>
                     <?php endif; ?>
-                    <td>
+                    <td class="list-col-after-appr">
+                        <div class="list-badge-group">
                         <?php if ($isElectronic): ?>
                             <?php if (($r['status'] ?? '') === 'delivered'): ?>
                                 <span class="badge text-bg-success"><?= e(__('status.delivered')) ?></span>
@@ -205,11 +209,12 @@ require __DIR__ . '/../includes/header.php';
                         <?php elseif ($hasReceipt): ?>
                             <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
                         <?php else: ?>
-                            <span class="badge text-bg-secondary"><?= e(__('receipt.pending')) ?></span>
+                            <span class="badge text-bg-secondary text-nowrap"><?= e(__('receipt.pending')) ?></span>
                         <?php endif; ?>
                         <?php if ((int) ($r['documents_count'] ?? 0) > 0): ?>
                             <span class="badge text-bg-success" title="<?= e(__('corr.attach')) ?>"><i class="bi bi-paperclip"></i></span>
                         <?php endif; ?>
+                        </div>
                     </td>
                     <td>
                         <?php if (!empty($r['linked_ref']) && in_array((string) ($r['linked_type'] ?? ''), ['incoming', 'outgoing', 'internal'], true)): ?>

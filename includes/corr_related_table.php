@@ -17,7 +17,7 @@ $relatedHighlightId = (int) ($relatedHighlightId ?? 0);
                 <th><?= e(__('corr.date')) ?></th>
                 <th><?= e(__('corr.status')) ?></th>
                 <th><?= e(__('corr.type')) ?></th>
-                <th></th>
+                <th class="text-center"><?= e(__('common.actions')) ?></th>
             </tr>
         </thead>
         <tbody>
@@ -70,9 +70,9 @@ $relatedHighlightId = (int) ($relatedHighlightId ?? 0);
                 <td>
                     <span class="badge <?= e(correspondence_type_badge_class($rtype)) ?>"><?= e(type_label($rtype)) ?></span>
                 </td>
-                <td>
+                <td class="text-center">
                     <?php if ($rid > 0): ?>
-                        <div class="d-inline-flex align-items-center gap-1">
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1">
                             <a class="btn btn-sm btn-outline-primary" href="<?= e(correspondence_view_url($rr)) ?>" title="<?= e(__('action.view')) ?>">
                                 <?= e(__('action.view')) ?>
                             </a>

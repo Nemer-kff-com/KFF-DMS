@@ -103,8 +103,37 @@ function correspondence_list_where(string $type, array $filters = [], ?array $us
                 || (function_exists('user_can_access_department') && user_can_access_department($filterDept, $user))
             )
         ) {
-            $where[] = 'c.department_id = ?';
+            // الداخلي: القسم المستلم (موجهة إلى)
+            if (($type ?? '') === 'internal'
+                && function_exists('dms_db_column_exists')
+                && dms_db_column_exists('tblcorrespondence', 'internal_to_department_id')
+            ) {
+                $where[] = 'IFNULL(c.internal_to_department_id, c.department_id) = ?';
+            } else {
+                $where[] = 'c.department_id = ?';
+            }
             $params[] = $filterDept;
+        }
+    }
+    if (!empty($filters['issuing_department_id'])) {
+        $filterIssuing = (int) $filters['issuing_department_id'];
+        if (
+            $filterIssuing > 0
+            && (
+                (function_exists('can_view_all_departments') && can_view_all_departments($user))
+                || (function_exists('user_can_access_department') && user_can_access_department($filterIssuing, $user))
+            )
+        ) {
+            // الداخلي/الصادر: جهة التوجيه (موجه من)
+            $where[] = 'IFNULL(c.issuing_department_id, c.department_id) = ?';
+            $params[] = $filterIssuing;
+        }
+    }
+    if (!empty($filters['entity_id'])) {
+        $filterEntity = (int) $filters['entity_id'];
+        if ($filterEntity > 0) {
+            $where[] = 'c.entity_id = ?';
+            $params[] = $filterEntity;
         }
     }
     if (!empty($filters['category_id'])) {

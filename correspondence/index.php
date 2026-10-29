@@ -126,11 +126,11 @@ require __DIR__ . '/../includes/header.php';
                     <th><?= e(__('corr.party')) ?></th>
                     <th><?= e(__('corr.date')) ?></th>
                     <th><?= e(__('departments.col_officer')) ?></th>
-                    <th><?= e(__('corr.status')) ?></th>
+                    <th class="list-col-status"><?= e(__('corr.status')) ?></th>
                     <?php if ($showAppr): ?>
-                    <th><?= e(__('issue_appr.col')) ?></th>
+                    <th class="list-col-appr"><?= e(__('issue_appr.col')) ?></th>
                     <?php endif; ?>
-                    <th><?= e(__('receipt.col')) ?></th>
+                    <th class="list-col-after-appr"><?= e(__('receipt.col')) ?></th>
                     <th><?= e(__('corr.linked')) ?></th>
                     <?php require __DIR__ . '/../includes/corr_linked_col_th.php'; ?>
                 </tr>
@@ -158,16 +158,16 @@ require __DIR__ . '/../includes/header.php';
                     <td><?= e(correspondence_party_display_name($r)) ?></td>
                     <td><?php render_corr_date_cell($r['corr_date'] ?? null); ?></td>
                     <td><?php render_correspondence_officer($r); ?></td>
-                    <td><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
+                    <td class="list-col-status"><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
                     <?php if ($showAppr): ?>
-                    <td><?= corr_approval_badge($r) ?></td>
+                    <td class="list-col-appr"><?= corr_approval_badge($r) ?></td>
                     <?php endif; ?>
-                    <td>
+                    <td class="list-col-after-appr">
                         <?php if (($r['type'] ?? '') === 'outgoing'): ?>
                             <?php if (correspondence_has_receipt($r)): ?>
                                 <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
                             <?php else: ?>
-                                <span class="badge text-bg-secondary"><?= e(__('receipt.pending')) ?></span>
+                                <span class="badge text-bg-secondary text-nowrap"><?= e(__('receipt.pending')) ?></span>
                             <?php endif; ?>
                         <?php else: ?>
                             <span class="text-muted">—</span>

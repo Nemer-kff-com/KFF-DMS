@@ -14,6 +14,7 @@ $filters = [
     'hijri_from' => trim((string) ($_GET['hijri_from'] ?? '')),
     'hijri_to' => trim((string) ($_GET['hijri_to'] ?? '')),
     'department_id' => $_GET['department_id'] ?? '',
+    'issuing_department_id' => $_GET['issuing_department_id'] ?? '',
 ];
 $list = correspondence_list_page('internal', $filters, $user, dms_request_page());
 $rows = $list['rows'];
@@ -42,16 +43,10 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<div class="card-panel mb-3">
-    <div class="card-body p-3">
-        <form class="list-filters" method="get">
-            <?php render_correspondence_list_filters($user, $departments, $filters, [
-                'list_type' => 'internal',
-                'hidden' => ['status_group' => $filters['status_group'] ?? ''],
-            ]); ?>
-        </form>
-    </div>
-</div>
+<?php render_correspondence_filters_card($user, $departments, $filters, [
+    'list_type' => 'internal',
+    'hidden' => ['status_group' => $filters['status_group'] ?? ''],
+]); ?>
 
 <div class="card-panel" id="list-main" data-list-panel>
     <div class="list-panel-body">
@@ -65,9 +60,9 @@ require __DIR__ . '/../includes/header.php';
                     <th><?= e(__('internal.to_department')) ?></th>
                     <th><?= e(__('corr.date')) ?></th>
                     <th><?= e(__('corr.reply_due')) ?></th>
-                    <th><?= e(__('corr.status')) ?></th>
+                    <th class="list-col-status"><?= e(__('corr.status')) ?></th>
                     <?php if ($showInternalAppr): ?>
-                    <th><?= e(__('issue_appr.col')) ?></th>
+                    <th class="list-col-appr"><?= e(__('issue_appr.col')) ?></th>
                     <?php endif; ?>
                     <th></th>
                 </tr>
@@ -108,14 +103,14 @@ require __DIR__ . '/../includes/header.php';
                             <span class="badge badge-overdue"><?= e(__('corr.overdue_badge')) ?></span>
                         <?php endif; ?>
                     </td>
-                    <td>
+                    <td class="list-col-status">
                         <?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?>
                         <?php if ((int) ($r['documents_count'] ?? 0) > 0): ?>
                             <span class="badge text-bg-success" title="<?= e(__('corr.attach')) ?>"><i class="bi bi-paperclip"></i></span>
                         <?php endif; ?>
                     </td>
                     <?php if ($showInternalAppr): ?>
-                    <td><?= internal_approval_badge($r) ?></td>
+                    <td class="list-col-appr"><?= internal_approval_badge($r) ?></td>
                     <?php endif; ?>
                     <td><a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('internal/view.php?id='.(int)$r['id'])) ?>"><?= e(__('action.view')) ?></a></td>
                 </tr>

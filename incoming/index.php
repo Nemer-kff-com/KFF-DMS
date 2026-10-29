@@ -14,6 +14,7 @@ $filters = [
     'hijri_from' => trim((string) ($_GET['hijri_from'] ?? '')),
     'hijri_to' => trim((string) ($_GET['hijri_to'] ?? '')),
     'department_id' => $_GET['department_id'] ?? '',
+    'entity_id' => $_GET['entity_id'] ?? '',
 ];
 $list = correspondence_list_page('incoming', $filters, $user, dms_request_page());
 $rows = $list['rows'];
@@ -38,16 +39,10 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<div class="card-panel mb-3">
-    <div class="card-body p-3">
-        <form class="list-filters" method="get">
-            <?php render_correspondence_list_filters($user, $departments, $filters, [
-                'list_type' => 'incoming',
-                'hidden' => ['status_group' => $filters['status_group'] ?? ''],
-            ]); ?>
-        </form>
-    </div>
-</div>
+<?php render_correspondence_filters_card($user, $departments, $filters, [
+    'list_type' => 'incoming',
+    'hidden' => ['status_group' => $filters['status_group'] ?? ''],
+]); ?>
 
 <div class="card-panel" id="list-main" data-list-panel>
     <div class="list-panel-body">
@@ -61,11 +56,11 @@ require __DIR__ . '/../includes/header.php';
                     <th><?= e(__('corr.party_to')) ?></th>
                     <th class="list-col-date"><?= e(__('corr.date')) ?></th>
                     <th><?= e(__('corr.reply_due')) ?></th>
-                    <th><?= e(__('corr.status')) ?></th>
+                    <th class="list-col-status"><?= e(__('corr.status')) ?></th>
                     <?php if ($showIncomingAppr): ?>
-                    <th><?= e(__('issue_appr.col')) ?></th>
+                    <th class="list-col-appr"><?= e(__('issue_appr.col')) ?></th>
                     <?php endif; ?>
-                    <th><?= e(__('corr.linked')) ?></th>
+                    <th class="list-col-after-appr"><?= e(__('corr.linked')) ?></th>
                     <?php require __DIR__ . '/../includes/corr_linked_col_th.php'; ?>
                 </tr>
             </thead>
@@ -98,19 +93,21 @@ require __DIR__ . '/../includes/header.php';
                             <span class="badge badge-overdue"><?= e(__('corr.overdue_badge')) ?></span>
                         <?php endif; ?>
                     </td>
-                    <td><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
+                    <td class="list-col-status"><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
                     <?php if ($showIncomingAppr): ?>
-                    <td><?= incoming_approval_badge($r) ?></td>
+                    <td class="list-col-appr"><?= incoming_approval_badge($r) ?></td>
                     <?php endif; ?>
-                    <td>
+                    <td class="list-col-after-appr">
+                        <div class="list-badge-group">
                         <?php if (!empty($r['reply_ref']) || (($r['linked_type'] ?? '') === 'outgoing' && !empty($r['linked_ref']))): ?>
                             <a class="badge text-bg-success text-decoration-none" href="<?= e(base_url('correspondence/related.php?id=' . (int) $r['id'])) ?>" title="<?= e(__('corr.related_open')) ?>"><?= e($r['reply_ref'] ?: $r['linked_ref']) ?></a>
                         <?php else: ?>
-                            <span class="badge text-bg-secondary"><?= e(__('corr.no_reply')) ?></span>
+                            <span class="badge text-bg-secondary text-nowrap"><?= e(__('corr.no_reply')) ?></span>
                         <?php endif; ?>
                         <?php if ((int) ($r['documents_count'] ?? 0) > 0): ?>
                             <span class="badge text-bg-success" title="<?= e(__('corr.attach')) ?>"><i class="bi bi-paperclip"></i></span>
                         <?php endif; ?>
+                        </div>
                     </td>
                     <td><a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('incoming/view.php?id='.(int)$r['id'])) ?>"><?= e(__('action.view')) ?></a></td>
                 </tr>

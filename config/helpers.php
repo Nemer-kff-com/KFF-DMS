@@ -5699,9 +5699,24 @@ function render_filter_date_range(array $filters): void
 function render_filter_department_field(?array $user, array $departments, string|int $selectedId, string $allValue = '', array $opts = []): void
 {
     $boxed = !empty($opts['boxed']);
+    $fieldName = trim((string) ($opts['name'] ?? 'department_id'));
+    if ($fieldName === '') {
+        $fieldName = 'department_id';
+    }
+    $label = trim((string) ($opts['label'] ?? ''));
+    if ($label === '') {
+        $listType = (string) ($opts['list_type'] ?? '');
+        $label = match ($listType) {
+            'outgoing' => __('corr.filter_from'),
+            'incoming' => __('corr.filter_to'),
+            'internal' => __('corr.filter_to'),
+            default => __('departments.col_officer'),
+        };
+    }
+    $lockToPrimary = !array_key_exists('lock_to_primary', $opts) || !empty($opts['lock_to_primary']);
     ob_start();
     if (can_view_all_departments($user)): ?>
-            <select name="department_id" class="form-select corr-officer-pick">
+            <select name="<?= e($fieldName) ?>" class="form-select corr-officer-pick">
                 <option value="<?= e($allValue) ?>"><?= e(__('common.all')) ?></option>
                 <?php foreach ($departments as $d): ?>
                     <option value="<?= (int) $d['id'] ?>" data-office="<?= e(department_officer_subtitle($d)) ?>" <?= (string) $selectedId === (string) $d['id'] ? 'selected' : '' ?>><?= e(department_person_option_label($d)) ?></option>
@@ -5709,13 +5724,13 @@ function render_filter_department_field(?array $user, array $departments, string
             </select>
     <?php elseif (function_exists('user_department_ids') && count(user_department_ids($user)) > 1): ?>
             <?php $mine = function_exists('departments_visible_to_user') ? departments_visible_to_user($user, $departments) : $departments; ?>
-            <select name="department_id" class="form-select corr-officer-pick">
+            <select name="<?= e($fieldName) ?>" class="form-select corr-officer-pick">
                 <option value="<?= e($allValue) ?>"><?= e(__('common.all')) ?></option>
                 <?php foreach ($mine as $d): ?>
                     <option value="<?= (int) $d['id'] ?>" data-office="<?= e(department_officer_subtitle($d)) ?>" <?= (string) $selectedId === (string) $d['id'] ? 'selected' : '' ?>><?= e(department_person_option_label($d)) ?></option>
                 <?php endforeach; ?>
             </select>
-    <?php else: ?>
+    <?php elseif ($lockToPrimary): ?>
             <?php
             $lockedId = function_exists('user_primary_department_id')
                 ? user_primary_department_id($user)
@@ -5732,18 +5747,148 @@ function render_filter_department_field(?array $user, array $departments, string
                 }
             }
             ?>
-            <input type="hidden" name="department_id" value="<?= $lockedId ?>">
+            <input type="hidden" name="<?= e($fieldName) ?>" value="<?= $lockedId ?>">
             <div class="form-control corr-officer-locked bg-light"><?php render_officer_with_office($lockedName, $lockedOffice); ?></div>
+    <?php else: ?>
+            <select name="<?= e($fieldName) ?>" class="form-select corr-officer-pick">
+                <option value="<?= e($allValue) ?>"><?= e(__('common.all')) ?></option>
+                <?php foreach ($departments as $d): ?>
+                    <option value="<?= (int) $d['id'] ?>" data-office="<?= e(department_officer_subtitle($d)) ?>" <?= (string) $selectedId === (string) $d['id'] ? 'selected' : '' ?>><?= e(department_person_option_label($d)) ?></option>
+                <?php endforeach; ?>
+            </select>
     <?php endif;
     $control = ob_get_clean();
+    if (!empty($opts['bare'])) {
+        echo $control;
+        return;
+    }
     if ($boxed) {
         echo '<div class="filter-date-group">'
-            . '<div class="filter-date-group-title">' . e(__('departments.col_officer')) . '</div>'
+            . '<div class="filter-date-group-title">' . e($label) . '</div>'
             . '<div class="filter-date-pair filter-select-pair">' . $control . '</div>'
             . '</div>';
         return;
     }
-    echo '<div class="list-filters-item"><label class="form-label">' . e(__('departments.col_officer')) . '</label>' . $control . '</div>';
+    echo '<div class="list-filters-item"><label class="form-label">' . e($label) . '</label>' . $control . '</div>';
+}
+
+/**
+ * فلتر جهة المراسلة عبر بحث (لا يحمّل كل الجهات في القائمة).
+ *
+ * @param array{bare?:bool} $opts
+ */
+function render_filter_entity_field(string|int $selectedId, string $label, string $corrType = 'outgoing', array $opts = []): void
+{
+    static $assetsPrinted = false;
+
+    $selected = max(0, (int) $selectedId);
+    $isIncoming = $corrType === 'incoming';
+    $display = '';
+    if ($selected > 0 && function_exists('get_entity')) {
+        $row = get_entity($selected);
+        if ($row) {
+            $payload = entity_picker_payload($row, $isIncoming);
+            $display = trim((string) ($payload['display'] ?? ''));
+            if ($display === '') {
+                $display = trim((string) ($payload['party'] ?? $payload['org'] ?? ''));
+            }
+        } else {
+            $selected = 0;
+        }
+    }
+    $hasValue = $selected > 0 && $display !== '';
+    $emptyLabel = __('common.all');
+
+    ob_start();
+    echo '<div class="input-group filter-entity-picker" data-filter-entity data-corr-type="'
+        . e($isIncoming ? 'incoming' : 'outgoing') . '" data-empty-label="' . e($emptyLabel) . '">';
+    echo '<input type="hidden" name="entity_id" value="' . ($hasValue ? $selected : '') . '" data-filter-entity-id>';
+    echo '<div class="form-control filter-entity-display' . ($hasValue ? '' : ' is-empty') . '"'
+        . ' role="button" tabindex="0" data-filter-entity-open'
+        . ' title="' . e(__('corr.entity_picker_open')) . '"'
+        . ' aria-label="' . e($label) . '">'
+        . '<span data-filter-entity-label>' . e($hasValue ? $display : $emptyLabel) . '</span>'
+        . '</div>';
+    echo '<button type="button" class="btn btn-outline-secondary" data-filter-entity-pick'
+        . ' title="' . e(__('corr.entity_picker_open')) . '"' . ($hasValue ? ' hidden' : '') . '>'
+        . '<i class="bi bi-search"></i></button>';
+    echo '<button type="button" class="btn btn-outline-secondary" data-filter-entity-clear'
+        . ' title="' . e(__('corr.entity_picker_clear')) . '"' . ($hasValue ? '' : ' hidden') . '>'
+        . '<i class="bi bi-x-lg"></i></button>';
+    echo '</div>';
+    $control = ob_get_clean();
+
+    if (!empty($opts['bare'])) {
+        echo $control;
+    } else {
+        echo '<div class="list-filters-item"><label class="form-label">' . e($label) . '</label>' . $control . '</div>';
+    }
+
+    if (!$assetsPrinted) {
+        $assetsPrinted = true;
+        require __DIR__ . '/../includes/filter_entity_picker.php';
+    }
+}
+
+/** بطاقة فلتر واحدة بنفس أسلوب بطاقات التاريخ */
+function render_filter_route_card(string $title, string $controlHtml): void
+{
+    echo '<div class="filter-date-group list-filters-route-card">'
+        . '<div class="filter-date-group-title">' . e($title) . '</div>'
+        . '<div class="filter-date-pair filter-select-pair">' . $controlHtml . '</div>'
+        . '</div>';
+}
+
+/** زوج موجه من / موجهة إلى كبطاقتين متوافقتين مع حقلي التاريخ */
+function render_filter_route_pair(?array $user, array $departments, array $filters, string $listType, string $deptAll = ''): void
+{
+    echo '<div class="list-filters-route">';
+    if ($listType === 'outgoing') {
+        ob_start();
+        render_filter_department_field($user, $departments, $filters['issuing_department_id'] ?? '', $deptAll, [
+            'name' => 'issuing_department_id',
+            'label' => __('corr.filter_from'),
+            'lock_to_primary' => false,
+            'bare' => true,
+        ]);
+        render_filter_route_card(__('corr.filter_from'), ob_get_clean());
+
+        ob_start();
+        render_filter_entity_field($filters['entity_id'] ?? '', __('corr.filter_to'), 'outgoing', ['bare' => true]);
+        render_filter_route_card(__('corr.filter_to'), ob_get_clean());
+    } elseif ($listType === 'incoming') {
+        ob_start();
+        render_filter_entity_field($filters['entity_id'] ?? '', __('corr.filter_from'), 'incoming', ['bare' => true]);
+        render_filter_route_card(__('corr.filter_from'), ob_get_clean());
+
+        ob_start();
+        render_filter_department_field($user, $departments, $filters['department_id'] ?? '', $deptAll, [
+            'name' => 'department_id',
+            'label' => __('corr.filter_to'),
+            'lock_to_primary' => false,
+            'bare' => true,
+        ]);
+        render_filter_route_card(__('corr.filter_to'), ob_get_clean());
+    } else {
+        ob_start();
+        render_filter_department_field($user, $departments, $filters['issuing_department_id'] ?? '', $deptAll, [
+            'name' => 'issuing_department_id',
+            'label' => __('corr.filter_from'),
+            'lock_to_primary' => false,
+            'bare' => true,
+        ]);
+        render_filter_route_card(__('corr.filter_from'), ob_get_clean());
+
+        ob_start();
+        render_filter_department_field($user, $departments, $filters['department_id'] ?? '', $deptAll, [
+            'name' => 'department_id',
+            'label' => __('corr.filter_to'),
+            'lock_to_primary' => false,
+            'bare' => true,
+        ]);
+        render_filter_route_card(__('corr.filter_to'), ob_get_clean());
+    }
+    echo '</div>';
 }
 
 /** أنواع المتابعة حسب نوع القائمة */
@@ -5766,6 +5911,113 @@ function correspondence_followup_kinds_for_filter(string $type = 'all', ?array $
         return ['no_attach', 'due_soon'];
     }
     return array_merge($approval, ['unreplied', 'no_referral', 'no_attach', 'unsent', 'no_receipt', 'due_soon']);
+}
+
+/**
+ * عدد الفلاتر النشطة في قائمة مراسلات (بدون تبويبات مثل prep / status_group).
+ */
+function correspondence_list_filters_active_count(array $filters, string $listType = 'all'): int
+{
+    $keys = [
+        'q', 'status', 'action', 'from', 'to', 'hijri_from', 'hijri_to',
+        'department_id', 'issuing_department_id', 'entity_id',
+    ];
+    if ($listType === 'outgoing' || $listType === 'all') {
+        $keys[] = 'receipt';
+        $keys[] = 'channel';
+        $keys[] = 'issue_approval';
+    }
+    $count = 0;
+    foreach ($keys as $key) {
+        $value = $filters[$key] ?? '';
+        if ($value === null) {
+            continue;
+        }
+        $value = is_string($value) ? trim($value) : $value;
+        if ($value === '' || $value === '0' || $value === 0) {
+            continue;
+        }
+        $count++;
+    }
+    return $count;
+}
+
+/**
+ * بطاقة فلاتر قابلة للطي لقوائم الصادر/الوارد/الداخلي.
+ *
+ * @param array<string,mixed> $options نفس خيارات render_correspondence_list_filters
+ */
+function render_correspondence_filters_card(?array $user, array $departments, array $filters, array $options = []): void
+{
+    $listType = (string) ($options['list_type'] ?? 'all');
+    if ($listType !== 'incoming' && $listType !== 'outgoing' && $listType !== 'internal') {
+        $listType = 'all';
+    }
+    $activeCount = correspondence_list_filters_active_count($filters, $listType);
+    $forceOpen = $activeCount > 0;
+    $cardId = 'listFiltersCard-' . $listType;
+    $storageKey = 'dms.listFilters.open.' . $listType;
+    $bodyId = $cardId . '-body';
+
+    $hidden = is_array($options['hidden'] ?? null) ? $options['hidden'] : [];
+    $clearQuery = [];
+    foreach ($hidden as $name => $value) {
+        if ($value === null || $value === '') {
+            continue;
+        }
+        $clearQuery[(string) $name] = (string) $value;
+    }
+    $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
+    $clearHref = $script . ($clearQuery ? ('?' . http_build_query($clearQuery)) : '');
+    ?>
+<div class="card-panel mb-3 list-filters-card<?= $forceOpen ? ' is-open' : '' ?>"
+     id="<?= e($cardId) ?>"
+     data-list-filters-card
+     data-storage-key="<?= e($storageKey) ?>"
+     data-force-open="<?= $forceOpen ? '1' : '0' ?>">
+    <script>
+    (function () {
+      var el = document.getElementById(<?= json_encode($cardId, JSON_UNESCAPED_UNICODE) ?>);
+      if (!el || el.getAttribute('data-force-open') === '1') return;
+      try {
+        if (localStorage.getItem(el.getAttribute('data-storage-key')) === '1') {
+          el.classList.add('is-open');
+        }
+      } catch (e) {}
+    })();
+    </script>
+    <div class="list-filters-card-bar">
+        <button type="button"
+                class="list-filters-card-toggle"
+                data-list-filters-toggle
+                data-show-label="<?= e(__('corr.filters_show')) ?>"
+                data-hide-label="<?= e(__('corr.filters_hide')) ?>"
+                aria-expanded="<?= $forceOpen ? 'true' : 'false' ?>"
+                aria-controls="<?= e($bodyId) ?>"
+                title="<?= e($forceOpen ? __('corr.filters_hide') : __('corr.filters_show')) ?>"
+                aria-label="<?= e($forceOpen ? __('corr.filters_hide') : __('corr.filters_show')) ?>">
+            <span class="list-filters-card-toggle-main">
+                <i class="bi bi-funnel" aria-hidden="true"></i>
+                <span><?= e(__('corr.filters_title')) ?></span>
+                <?php if ($activeCount > 0): ?>
+                    <span class="badge text-bg-secondary list-filters-card-count"><?= (int) $activeCount ?></span>
+                <?php endif; ?>
+            </span>
+            <i class="bi bi-chevron-down list-filters-card-chevron" aria-hidden="true"></i>
+        </button>
+        <?php if ($activeCount > 0): ?>
+            <a class="btn btn-sm btn-outline-secondary list-filters-card-clear" href="<?= e($clearHref) ?>">
+                <i class="bi bi-x-lg me-1" aria-hidden="true"></i><?= e(__('corr.filters_clear')) ?>
+            </a>
+        <?php endif; ?>
+    </div>
+    <div class="list-filters-card-body card-body p-3 pt-2" id="<?= e($bodyId) ?>">
+        <form class="list-filters" method="get">
+            <?php render_correspondence_list_filters($user, $departments, $filters, $options); ?>
+        </form>
+    </div>
+</div>
+    <?php
 }
 
 /**
@@ -5891,12 +6143,19 @@ function render_correspondence_list_filters(?array $user, array $departments, ar
             </select>
         </div>
         <?php endif; ?>
-        <?php render_filter_department_field($user, $departments, $filters['department_id'] ?? '', $deptAll); ?>
+        <?php if ($listType === 'all'): ?>
+            <?php render_filter_department_field($user, $departments, $filters['department_id'] ?? '', $deptAll, ['list_type' => $listType]); ?>
+        <?php endif; ?>
     </div>
     <div class="list-filters-footer">
         <?php render_filter_date_range($filters); ?>
+        <?php if ($listType === 'outgoing' || $listType === 'incoming' || $listType === 'internal'): ?>
+            <?php render_filter_route_pair($user, $departments, $filters, $listType, $deptAll); ?>
+        <?php endif; ?>
         <div class="list-filters-actions">
-            <button class="btn btn-outline-secondary w-100" type="submit"><?= e($submitLabel) ?></button>
+            <button class="btn btn-kff list-filters-submit" type="submit">
+                <i class="bi bi-funnel me-1" aria-hidden="true"></i><?= e($submitLabel) ?>
+            </button>
         </div>
     </div>
     <?php

@@ -982,7 +982,8 @@ function outgoing_approval_badge(array $corr): string
             'pending_sg' => outgoing_appr_text('issue_appr.list_pending_sg'),
             'pending_deputy' => outgoing_appr_text('issue_appr.list_pending_deputy'),
             'pending_alternate' => outgoing_appr_text('issue_appr.list_pending_alternate'),
-            'approved', 'with_comms' => __('issue_appr.list_comms'),
+            'approved' => appr__('issue_appr.list_approved'),
+            'with_comms' => __('issue_appr.list_comms'),
             'rejected' => appr__('issue_appr.list_rejected'),
             default => appr__('issue_appr.list_none'),
         };
@@ -1026,19 +1027,16 @@ function appr_badge_stage_user(array $corr, string $s): array
             return ['id' => $creator, 'tip' => $waiting];
         case 'not_required':
             return ['id' => $creator, 'tip' => __('appr_list.created_by')];
-        case 'approved':
         case 'with_comms':
-            if (($corr['type'] ?? '') === 'outgoing' || $s === 'with_comms') {
-                $id = (int) ($corr['issue_approval_assignee_id'] ?? 0);
-                if ($id <= 0 && function_exists('outgoing_dispatch_user_ids')) {
-                    $ids = outgoing_dispatch_user_ids();
-                    if (count($ids) === 1) {
-                        $id = $ids[0];
-                    }
+            $id = (int) ($corr['issue_approval_assignee_id'] ?? 0);
+            if ($id <= 0 && function_exists('outgoing_dispatch_user_ids')) {
+                $ids = outgoing_dispatch_user_ids();
+                if (count($ids) === 1) {
+                    $id = $ids[0];
                 }
-                return ['id' => $id, 'tip' => __('issue_appr.header_with_comms')];
             }
-            return ['id' => (int) ($corr['issue_approval_decided_by'] ?? 0), 'tip' => __('appr_list.decided_by')];
+            return ['id' => $id, 'tip' => __('issue_appr.header_with_comms')];
+        case 'approved':
         case 'rejected':
         case 'filed':
             return ['id' => (int) ($corr['issue_approval_decided_by'] ?? 0), 'tip' => __('appr_list.decided_by')];
@@ -1046,29 +1044,23 @@ function appr_badge_stage_user(array $corr, string $s): array
     return ['id' => 0, 'tip' => ''];
 }
 
-/** سطر تحت شارة الاعتماد في القوائم: اسم صاحب المرحلة ثم وظيفته (مع تلميح: لدى من الآن / صاحب القرار / المنشئ) */
+/** سطر تحت شارة الاعتماد في القوائم: اسم صاحب المرحلة فقط (مع تلميح: لدى من الآن / صاحب القرار / المنشئ) */
 function appr_badge_person_html(array $corr, string $s): string
 {
     $stage = appr_badge_stage_user($corr, $s);
     $who = outgoing_badge_user_row($stage['id']);
     if ($who === null) {
-        $showRole = $s === 'pending_review'
-            || $s === 'with_comms'
-            || ($s === 'approved' && ($corr['type'] ?? '') === 'outgoing');
+        $showRole = $s === 'pending_review' || $s === 'with_comms';
         return $showRole
-            ? '<span title="' . e($stage['tip']) . '">' . e(__('role.communications')) . '</span>'
+            ? '<span class="text-nowrap" title="' . e($stage['tip']) . '">' . e(__('role.communications')) . '</span>'
             : '';
     }
     $name = function_exists('user_display_name') ? user_display_name($who) : trim((string) ($who['name_ar'] ?? ''));
     if ($name === '') {
         return '';
     }
-    $job = user_job_title($who);
-    if ($job === '' && in_array($s, ['approved', 'rejected'], true) && $stage['id'] === outgoing_approval_alternate_user_id()) {
-        $job = outgoing_approver_alternate_title();
-    }
-    return '<span title="' . e($stage['tip']) . '">' . e($name) . '</span>'
-        . ($job !== '' ? '<div class="lh-sm">' . e($job) . '</div>' : '');
+
+    return '<span class="text-nowrap" title="' . e($stage['tip']) . '">' . e($name) . '</span>';
 }
 
 /** شارة اعتماد أي معاملة حسب نوعها (للقوائم الموحّدة) */
@@ -1082,7 +1074,7 @@ function corr_approval_badge(array $corr): string
     };
 }
 
-/** شارة الاعتماد مع صاحب المرحلة؛ مراحل الاعتماد تُختصر إلى «بانتظار الاعتماد» ما دام الاسم والوظيفة ظاهرين تحتها */
+/** شارة الاعتماد مع صاحب المرحلة؛ مراحل الاعتماد تُختصر إلى «بانتظار الاعتماد» ما دام الاسم ظاهراً تحتها */
 function appr_badge_render(string $class, string $title, string $short, array $corr, string $s): string
 {
     $line = appr_badge_person_html($corr, $s);
@@ -1090,11 +1082,14 @@ function appr_badge_render(string $class, string $title, string $short, array $c
         $short = __('appr_list.pending_approval');
     }
     $badge = '<span class="badge ' . $class . '" title="' . e($title) . '">' . e($short) . '</span>';
-    if ($line === '') {
-        return $badge;
+    $html = '<div class="outgoing-appr-cell">'
+        . '<div class="outgoing-appr-line">' . $badge . '</div>';
+    if ($line !== '') {
+        $html .= '<div class="outgoing-appr-person small text-muted lh-sm">' . $line . '</div>';
     }
-    return '<div class="outgoing-appr-cell">' . $badge
-        . '<div class="small text-muted mt-1 lh-sm">' . $line . '</div></div>';
+    $html .= '</div>';
+
+    return $html;
 }
 
 function incoming_approval_in_scope(array $corr): bool
