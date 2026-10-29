@@ -3621,7 +3621,8 @@ function next_ref_numbers(string $type, int $count, ?int $departmentId = null): 
         $pdo->beginTransaction();
     }
     try {
-        $usedMax = corr_ref_max_used_sequence($year, $prefix);
+        // أعلى تسلسل لنفس النوع فقط — الوارد/الصادر/الداخلي عدّادات مستقلة
+        $usedMax = corr_ref_max_used_sequence($year, $prefix, $seqType);
         $stmt = $pdo->prepare(
             "SELECT last_number FROM `tblsequences` WHERE seq_type = ? AND seq_year = ? AND seq_scope = ? FOR UPDATE"
         );
@@ -3633,7 +3634,7 @@ function next_ref_numbers(string $type, int $count, ?int $departmentId = null): 
             )->execute([$seqType, $year, $scope]);
             $last = 0;
         }
-        // بادئة بلا أرقام سابقة: سلسلة جديدة من 1، لا نكمل العدّاد المشترك القديم
+        // بادئة بلا أرقام سابقة: سلسلة جديدة من 1، لا نكمل عدّاد نوع آخر
         $seq = ($prefix !== '' && $usedMax === 0) ? 0 : max((int) $last, $usedMax);
         $refs = [];
         $n = 0;
@@ -3667,12 +3668,21 @@ function next_ref_numbers(string $type, int $count, ?int $departmentId = null): 
     return $refs;
 }
 
-/** أعلى تسلسل مستخدم لنفس السنة/البادئة في المراسلات */
-function corr_ref_max_used_sequence(int $year, string $prefix = ''): int
+/**
+ * أعلى تسلسل مستخدم لنفس السنة/البادئة.
+ * عند تمرير النوع يُحسب ضمن وارد أو صادر أو داخلي فقط حتى لا تختلط العدادات.
+ */
+function corr_ref_max_used_sequence(int $year, string $prefix = '', ?string $type = null): int
 {
     $max = 0;
     try {
-        $rows = db()->query('SELECT ref_number FROM `tblcorrespondence`')->fetchAll(PDO::FETCH_COLUMN);
+        if ($type !== null && in_array($type, ['incoming', 'outgoing', 'internal'], true)) {
+            $stmt = db()->prepare('SELECT ref_number FROM `tblcorrespondence` WHERE `type` = ?');
+            $stmt->execute([$type]);
+            $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } else {
+            $rows = db()->query('SELECT ref_number FROM `tblcorrespondence`')->fetchAll(PDO::FETCH_COLUMN);
+        }
         foreach ($rows as $ref) {
             $seq = corr_ref_extract_seq_for_year((string) $ref, $prefix, $year);
             if ($seq !== null) {
