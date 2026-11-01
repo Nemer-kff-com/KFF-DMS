@@ -124,6 +124,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $outgoingPrimaryMinutes = $saveApprovalChain('outgoing', true);
         set_setting('outgoing_approval_hours', (string) max(1, (int) ceil($outgoingPrimaryMinutes / 60)));
 
+        [$commsMinutes, $commsUnit] = $parseTimeout('outgoing_comms_value', 'outgoing_comms_unit');
+        $commsPrimary = max(0, (int) ($_POST['outgoing_comms_primary_user_id'] ?? 0));
+        $commsAlt = max(0, (int) ($_POST['outgoing_comms_alternate_user_id'] ?? 0));
+        $commsAltEnabled = isset($_POST['outgoing_comms_alternate_enabled']);
+        if (!$commsAltEnabled) {
+            $commsAlt = 0;
+        }
+        if ($commsPrimary > 0 && $commsAlt > 0 && $commsPrimary === $commsAlt) {
+            throw new InvalidArgumentException(__('settings.outgoing_approval_same_user'));
+        }
+        $commsActiveUser = static function (int $uid): bool {
+            if ($uid <= 0) {
+                return true;
+            }
+            try {
+                $st = db()->prepare('SELECT id FROM `tblusers` WHERE id = ? AND is_active = 1 LIMIT 1');
+                $st->execute([$uid]);
+                return (bool) $st->fetchColumn();
+            } catch (Throwable $e) {
+                return false;
+            }
+        };
+        if (!$commsActiveUser($commsPrimary) || !$commsActiveUser($commsAlt)) {
+            throw new InvalidArgumentException(__('settings.outgoing_comms_user_inactive'));
+        }
+        $oldCommsPrimary = (int) setting('outgoing_comms_primary_user_id', '0');
+        $oldCommsAlt = setting('outgoing_comms_alternate_enabled', '1') === '1'
+            ? (int) setting('outgoing_comms_alternate_user_id', '0')
+            : 0;
+        set_setting('outgoing_comms_minutes', (string) $commsMinutes);
+        set_setting('outgoing_comms_unit', $commsUnit);
+        set_setting('outgoing_comms_primary_user_id', (string) $commsPrimary);
+        set_setting('outgoing_comms_alternate_user_id', (string) $commsAlt);
+        set_setting('outgoing_comms_alternate_enabled', $commsAltEnabled ? '1' : '0');
+        if (function_exists('outgoing_comms_sync_assignee_permissions')) {
+            outgoing_comms_sync_assignee_permissions(
+                $oldCommsPrimary,
+                $oldCommsAlt,
+                $commsPrimary,
+                $commsAlt,
+                (int) ($user['id'] ?? 0) ?: null
+            );
+        }
+
         set_setting('incoming_approval_enabled', isset($_POST['incoming_approval_enabled']) ? '1' : '0');
         $saveApprovalChain('incoming', true);
         set_setting('incoming_approval_scope_all', ($_POST['incoming_approval_scope_all'] ?? '0') === '1' ? '1' : '0');
@@ -273,6 +317,11 @@ foreach (['outgoing', 'incoming', 'internal'] as $chainPrefix) {
         $settings[$chainPrefix . '_reviewer_' . $roleKey . '_user_id'] = setting($chainPrefix . '_reviewer_' . $roleKey . '_user_id', '0');
     }
 }
+$settings['outgoing_comms_minutes'] = setting('outgoing_comms_minutes', '120');
+$settings['outgoing_comms_unit'] = setting('outgoing_comms_unit', 'hours');
+$settings['outgoing_comms_alternate_enabled'] = setting('outgoing_comms_alternate_enabled', '1');
+$settings['outgoing_comms_primary_user_id'] = setting('outgoing_comms_primary_user_id', '0');
+$settings['outgoing_comms_alternate_user_id'] = setting('outgoing_comms_alternate_user_id', '0');
 foreach (['incoming' => 60, 'internal' => 120] as $chainPrefix => $chainDefaultMinutes) {
     foreach (['approval', 'approval_deputy'] as $stageKey) {
         $settings[$chainPrefix . '_' . $stageKey . '_minutes'] = setting($chainPrefix . '_' . $stageKey . '_minutes', (string) $chainDefaultMinutes);
@@ -410,6 +459,9 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(__('settings.subtitle_short')) ?></p>
     </div>
     <div class="page-header-actions">
+        <a href="<?= e(base_url('admin/load_check.php')) ?>" class="btn btn-outline-secondary btn-sm" title="<?= e(__('load_check.title')) ?>">
+            <i class="bi bi-speedometer2 me-1"></i><?= e(__('settings.tab_load_check')) ?>
+        </a>
         <a href="<?= e(base_url('admin/check_assets.php')) ?>" class="btn btn-outline-secondary btn-sm" title="فحص ملفات التنسيق">
             <i class="bi bi-palette2 me-1"></i>فحص التنسيق
         </a>
@@ -1172,10 +1224,12 @@ require __DIR__ . '/../includes/header.php';
             block.classList.toggle('is-stage-off', !!own && !own.checked);
         });
         document.querySelectorAll('.settings-approver-stage-body').forEach(function (body) {
-            body.inert = !!body.closest('.is-stage-off');
+            var stage = body.closest('[data-approver-stage]');
+            body.inert = !!(stage && stage.classList.contains('is-stage-off'));
         });
         document.querySelectorAll('[data-approver-pick]').forEach(function (btn) {
-            btn.disabled = !!btn.closest('.is-stage-off');
+            var stage = btn.closest('[data-approver-stage]');
+            btn.disabled = !!(stage && stage.classList.contains('is-stage-off'));
         });
     }
     refreshStages();
@@ -1267,7 +1321,10 @@ require __DIR__ . '/../includes/header.php';
             item.setAttribute('data-value', opt.value);
             var name = isNone ? opt.textContent.trim() : (opt.getAttribute('data-name') || '');
             var job = isNone ? '' : (opt.getAttribute('data-job-title') || '');
-            var email = isNone ? '' : (opt.textContent.split('—').slice(1).join('—').trim());
+            var email = isNone ? '' : (opt.getAttribute('data-email') || '').trim();
+            if (!email && !isNone) {
+                email = opt.textContent.split(/[—–]/).slice(1).join('—').trim();
+            }
             item.setAttribute('data-search', (name + ' ' + job + ' ' + email).toLowerCase());
             if (isNone) item.classList.add('is-none');
 
@@ -1278,11 +1335,18 @@ require __DIR__ . '/../includes/header.php';
             n.className = 'approver-picker-name';
             n.textContent = name;
             text.appendChild(n);
-            if (job || email) {
-                var meta = document.createElement('div');
-                meta.className = 'approver-picker-meta';
-                meta.textContent = job && email ? job + ' · ' + email : (job || email);
-                text.appendChild(meta);
+            if (job) {
+                var metaJob = document.createElement('div');
+                metaJob.className = 'approver-picker-meta';
+                metaJob.textContent = job;
+                text.appendChild(metaJob);
+            }
+            if (email) {
+                var metaEmail = document.createElement('div');
+                metaEmail.className = 'approver-picker-meta approver-picker-email';
+                metaEmail.setAttribute('dir', 'ltr');
+                metaEmail.textContent = email;
+                text.appendChild(metaEmail);
             }
             item.appendChild(text);
 

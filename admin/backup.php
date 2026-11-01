@@ -151,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if ($action === 'backup_now' || $action === 'project_backup_now' || $action === 'storage_backup_now') {
+    if ($action === 'backup_now' || $action === 'project_backup_now') {
         @set_time_limit(0);
         @ignore_user_abort(true);
     }
@@ -181,19 +181,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errMsg = 'فشل إنشاء نسخة النظام المضغوطة.';
         if ($res['ok'] && !empty($res['cloud_uploaded'])) {
             $okMsg = 'تم إنشاء نسخة النظام ورفعها إلى السحابة بنجاح.';
-        }
-    } elseif ($action === 'storage_backup_now') {
-        $backupDir = dms_backup_maint_web_backup_dir($settings, $envPaths);
-        $res = dms_backup_storage_create(
-            $backupDir,
-            false,
-            $settings,
-            max(1, min(365, (int) ($settings['project_keep_days'] ?? $settings['keep_days'] ?? 30)))
-        );
-        $okMsg = 'تم إنشاء نسخة ملفات المعاملات المضغوطة بنجاح.';
-        $errMsg = 'فشل إنشاء نسخة ملفات المعاملات.';
-        if ($res['ok'] && !empty($res['cloud_uploaded'])) {
-            $okMsg = 'تم إنشاء نسخة ملفات المعاملات ورفعها إلى السحابة بنجاح.';
         }
     } elseif ($action === 'schedule_diagnose') {
         $lines = dms_backup_cron_diagnose($settings);
@@ -315,6 +302,18 @@ $backupFiles = dms_backup_maint_backup_files($activeBackupDir);
 $backupCount = count($backupFiles);
 $backupTotalBytes = array_sum(array_column($backupFiles, 'size'));
 $latestBackup = $backupFiles[0] ?? null;
+$archiveRobocopyPaths = dms_backup_maint_archive_robocopy_paths($settings);
+$archiveRobocopyCmd = dms_backup_maint_archive_robocopy_command($settings);
+$storageRobocopyPaths = dms_backup_maint_storage_robocopy_paths($settings);
+$storageRobocopyCmd = dms_backup_maint_storage_robocopy_command($settings);
+$archiveBackupDirValue = (string) ($archiveRobocopyPaths['dest'] ?? '');
+$storageBackupDirValue = (string) ($storageRobocopyPaths['dest'] ?? '');
+// مصادر المزامنة من إعدادات التخزين (settings?tab=storage) — نفس المسار الفعّال
+$storageSourceDisplay = function_exists('dms_storage_root') ? (string) dms_storage_root() : (string) ($storageRobocopyPaths['source'] ?? '');
+$archiveSourceDisplay = function_exists('archive_disk_root') ? (string) archive_disk_root() : (string) ($archiveRobocopyPaths['source'] ?? '');
+$projectRootHidden = (string) ($settings['host_project_root'] ?? $envPaths['project_root'] ?? '');
+$robocopyMode = dms_backup_maint_robocopy_mode($settings);
+$settingsStorageUrl = base_url('admin/settings.php?tab=storage');
 $dbNameLabel = (string) ($envPaths['db_name'] !== '' ? $envPaths['db_name'] : '');
 $oauthRedirectUri = dms_backup_cloud_oauth_redirect_uri();
 $gdriveConnected = trim((string) ($settings['gdrive_refresh_token'] ?? '')) !== '';
@@ -357,6 +356,57 @@ $pageExtraHead = <<<'CSS'
 }
 .dms-backup-pro .btn-kff { background: #9B7D3B; border-color: #9B7D3B; color: #fff; }
 .dms-backup-pro .btn-kff:hover { background: #8a6d34; border-color: #8a6d34; color: #fff; }
+.dms-backup-pro .paths-sync-card {
+  border: 1px solid #e6e8ec; border-radius: 12px; background: #fafbfc;
+  padding: 0; margin-top: .15rem; overflow: hidden;
+}
+.dms-backup-pro .paths-sync-card .paths-sync-toggle {
+  width: 100%; border: 0; background: transparent; text-align: start;
+  font-weight: 800; color: #3d4650; font-size: .95rem; margin: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .95rem 1rem; cursor: pointer;
+}
+.dms-backup-pro .paths-sync-card .paths-sync-toggle:hover { background: #f3f4f6; }
+.dms-backup-pro .paths-sync-card .paths-sync-toggle .paths-sync-toggle-label {
+  display: inline-flex; align-items: center; gap: .4rem;
+}
+.dms-backup-pro .paths-sync-card .paths-sync-chevron {
+  color: #6b7280; font-size: .9rem; transition: transform .2s ease;
+}
+.dms-backup-pro .paths-sync-card .paths-sync-toggle[aria-expanded="true"] .paths-sync-chevron {
+  transform: rotate(180deg);
+}
+.dms-backup-pro .paths-sync-card .paths-sync-body { padding: 0 1rem 1rem; }
+.dms-backup-pro .paths-sync-card .paths-sync-hint {
+  color: #6c757d; font-size: .8rem; margin: 0 0 .85rem;
+}
+.dms-backup-pro .paths-sync-card .form-label { font-size: .82rem; font-weight: 600; color: #4b5563; margin-bottom: .3rem; }
+.dms-backup-pro .paths-sync-card .form-control { background: #fff; }
+.dms-backup-pro .robo-list { display: flex; flex-direction: column; gap: .75rem; margin-top: .85rem; }
+.dms-backup-pro .robo-item {
+  background: #fff; border: 1px solid #e8eaee; border-radius: 10px; padding: .75rem .85rem;
+}
+.dms-backup-pro .robo-item .robo-head {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .45rem;
+}
+.dms-backup-pro .robo-item .robo-name { font-weight: 700; color: #38404a; font-size: .88rem; }
+.dms-backup-pro .robo-item .robo-meta {
+  font-size: .75rem; color: #6c757d; margin-bottom: .5rem; line-height: 1.45;
+  direction: ltr; text-align: start;
+}
+.dms-backup-pro .robo-item .robo-meta code {
+  direction: ltr; display: inline; background: #f3f4f6; padding: .1rem .35rem; border-radius: 4px; font-size: .72rem;
+}
+.dms-backup-pro .robo-item .robo-cmd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .78rem; direction: ltr; text-align: start;
+  background: #f8f9fb; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: .55rem .65rem; word-break: break-all; color: #1f2937; margin: 0;
+}
+.dms-backup-pro .robo-item .robo-actions { display: flex; gap: .4rem; flex-shrink: 0; }
+.dms-backup-pro .paths-sync-card .form-control[readonly] {
+  background: #f3f4f6; color: #4b5563; cursor: default;
+}
 .dms-backup-pro .icon-actions { display:flex; flex-wrap:wrap; gap:.45rem; align-items:center; padding-top:.25rem; }
 .dms-backup-pro .icon-actions .inv-btn-icon { margin: 0; }
 .dms-backup-pro .stats-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.75rem; margin-bottom:1rem; }
@@ -374,8 +424,21 @@ $pageExtraHead = <<<'CSS'
 .dms-backup-pro .stat-card .v { color:#1f2937; font-weight:800; font-size:1.08rem; margin:0; line-height:1.25; }
 .dms-backup-pro .schedule-toggles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; }
 .dms-backup-pro .schedule-toggles .task-toggle { height:100%; }
+.dms-backup-pro .ctrl-system-box {
+  border:1px solid #e8eaee; border-radius:12px; background:#fff; padding:.95rem 1rem; margin-bottom:.85rem;
+}
+.dms-backup-pro .ctrl-system-box .ctrl-system-intro {
+  font-size:.84rem; color:#4b5563; margin:0 0 .85rem; padding-bottom:.7rem; border-bottom:1px solid #eef0f3;
+}
+.dms-backup-pro .ctrl-system-box .ctrl-system-intro strong { color:#374151; }
+.dms-backup-pro .ctrl-system-box .ctrl-system-path {
+  margin-bottom:.85rem;
+}
+.dms-backup-pro .ctrl-system-box .ctrl-system-path .form-label {
+  font-size:.82rem; font-weight:600; color:#4b5563; margin-bottom:.3rem;
+}
 .dms-backup-pro .ctrl-jobs {
-  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-bottom:.85rem;
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-bottom:0;
 }
 .dms-backup-pro .ctrl-job {
   border:1px solid #e8eaee; border-radius:12px; background:#fafbfc; padding:.85rem .9rem;
@@ -413,9 +476,15 @@ $pageExtraHead = <<<'CSS'
 .dms-backup-pro .ctrl-job-foot b { color:#374151; font-weight:700; }
 .dms-backup-pro .ctrl-job-foot .ready { color:#166534; font-weight:800; }
 .dms-backup-pro .ctrl-alert-box {
-  margin-top:.85rem; padding:.75rem .85rem;
+  margin:0 0 .85rem; padding:.85rem .9rem;
   border:1px solid #e8eaee; border-radius:12px; background:#fafbfc;
 }
+.dms-backup-pro .ctrl-alert-box .ctrl-alert-title {
+  display:flex; align-items:center; gap:.45rem;
+  font-weight:800; color:#374151; font-size:.88rem; margin:0 0 .75rem;
+  padding-bottom:.55rem; border-bottom:1px solid #eef0f3;
+}
+.dms-backup-pro .ctrl-alert-box .ctrl-alert-title .ctrl-job-ico { margin-top:0; }
 .dms-backup-pro .ctrl-alert-toggles {
   display:flex; flex-wrap:wrap; gap:.55rem; height:100%; align-items:flex-end;
 }
@@ -556,6 +625,7 @@ $pageExtraHead = <<<'CSS'
   .dms-backup-pro .ctrl-job-fields.triple { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px){
+  .dms-backup-pro .robo-item .robo-head { flex-direction: column; align-items: flex-start; }
   .dms-backup-pro .stats-grid,
   .dms-backup-pro .status-grid,
   .dms-backup-pro .task-toggles,
@@ -609,126 +679,209 @@ CSS;
                     <button type="submit" name="action" value="schedule_diagnose" class="btn btn-sm btn-outline-secondary" title="تشخيص الجدولة"><i class="bi bi-clipboard-check"></i></button>
                     <button type="submit" name="action" value="backup_now" class="btn btn-sm btn-outline-primary" title="نسخة قاعدة البيانات (SQL)"><i class="bi bi-database"></i></button>
                     <button type="submit" name="action" value="project_backup_now" class="btn btn-sm btn-outline-primary" title="نسخة النظام / الكود (ZIP)"><i class="bi bi-code-slash"></i></button>
-                    <button type="submit" name="action" value="storage_backup_now" class="btn btn-sm btn-outline-primary" title="نسخة ملفات المعاملات (ZIP)"><i class="bi bi-folder2-open"></i></button>
                     <button type="submit" name="action" value="alert_email_test" class="btn btn-sm btn-outline-secondary" title="اختبار بريد التنبيه"><i class="bi bi-envelope"></i></button>
                 </div>
             </div>
 
-            <div class="alert alert-light border mb-3 py-2 small">
-                <strong>نسخ فوري:</strong>
-                <span class="me-2"><i class="bi bi-database"></i> قاعدة البيانات</span>
-                <span class="me-2"><i class="bi bi-code-slash"></i> النظام (الكود بدون ملفات المعاملات)</span>
-                <span><i class="bi bi-folder2-open"></i> ملفات المعاملات (<?= e(function_exists('dms_storage_root') ? dms_storage_root() : 'storage/uploads') ?>)</span>
-            </div>
-
-            <div class="ctrl-jobs">
-                <div class="ctrl-job">
-                    <div class="ctrl-job-head">
-                        <span class="ctrl-job-ico" aria-hidden="true"><i class="bi bi-database"></i></span>
-                        <div class="d-flex align-items-start gap-2 flex-grow-1">
-                            <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="enable_db_backup" name="enable_db_backup" value="1" <?php echo !empty($settings['enable_db_backup']) ? 'checked' : ''; ?>>
-                            <label class="form-check-label mb-0" for="enable_db_backup">قاعدة البيانات (SQL)</label>
-                        </div>
-                    </div>
-                    <div class="ctrl-job-fields triple">
-                        <div>
-                            <label class="form-label" for="backup_time">وقت التشغيل</label>
-                            <input type="time" class="form-control" id="backup_time" name="backup_time" value="<?php echo htmlspecialchars($settings['backup_time'], ENT_QUOTES, 'UTF-8'); ?>" required>
-                        </div>
-                        <div>
-                            <label class="form-label" for="db_backup_every_days">كل كم يوم</label>
-                            <input type="number" class="form-control" min="1" max="365" id="db_backup_every_days" name="db_backup_every_days" value="<?php echo (int) ($settings['db_backup_every_days'] ?? 1); ?>" required>
-                        </div>
-                        <div>
-                            <label class="form-label" for="keep_days">أيام الحفظ</label>
-                            <input type="number" class="form-control" min="1" max="90" id="keep_days" name="keep_days" value="<?php echo (int) $settings['keep_days']; ?>" required>
-                        </div>
-                    </div>
-                    <div class="ctrl-job-foot">
-                        آخر نجاح: <b><?php echo htmlspecialchars($jobDbView['last'] !== '' ? $jobDbView['last'] : '—', ENT_QUOTES, 'UTF-8'); ?></b>
-                        · القادم: <b><?php echo htmlspecialchars($jobDbView['next'], ENT_QUOTES, 'UTF-8'); ?></b><br>
-                        <?php if (!empty($jobDbView['ready_now'])): ?>
-                            <span class="ready"><?php echo htmlspecialchars($jobDbView['status'], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <?php else: ?>
-                            <?php echo htmlspecialchars($jobDbView['status'], ENT_QUOTES, 'UTF-8'); ?>
-                        <?php endif; ?>
-                    </div>
+            <div class="ctrl-system-box">
+                <div class="ctrl-system-intro">
+                    <strong>نسخ فوري عبر النظام:</strong>
+                    <span class="me-2"><i class="bi bi-database"></i> قاعدة البيانات</span>
+                    <span class="me-2"><i class="bi bi-code-slash"></i> النظام / الكود (ZIP)</span>
                 </div>
 
-                <div class="ctrl-job">
-                    <div class="ctrl-job-head">
-                        <span class="ctrl-job-ico" aria-hidden="true"><i class="bi bi-file-earmark-zip"></i></span>
-                        <div class="d-flex align-items-start gap-2 flex-grow-1">
-                            <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="enable_project_backup" name="enable_project_backup" value="1" <?php echo !empty($settings['enable_project_backup']) ? 'checked' : ''; ?>>
-                            <label class="form-check-label mb-0" for="enable_project_backup">النظام / الكود (ZIP)</label>
+                <div class="ctrl-system-path path-editable">
+                    <label class="form-label" for="host_backup_dir">وجهة ملفات النظام وقاعدة البيانات</label>
+                    <input type="text" class="form-control" id="host_backup_dir" name="host_backup_dir" dir="ltr"
+                           value="<?php echo htmlspecialchars($settings['host_backup_dir'], ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+
+                <div class="ctrl-jobs">
+                    <div class="ctrl-job">
+                        <div class="ctrl-job-head">
+                            <span class="ctrl-job-ico" aria-hidden="true"><i class="bi bi-database"></i></span>
+                            <div class="d-flex align-items-start gap-2 flex-grow-1">
+                                <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="enable_db_backup" name="enable_db_backup" value="1" <?php echo !empty($settings['enable_db_backup']) ? 'checked' : ''; ?>>
+                                <label class="form-check-label mb-0" for="enable_db_backup">قاعدة البيانات (SQL)</label>
+                            </div>
+                        </div>
+                        <div class="ctrl-job-fields triple">
+                            <div>
+                                <label class="form-label" for="backup_time">وقت التشغيل</label>
+                                <input type="time" class="form-control" id="backup_time" name="backup_time" value="<?php echo htmlspecialchars($settings['backup_time'], ENT_QUOTES, 'UTF-8'); ?>" required>
+                            </div>
+                            <div>
+                                <label class="form-label" for="db_backup_every_days">كل كم يوم</label>
+                                <input type="number" class="form-control" min="1" max="365" id="db_backup_every_days" name="db_backup_every_days" value="<?php echo (int) ($settings['db_backup_every_days'] ?? 1); ?>" required>
+                            </div>
+                            <div>
+                                <label class="form-label" for="keep_days">أيام الحفظ</label>
+                                <input type="number" class="form-control" min="1" max="90" id="keep_days" name="keep_days" value="<?php echo (int) $settings['keep_days']; ?>" required>
+                            </div>
+                        </div>
+                        <div class="ctrl-job-foot">
+                            آخر نجاح: <b><?php echo htmlspecialchars($jobDbView['last'] !== '' ? $jobDbView['last'] : '—', ENT_QUOTES, 'UTF-8'); ?></b>
+                            · القادم: <b><?php echo htmlspecialchars($jobDbView['next'], ENT_QUOTES, 'UTF-8'); ?></b><br>
+                            <?php if (!empty($jobDbView['ready_now'])): ?>
+                                <span class="ready"><?php echo htmlspecialchars($jobDbView['status'], ENT_QUOTES, 'UTF-8'); ?></span>
+                            <?php else: ?>
+                                <?php echo htmlspecialchars($jobDbView['status'], ENT_QUOTES, 'UTF-8'); ?>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <div class="ctrl-job-fields triple">
-                        <div>
-                            <label class="form-label" for="project_backup_time">وقت التشغيل</label>
-                            <input type="time" class="form-control" id="project_backup_time" name="project_backup_time" value="<?php echo htmlspecialchars((string) ($settings['project_backup_time'] ?? '04:00'), ENT_QUOTES, 'UTF-8'); ?>" required>
+
+                    <div class="ctrl-job">
+                        <div class="ctrl-job-head">
+                            <span class="ctrl-job-ico" aria-hidden="true"><i class="bi bi-file-earmark-zip"></i></span>
+                            <div class="d-flex align-items-start gap-2 flex-grow-1">
+                                <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="enable_project_backup" name="enable_project_backup" value="1" <?php echo !empty($settings['enable_project_backup']) ? 'checked' : ''; ?>>
+                                <label class="form-check-label mb-0" for="enable_project_backup">النظام / الكود (ZIP)</label>
+                            </div>
                         </div>
-                        <div>
-                            <label class="form-label" for="project_backup_every_days">كل كم يوم</label>
-                            <input type="number" class="form-control" min="1" max="365" id="project_backup_every_days" name="project_backup_every_days" value="<?php echo (int) ($settings['project_backup_every_days'] ?? 1); ?>" required>
+                        <div class="ctrl-job-fields triple">
+                            <div>
+                                <label class="form-label" for="project_backup_time">وقت التشغيل</label>
+                                <input type="time" class="form-control" id="project_backup_time" name="project_backup_time" value="<?php echo htmlspecialchars((string) ($settings['project_backup_time'] ?? '04:00'), ENT_QUOTES, 'UTF-8'); ?>" required>
+                            </div>
+                            <div>
+                                <label class="form-label" for="project_backup_every_days">كل كم يوم</label>
+                                <input type="number" class="form-control" min="1" max="365" id="project_backup_every_days" name="project_backup_every_days" value="<?php echo (int) ($settings['project_backup_every_days'] ?? 1); ?>" required>
+                            </div>
+                            <div>
+                                <label class="form-label" for="project_keep_days">أيام الحفظ</label>
+                                <input type="number" class="form-control" min="1" max="365" id="project_keep_days" name="project_keep_days" value="<?php echo (int) $projectKeepDays; ?>" required>
+                            </div>
                         </div>
-                        <div>
-                            <label class="form-label" for="project_keep_days">أيام الحفظ</label>
-                            <input type="number" class="form-control" min="1" max="365" id="project_keep_days" name="project_keep_days" value="<?php echo (int) $projectKeepDays; ?>" required>
+                        <div class="ctrl-job-foot">
+                            آخر نجاح: <b><?php echo htmlspecialchars($jobProjectView['last'] !== '' ? $jobProjectView['last'] : '—', ENT_QUOTES, 'UTF-8'); ?></b>
+                            · القادم: <b><?php echo htmlspecialchars($jobProjectView['next'], ENT_QUOTES, 'UTF-8'); ?></b><br>
+                            <?php if (!empty($jobProjectView['ready_now'])): ?>
+                                <span class="ready"><?php echo htmlspecialchars($jobProjectView['status'], ENT_QUOTES, 'UTF-8'); ?></span>
+                            <?php else: ?>
+                                <?php echo htmlspecialchars($jobProjectView['status'], ENT_QUOTES, 'UTF-8'); ?>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <div class="ctrl-job-foot">
-                        آخر نجاح: <b><?php echo htmlspecialchars($jobProjectView['last'] !== '' ? $jobProjectView['last'] : '—', ENT_QUOTES, 'UTF-8'); ?></b>
-                        · القادم: <b><?php echo htmlspecialchars($jobProjectView['next'], ENT_QUOTES, 'UTF-8'); ?></b><br>
-                        <?php if (!empty($jobProjectView['ready_now'])): ?>
-                            <span class="ready"><?php echo htmlspecialchars($jobProjectView['status'], ENT_QUOTES, 'UTF-8'); ?></span>
-                        <?php else: ?>
-                            <?php echo htmlspecialchars($jobProjectView['status'], ENT_QUOTES, 'UTF-8'); ?>
-                        <?php endif; ?>
+                </div>
+            </div>
+
+            <?php
+            $alertFailOn = !empty($settings['alert_email_enabled']);
+            $alertOkOn = !empty($settings['alert_email_success_enabled']);
+            ?>
+            <div class="ctrl-alert-box">
+                <div class="ctrl-alert-title">
+                    <span class="ctrl-job-ico" aria-hidden="true"><i class="bi bi-envelope"></i></span>
+                    بريد التنبيه
+                </div>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <div class="ctrl-alert-toggles">
+                            <div class="alert-opt">
+                                <div class="task-toggle<?php echo $alertFailOn ? ' fail-on' : ''; ?>">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="alert_email_enabled" name="alert_email_enabled" value="1" <?php echo $alertFailOn ? 'checked' : ''; ?>>
+                                        <label class="form-check-label mb-0" for="alert_email_enabled">إشعار عند الفشل</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert-opt">
+                                <div class="task-toggle<?php echo $alertOkOn ? ' ok-on' : ''; ?>">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="alert_email_success_enabled" name="alert_email_success_enabled" value="1" <?php echo $alertOkOn ? 'checked' : ''; ?>>
+                                        <label class="form-check-label mb-0" for="alert_email_success_enabled">إشعار عند النجاح</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="alert_email">عنوان البريد</label>
+                        <input type="email" class="form-control" id="alert_email" name="alert_email" dir="ltr" placeholder="you@example.com" value="<?php echo htmlspecialchars((string) ($settings['alert_email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                     </div>
                 </div>
             </div>
 
             <div class="ctrl-meta">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" for="host_project_root">مسار المشروع</label>
-                        <input type="text" class="form-control" id="host_project_root" name="host_project_root" dir="ltr" value="<?php echo htmlspecialchars($settings['host_project_root'], ENT_QUOTES, 'UTF-8'); ?>">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" for="host_backup_dir">مسار النسخ</label>
-                        <input type="text" class="form-control" id="host_backup_dir" name="host_backup_dir" dir="ltr" value="<?php echo htmlspecialchars($settings['host_backup_dir'], ENT_QUOTES, 'UTF-8'); ?>">
-                    </div>
-                </div>
-                <?php
-                $alertFailOn = !empty($settings['alert_email_enabled']);
-                $alertOkOn = !empty($settings['alert_email_success_enabled']);
-                ?>
-                <div class="ctrl-alert-box">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-6">
-                            <div class="ctrl-alert-toggles">
-                                <div class="alert-opt">
-                                    <div class="task-toggle<?php echo $alertFailOn ? ' fail-on' : ''; ?>">
-                                        <div class="d-flex align-items-start gap-2">
-                                            <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="alert_email_enabled" name="alert_email_enabled" value="1" <?php echo $alertFailOn ? 'checked' : ''; ?>>
-                                            <label class="form-check-label mb-0" for="alert_email_enabled">إشعار عند الفشل</label>
-                                        </div>
-                                    </div>
+                <div class="paths-sync-card" id="pathsSyncCard"
+                     data-storage-src="<?php echo htmlspecialchars(dms_backup_maint_win_path($storageSourceDisplay), ENT_QUOTES, 'UTF-8'); ?>"
+                     data-archive-src="<?php echo htmlspecialchars(dms_backup_maint_win_path($archiveSourceDisplay), ENT_QUOTES, 'UTF-8'); ?>">
+                    <button type="button" class="paths-sync-toggle" id="pathsSyncToggle"
+                            data-bs-toggle="collapse" data-bs-target="#pathsSyncCollapse"
+                            aria-expanded="false" aria-controls="pathsSyncCollapse">
+                        <span class="paths-sync-toggle-label">
+                            <i class="bi bi-folder-symlink"></i> مزامنة مرفقات المعاملات والأرشيف
+                        </span>
+                        <i class="bi bi-chevron-down paths-sync-chevron" aria-hidden="true"></i>
+                    </button>
+                    <div class="collapse" id="pathsSyncCollapse">
+                        <div class="paths-sync-body">
+                            <p class="paths-sync-hint mb-0">
+                                مصادر المرفقات من
+                                <a href="<?php echo htmlspecialchars($settingsStorageUrl, ENT_QUOTES, 'UTF-8'); ?>">إعدادات التخزين</a>.
+                                حدّد الوجهات ونوع النسخ ثم انسخ الأمر.
+                                نفّذه مباشرة من CMD، أو أضفه لجدولة نظام التشغيل.
+                            </p>
+                            <input type="hidden" name="host_project_root" value="<?php echo htmlspecialchars($projectRootHidden, ENT_QUOTES, 'UTF-8'); ?>">
+                            <div class="row g-3">
+                                <div class="col-12 path-editable">
+                                    <label class="form-label" for="storage_backup_dir">وجهة مرفقات المعاملات</label>
+                                    <input type="text" class="form-control" id="storage_backup_dir" name="storage_backup_dir" dir="ltr"
+                                           value="<?php echo htmlspecialchars($storageBackupDirValue, ENT_QUOTES, 'UTF-8'); ?>">
                                 </div>
-                                <div class="alert-opt">
-                                    <div class="task-toggle<?php echo $alertOkOn ? ' ok-on' : ''; ?>">
-                                        <div class="d-flex align-items-start gap-2">
-                                            <input class="form-check-input m-0 flex-shrink-0" type="checkbox" id="alert_email_success_enabled" name="alert_email_success_enabled" value="1" <?php echo $alertOkOn ? 'checked' : ''; ?>>
-                                            <label class="form-check-label mb-0" for="alert_email_success_enabled">إشعار عند النجاح</label>
-                                        </div>
-                                    </div>
+                                <div class="col-12 path-editable">
+                                    <label class="form-label" for="archive_backup_dir">وجهة مرفقات الأرشيف</label>
+                                    <input type="text" class="form-control" id="archive_backup_dir" name="archive_backup_dir" dir="ltr"
+                                           value="<?php echo htmlspecialchars($archiveBackupDirValue, ENT_QUOTES, 'UTF-8'); ?>">
+                                </div>
+                                <div class="col-12 path-editable">
+                                    <label class="form-label" for="robocopy_mode">نوع النسخ</label>
+                                    <select class="form-select" id="robocopy_mode" name="robocopy_mode">
+                                        <option value="mirror" <?php echo $robocopyMode === 'mirror' ? 'selected' : ''; ?>>نسخة متطابقة — الوجهة تطابق المصدر تماماً</option>
+                                        <option value="full" <?php echo $robocopyMode === 'full' ? 'selected' : ''; ?>>نسخة كاملة للمصدر — نسخ كل الملفات دون حذف من الوجهة</option>
+                                    </select>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="alert_email">بريد التنبيه</label>
-                            <input type="email" class="form-control" id="alert_email" name="alert_email" dir="ltr" placeholder="you@example.com" value="<?php echo htmlspecialchars((string) ($settings['alert_email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+
+                            <div class="robo-list">
+                                <div class="robo-item">
+                                    <div class="robo-head">
+                                        <span class="robo-name"><i class="bi bi-folder2-open me-1"></i>مرفقات المعاملات</span>
+                                        <div class="robo-actions">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="storageRobocopyCopyBtn"
+                                                    data-cron-copy="<?php echo htmlspecialchars($storageRobocopyCmd, ENT_QUOTES, 'UTF-8'); ?>"
+                                                    <?php echo $storageRobocopyCmd === '' ? 'disabled' : ''; ?>>
+                                                <i class="bi bi-clipboard"></i> نسخ الأمر
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="robo-meta" id="storageRobocopyMeta" dir="ltr">
+                                        المصدر <code id="storageRobocopySrc"><?php echo htmlspecialchars(dms_backup_maint_win_path($storageSourceDisplay), ENT_QUOTES, 'UTF-8'); ?></code>
+                                        · الوجهة <code id="storageRobocopyDest"><?php echo htmlspecialchars(dms_backup_maint_win_path($storageBackupDirValue), ENT_QUOTES, 'UTF-8'); ?></code>
+                                        · السجل <code id="storageRobocopyLog"><?php echo htmlspecialchars(dms_backup_maint_win_path((string) ($storageRobocopyPaths['log'] ?? '')), ENT_QUOTES, 'UTF-8'); ?></code>
+                                    </div>
+                                    <pre class="robo-cmd" id="storageRobocopyCmd"><?php echo htmlspecialchars($storageRobocopyCmd !== '' ? $storageRobocopyCmd : '—', ENT_QUOTES, 'UTF-8'); ?></pre>
+                                </div>
+
+                                <div class="robo-item">
+                                    <div class="robo-head">
+                                        <span class="robo-name"><i class="bi bi-archive me-1"></i>مرفقات الأرشيف</span>
+                                        <div class="robo-actions">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="archiveRobocopyCopyBtn"
+                                                    data-cron-copy="<?php echo htmlspecialchars($archiveRobocopyCmd, ENT_QUOTES, 'UTF-8'); ?>"
+                                                    <?php echo $archiveRobocopyCmd === '' ? 'disabled' : ''; ?>>
+                                                <i class="bi bi-clipboard"></i> نسخ الأمر
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="robo-meta" id="archiveRobocopyMeta" dir="ltr">
+                                        المصدر <code id="archiveRobocopySrc"><?php echo htmlspecialchars(dms_backup_maint_win_path($archiveSourceDisplay), ENT_QUOTES, 'UTF-8'); ?></code>
+                                        · الوجهة <code id="archiveRobocopyDest"><?php echo htmlspecialchars(dms_backup_maint_win_path($archiveBackupDirValue), ENT_QUOTES, 'UTF-8'); ?></code>
+                                        · السجل <code id="archiveRobocopyLog"><?php echo htmlspecialchars(dms_backup_maint_win_path((string) ($archiveRobocopyPaths['log'] ?? '')), ENT_QUOTES, 'UTF-8'); ?></code>
+                                    </div>
+                                    <pre class="robo-cmd" id="archiveRobocopyCmd"><?php echo htmlspecialchars($archiveRobocopyCmd !== '' ? $archiveRobocopyCmd : '—', ENT_QUOTES, 'UTF-8'); ?></pre>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -798,6 +951,9 @@ CSS;
             <input type="hidden" name="keep_days" value="<?php echo (int) $settings['keep_days']; ?>">
             <input type="hidden" name="host_project_root" value="<?php echo htmlspecialchars($settings['host_project_root'], ENT_QUOTES, 'UTF-8'); ?>">
             <input type="hidden" name="host_backup_dir" value="<?php echo htmlspecialchars($settings['host_backup_dir'], ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="archive_backup_dir" value="<?php echo htmlspecialchars($archiveBackupDirValue, ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="storage_backup_dir" value="<?php echo htmlspecialchars($storageBackupDirValue, ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="robocopy_mode" value="<?php echo htmlspecialchars($robocopyMode, ENT_QUOTES, 'UTF-8'); ?>">
 
             <div class="col-12">
                 <div class="cloud-section-label">خيارات الرفع</div>
@@ -1042,6 +1198,65 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    (function () {
+        var card = document.getElementById('pathsSyncCard');
+        var bak = document.getElementById('host_backup_dir');
+        var storageDir = document.getElementById('storage_backup_dir');
+        var archiveDir = document.getElementById('archive_backup_dir');
+        var modeEl = document.getElementById('robocopy_mode');
+        if (!card || !bak || !storageDir || !archiveDir || !modeEl) return;
+        function norm(p) {
+            return String(p || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+        }
+        function win(p) {
+            return norm(p).replace(/\//g, '\\');
+        }
+        function flags() {
+            return modeEl.value === 'full' ? '/E /COPY:DAT /R:2 /W:5 /MT:8' : '/MIR /R:2 /W:5 /MT:8';
+        }
+        function setCopy(btn, cmd) {
+            if (!btn) return;
+            btn.setAttribute('data-cron-copy', cmd);
+            btn.disabled = !cmd;
+        }
+        function syncCmds() {
+            var base = norm(bak.value);
+            var storageDest = norm(storageDir.value);
+            var archiveDest = norm(archiveDir.value);
+            var storageLog = base ? base + '/storage_robocopy.log' : (storageDest ? storageDest.replace(/\/[^\/]+$/, '') + '/storage_robocopy.log' : '');
+            var archiveLog = base ? base + '/archive_robocopy.log' : (archiveDest ? archiveDest.replace(/\/[^\/]+$/, '') + '/archive_robocopy.log' : '');
+            var storageSrc = card.getAttribute('data-storage-src') || '';
+            var archiveSrc = card.getAttribute('data-archive-src') || '';
+            var fl = flags();
+
+            var storageCmd = (storageSrc && storageDest)
+                ? 'robocopy "' + win(storageSrc) + '" "' + win(storageDest) + '" ' + fl + ' /LOG:"' + win(storageLog) + '"'
+                : '';
+            var archiveCmd = (archiveSrc && archiveDest)
+                ? 'robocopy "' + win(archiveSrc) + '" "' + win(archiveDest) + '" ' + fl + ' /LOG:"' + win(archiveLog) + '"'
+                : '';
+
+            var storageCmdEl = document.getElementById('storageRobocopyCmd');
+            var archiveCmdEl = document.getElementById('archiveRobocopyCmd');
+            var storageDestEl = document.getElementById('storageRobocopyDest');
+            var archiveDestEl = document.getElementById('archiveRobocopyDest');
+            var storageLogEl = document.getElementById('storageRobocopyLog');
+            var archiveLogEl = document.getElementById('archiveRobocopyLog');
+            if (storageCmdEl) storageCmdEl.textContent = storageCmd || '—';
+            if (archiveCmdEl) archiveCmdEl.textContent = archiveCmd || '—';
+            if (storageDestEl) storageDestEl.textContent = win(storageDest);
+            if (archiveDestEl) archiveDestEl.textContent = win(archiveDest);
+            if (storageLogEl) storageLogEl.textContent = win(storageLog);
+            if (archiveLogEl) archiveLogEl.textContent = win(archiveLog);
+            setCopy(document.getElementById('storageRobocopyCopyBtn'), storageCmd);
+            setCopy(document.getElementById('archiveRobocopyCopyBtn'), archiveCmd);
+        }
+        [bak, storageDir, archiveDir, modeEl].forEach(function (el) {
+            el.addEventListener('input', syncCmds);
+            el.addEventListener('change', syncCmds);
+        });
+    })();
+
     document.querySelectorAll('[data-cron-copy]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var text = (btn.getAttribute('data-cron-copy') || '').trim();
@@ -1050,7 +1265,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 Swal.fire({
                     icon: 'success',
                     title: 'تم النسخ',
-                    text: 'تم نسخ أمر Cron.',
+                    text: text.indexOf('robocopy') === 0 ? 'تم نسخ أمر المزامنة.' : 'تم نسخ أمر Cron.',
                     timer: 1400,
                     showConfirmButton: false
                 });

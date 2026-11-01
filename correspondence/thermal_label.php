@@ -37,7 +37,7 @@ if ($thermalType === 'outgoing') {
         redirect($back);
     }
     if (function_exists('outgoing_require_print_perm')) {
-        outgoing_require_print_perm(corr_print_perm('outgoing', 'thermal'), $user, $back);
+        outgoing_require_print_perm(corr_print_perm('outgoing', 'thermal'), $user, $back, $corr);
     }
 }
 

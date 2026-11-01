@@ -336,6 +336,12 @@ function settings_desc_ar_map(): array
             'outgoing_approver_sg_user_id' => 'مستخدم المعتمد الأول لموافقة إصدار الصادر',
             'outgoing_approver_deputy_user_id' => 'مستخدم المعتمد عند تصعيد موافقة الإصدار',
             'outgoing_approver_alternate_user_id' => 'مستخدم المعتمد البديل (استثناء) لموافقة إصدار الصادر',
+            'outgoing_comms_primary_user_id' => 'مسؤول مرحلة الاتصالات الأساسي لطباعة الصادر',
+            'outgoing_comms_alternate_user_id' => 'مسؤول مرحلة الاتصالات البديل لطباعة الصادر',
+            'outgoing_comms_alternate_enabled' => 'تفعيل مسؤول الاتصالات البديل',
+            'outgoing_comms_minutes' => 'مهلة مسؤول الاتصالات الأساسي بالدقائق قبل التحويل للبديل',
+            'outgoing_comms_unit' => 'وحدة عرض مهلة مرحلة الاتصالات (دقائق/ساعات)',
+            'outgoing_comms_auto_grants' => 'سجل المنح التلقائية لصلاحيات مرحلة الاتصالات (داخلي)',
             'storage_root' => 'جذر تخزين ملفات المعاملات فقط (فارغ = storage/uploads داخل المشروع؛ الشعار والصور تبقى في assets/uploads)',
             'archive_disk_root' => 'جذر تخزين مرفقات الأرشيف فقط (فارغ = G:/archives على ويندوز أو storage/archives داخل المشروع)',
         'print_signer_name' => 'اسم الموجِّه في أنموذج الاستلام (موجهة من)',
@@ -1188,6 +1194,11 @@ function ensure_org_settings(): void
             'outgoing_approver_sg_user_id' => '0',
             'outgoing_approver_deputy_user_id' => '0',
             'outgoing_approver_alternate_user_id' => '0',
+            'outgoing_comms_primary_user_id' => '0',
+            'outgoing_comms_alternate_user_id' => '0',
+            'outgoing_comms_alternate_enabled' => '1',
+            'outgoing_comms_minutes' => '120',
+            'outgoing_comms_unit' => 'hours',
             'circular_prefix' => '',
             'internal_prefix' => '',
             'incoming_prefix' => '',
@@ -3525,7 +3536,78 @@ function corr_ref_sequence_scope(string $type, ?int $departmentId, string $prefi
 
 function dms_sequences_type_enum_sql(): string
 {
-    return "ENUM('incoming','outgoing','internal','circular','archive') NOT NULL";
+    // عدّادات المراسلات + عدّاد مستقل لكل أرشيف (عام / منح / مشاريع / مالية)
+    return "ENUM('incoming','outgoing','internal','circular','archive','archive_general','archive_scholarships','archive_projects','archive_finance') NOT NULL";
+}
+
+/** أنواع عدّادات الأرشيف المنفصلة (مفتاح منطقي => قيمة seq_type) */
+function dms_archive_seq_types(): array
+{
+    return [
+        'general' => 'archive_general',
+        'scholarships' => 'archive_scholarships',
+        'projects' => 'archive_projects',
+        'finance' => 'archive_finance',
+    ];
+}
+
+function dms_archive_seq_type(string $kind = 'general'): string
+{
+    $map = dms_archive_seq_types();
+    $kind = strtolower(trim($kind));
+    return $map[$kind] ?? 'archive_general';
+}
+
+/**
+ * ترحيل صفوف archive القديمة (بنطاق reg-*) إلى أنواع seq_type مستقلة.
+ */
+function dms_sequences_migrate_archive_seq_types(PDO $pdo): void
+{
+    static $migrated = false;
+    if ($migrated) {
+        return;
+    }
+    $migrated = true;
+    try {
+        if (!dms_db_table_exists('tblsequences')) {
+            return;
+        }
+        $hasLegacy = (int) $pdo->query(
+            "SELECT COUNT(*) FROM `tblsequences` WHERE seq_type = 'archive'"
+        )->fetchColumn();
+        if ($hasLegacy <= 0) {
+            return;
+        }
+
+        $scopeMap = [
+            'reg-scholarships' => 'archive_scholarships',
+            'reg-projects' => 'archive_projects',
+            'reg-finance' => 'archive_finance',
+        ];
+        $ins = $pdo->prepare(
+            'INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE last_number = GREATEST(last_number, VALUES(last_number))'
+        );
+        $del = $pdo->prepare(
+            'DELETE FROM `tblsequences` WHERE seq_type = ? AND seq_year = ? AND seq_scope = ?'
+        );
+
+        $rows = $pdo->query(
+            "SELECT seq_type, seq_year, seq_scope, last_number FROM `tblsequences` WHERE seq_type = 'archive'"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($rows as $row) {
+            $year = (int) ($row['seq_year'] ?? 0);
+            $scope = (string) ($row['seq_scope'] ?? '');
+            $last = (int) ($row['last_number'] ?? 0);
+            $newType = $scopeMap[$scope] ?? 'archive_general';
+            $newScope = isset($scopeMap[$scope]) ? '' : $scope;
+            $ins->execute([$newType, $year, $newScope, $last]);
+            $del->execute(['archive', $year, $scope]);
+        }
+    } catch (Throwable $e) {
+        $migrated = false;
+    }
 }
 
 function ensure_sequences_schema(): void
@@ -3561,11 +3643,21 @@ function ensure_sequences_schema(): void
         $seqType = function_exists('dms_db_column_meta')
             ? (string) ((dms_db_column_meta('tblsequences', 'seq_type')['COLUMN_TYPE'] ?? ''))
             : '';
-        if ($seqType !== '' && (
-            stripos($seqType, "'internal'") === false
+        if ($seqType === '') {
+            try {
+                $seqType = (string) ($pdo->query("SHOW COLUMNS FROM `tblsequences` LIKE 'seq_type'")->fetch(PDO::FETCH_ASSOC)['Type'] ?? '');
+            } catch (Throwable $e) {
+                $seqType = '';
+            }
+        }
+        $needsEnumExpand = $seqType === ''
+            || stripos($seqType, "'internal'") === false
             || stripos($seqType, "'circular'") === false
-            || stripos($seqType, "'archive'") === false
-        )) {
+            || stripos($seqType, "'archive_general'") === false
+            || stripos($seqType, "'archive_scholarships'") === false
+            || stripos($seqType, "'archive_projects'") === false
+            || stripos($seqType, "'archive_finance'") === false;
+        if ($needsEnumExpand) {
             try {
                 $pdo->exec(
                     'ALTER TABLE `tblsequences` MODIFY COLUMN `seq_type` ' . dms_sequences_type_enum_sql()
@@ -3574,6 +3666,7 @@ function ensure_sequences_schema(): void
                 // قد يكون موسّعاً مسبقاً
             }
         }
+        dms_sequences_migrate_archive_seq_types($pdo);
         dms_sequences_purge_untyped_rows($pdo);
     } catch (Throwable $e) {
         $done = false;
@@ -3588,7 +3681,10 @@ function dms_sequences_purge_untyped_rows(PDO $pdo): void
             "DELETE FROM `tblsequences`
              WHERE seq_type IS NULL
                 OR seq_type = ''
-                OR seq_type NOT IN ('incoming','outgoing','internal','circular','archive')"
+                OR seq_type NOT IN (
+                    'incoming','outgoing','internal','circular','archive',
+                    'archive_general','archive_scholarships','archive_projects','archive_finance'
+                )"
         );
     } catch (Throwable $e) {
         // ignore

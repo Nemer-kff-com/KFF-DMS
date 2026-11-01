@@ -24,6 +24,7 @@ $renderReviewSelect = static function (string $selectId) use ($approvalUsers, $a
             <option value="<?= (int) $au['id'] ?>" <?= $current === (int) $au['id'] ? 'selected' : '' ?>
                     data-job-title="<?= e(user_job_title($au)) ?>"
                     data-name="<?= e(user_display_name($au)) ?>"
+                    data-email="<?= e((string) ($au['email'] ?? '')) ?>"
                     data-photo="<?= e($approverPhotoUrl($au)) ?>">
                 <?= e(user_display_name($au)) ?> — <?= e((string) ($au['email'] ?? '')) ?>
             </option>

@@ -194,7 +194,13 @@ function dms_operational_reset_seed_numbering(
         foreach (dms_operational_sequence_scopes('internal') as $scope) {
             $ins->execute(['internal', $year, $scope, $internalStart - 1]);
         }
-        $ins->execute(['archive', $year, '', $archiveStart - 1]);
+        $archiveTypes = function_exists('dms_archive_seq_types')
+            ? array_values(dms_archive_seq_types())
+            : ['archive_general', 'archive_scholarships', 'archive_projects', 'archive_finance'];
+        foreach ($archiveTypes as $archiveType) {
+            $start = $archiveType === 'archive_general' ? ($archiveStart - 1) : 0;
+            $ins->execute([$archiveType, $year, '', $start]);
+        }
         $ins->execute(['circular', $year, '', $circularStart - 1]);
     }
 

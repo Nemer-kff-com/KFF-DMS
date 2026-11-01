@@ -30,6 +30,13 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <div class="page-header-actions">
         <span class="admin-count-badge"><i class="bi bi-person-badge me-1"></i><?= count($roles) ?></span>
+        <a class="btn btn-outline-secondary btn-sm"
+           href="<?= e(base_url('admin/roles_print.php')) ?>"
+           target="_blank"
+           rel="noopener"
+           title="<?= e(__('action.print')) ?>">
+            <i class="bi bi-printer"></i>
+        </a>
         <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/permissions.php')) ?>">
             <i class="bi bi-shield-check me-1"></i><?= e(__('perm.title')) ?>
         </a>

@@ -17,8 +17,16 @@ $hasLetter = function_exists('correspondence_letter_text')
     && correspondence_letter_text($corr) !== '';
 $useLetterPrint = !$forceForm && $hasLetter;
 
-if (!$useLetterPrint && function_exists('outgoing_require_print_perm')) {
-    outgoing_require_print_perm(corr_print_perm('outgoing', 'form'), $user, base_url('outgoing/view.php?id=' . $id));
+if (function_exists('outgoing_require_print_perm')) {
+    // الخطاب الرسمي أو نموذج التسليم: في with_comms يشترط صلاحية المرحلة + الإسناد
+    if (!$useLetterPrint || (function_exists('outgoing_is_comms_print_stage') && outgoing_is_comms_print_stage($corr))) {
+        outgoing_require_print_perm(
+            $useLetterPrint ? 'outgoing.print_form' : corr_print_perm('outgoing', 'form'),
+            $user,
+            base_url('outgoing/view.php?id=' . $id),
+            $corr
+        );
+    }
 }
 
 if ($useLetterPrint) {

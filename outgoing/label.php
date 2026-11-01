@@ -21,7 +21,7 @@ if (function_exists('correspondence_intend_electronic') && correspondence_intend
     redirect(base_url('outgoing/view.php?id=' . $id));
 }
 if (function_exists('outgoing_require_print_perm')) {
-    outgoing_require_print_perm(corr_print_perm('outgoing', 'envelope'), $user, base_url('outgoing/view.php?id=' . $id));
+    outgoing_require_print_perm(corr_print_perm('outgoing', 'envelope'), $user, base_url('outgoing/view.php?id=' . $id), $corr);
 }
 
 $labelCorrList = [$corr];

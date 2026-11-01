@@ -1074,9 +1074,14 @@ function archive_ensure_register_schema(): void
     }
 }
 
-function archive_register_seq_scope(string $kind): string
+/** نوع عدّاد السجل في tblsequences (مستقل لكل أرشيف) */
+function archive_register_seq_type(string $kind): string
 {
-    return 'reg-' . preg_replace('/[^a-z0-9_]/', '', $kind);
+    if (function_exists('dms_archive_seq_type')) {
+        return dms_archive_seq_type($kind);
+    }
+    $kind = preg_replace('/[^a-z0-9_]/', '', strtolower(trim($kind))) ?: 'general';
+    return $kind === 'general' ? 'archive_general' : ('archive_' . $kind);
 }
 
 /** رقم السجل: سنة من 4 خانات / تسلسل 4+ حتى لا يسبق 2006 عام 1998 */
@@ -1272,7 +1277,7 @@ function next_archive_register_no(string $kind): string
         ? corr_numbering_hijri_year()
         : (function_exists('corr_numbering_year') ? corr_numbering_year() : ((int) date('Y') - 579));
     $prefix = function_exists('archive_prefix') ? archive_prefix() : '';
-    $scope = archive_register_seq_scope($kind);
+    $seqType = archive_register_seq_type($kind);
     if (function_exists('ensure_sequences_schema')) {
         ensure_sequences_schema();
     }
@@ -1283,19 +1288,19 @@ function next_archive_register_no(string $kind): string
     }
     try {
         $stmt = $pdo->prepare(
-            "SELECT last_number FROM `tblsequences` WHERE seq_type = 'archive' AND seq_year = ? AND seq_scope = ? FOR UPDATE"
+            'SELECT last_number FROM `tblsequences` WHERE seq_type = ? AND seq_year = ? AND seq_scope = \'\' FOR UPDATE'
         );
-        $stmt->execute([$year, $scope]);
+        $stmt->execute([$seqType, $year]);
         $last = $stmt->fetchColumn();
         if ($last === false) {
-            $scopeMax = $pdo->prepare(
-                "SELECT MAX(last_number) FROM `tblsequences` WHERE seq_type = 'archive' AND seq_scope = ?"
+            $typeMax = $pdo->prepare(
+                'SELECT MAX(last_number) FROM `tblsequences` WHERE seq_type = ?'
             );
-            $scopeMax->execute([$scope]);
-            $seed = (int) $scopeMax->fetchColumn();
+            $typeMax->execute([$seqType]);
+            $seed = (int) $typeMax->fetchColumn();
             $pdo->prepare(
-                "INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number) VALUES ('archive', ?, ?, ?)"
-            )->execute([$year, $scope, $seed]);
+                'INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number) VALUES (?, ?, \'\', ?)'
+            )->execute([$seqType, $year, $seed]);
             $last = $seed;
         }
         $usedMax = archive_register_max_used_sequence($kind, $year, $prefix);
@@ -1315,8 +1320,8 @@ function next_archive_register_no(string $kind): string
             throw new RuntimeException(__('archive.number_fail'));
         }
         $pdo->prepare(
-            "UPDATE `tblsequences` SET last_number = ? WHERE seq_type = 'archive' AND seq_year = ? AND seq_scope = ?"
-        )->execute([$seq, $year, $scope]);
+            'UPDATE `tblsequences` SET last_number = ? WHERE seq_type = ? AND seq_year = ? AND seq_scope = \'\''
+        )->execute([$seq, $seqType, $year]);
         if ($ownTx) {
             $pdo->commit();
         }
@@ -1343,11 +1348,11 @@ function archive_register_backfill_numbers(bool $force = false): void
             continue;
         }
         $table = $def['table'];
-        $scope = archive_register_seq_scope($kind);
+        $seqType = archive_register_seq_type($kind);
         try {
             if ($force) {
                 $pdo->exec('UPDATE `' . $table . '` SET archive_no = NULL');
-                $pdo->prepare("DELETE FROM `tblsequences` WHERE seq_type = 'archive' AND seq_scope = ?")->execute([$scope]);
+                $pdo->prepare('DELETE FROM `tblsequences` WHERE seq_type = ?')->execute([$seqType]);
                 $sql = 'SELECT * FROM `' . $table . '`';
             } else {
                 $sql = 'SELECT * FROM `' . $table . '` WHERE archive_no IS NULL OR TRIM(archive_no) = \'\'';
@@ -1392,10 +1397,10 @@ function archive_register_backfill_numbers(bool $force = false): void
             $curYear = function_exists('corr_numbering_year') ? corr_numbering_year() : 0;
             $ins = $pdo->prepare(
                 'INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number)
-                 VALUES (\'archive\', ?, ?, ?)
+                 VALUES (?, ?, \'\', ?)
                  ON DUPLICATE KEY UPDATE last_number = GREATEST(last_number, VALUES(last_number))'
             );
-            $ins->execute([(int) $curYear, $scope, $seq]);
+            $ins->execute([$seqType, (int) $curYear, $seq]);
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {

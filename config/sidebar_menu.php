@@ -132,6 +132,17 @@ function dms_sidebar_menu_sync_system_items(): void
             'scopes' => 'admin',
         ],
         [
+            'menu_key' => 'system_logs',
+            'parent_key' => 'group_settings',
+            'sort_order' => 140,
+            'label_ar' => 'السجلات والجلسات',
+            'label_en' => 'Logs & sessions',
+            'icon' => 'bi-journal-text',
+            'href' => 'admin/system_logs.php',
+            'active_rule' => 'file:system_logs.php,activity_log.php,security_log.php,active_sessions.php',
+            'scopes' => 'admin',
+        ],
+        [
             'menu_key' => 'corr_lookups',
             'parent_key' => 'group_settings',
             'sort_order' => 90,
@@ -339,9 +350,9 @@ function dms_sidebar_menu_sync_system_items(): void
         'UPDATE `tblsidebar_menu` SET label_ar = ?, label_en = ?, icon = ? WHERE menu_key = ?'
     )->execute(['الرئيسية', 'Home', 'bi-house-door', 'dashboard']);
 
-    // البريد وواتساب تبويبان داخل صفحة الإعدادات
+    // البريد وواتساب تبويبان داخل الإعدادات؛ السجلات الثلاثة داخل صفحة موحّدة
     $hideStmt = db()->prepare('UPDATE `tblsidebar_menu` SET is_visible = 0 WHERE menu_key = ?');
-    foreach (['search', 'email_settings', 'whatsapp_settings'] as $hiddenKey) {
+    foreach (['search', 'email_settings', 'whatsapp_settings', 'activity_log', 'security_log', 'active_sessions'] as $hiddenKey) {
         $hideStmt->execute([$hiddenKey]);
     }
     db()->prepare(

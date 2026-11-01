@@ -223,7 +223,35 @@ $pathBuild = static function (string $p) use ($pathPerson, $pathTimeout, $pathSt
     ];
 
     if ($p === 'outgoing') {
-        $commsNames = [];
+        $commsRows = [];
+        $pri = $pathPerson((int) setting('outgoing_comms_primary_user_id', '0'));
+        $commsRows[] = [
+            'label' => __('settings.outgoing_comms_primary_heading'),
+            'value' => $pri['name'] . ($pri['job'] !== '' ? ' — ' . $pri['job'] : ''),
+        ];
+        $altOn = setting('outgoing_comms_alternate_enabled', '1') === '1';
+        if ($altOn) {
+            $alt = $pathPerson((int) setting('outgoing_comms_alternate_user_id', '0'));
+            $commsRows[] = [
+                'label' => __('settings.outgoing_comms_alternate_heading'),
+                'value' => $alt['name'] . ($alt['job'] !== '' ? ' — ' . $alt['job'] : ''),
+            ];
+            $mins = (int) setting('outgoing_comms_minutes', '120');
+            $unit = setting('outgoing_comms_unit', 'hours');
+            $timeoutVal = ($unit === 'hours' && $mins % 60 === 0)
+                ? (($mins / 60) . ' ' . __('settings.hours'))
+                : ($mins . ' ' . __('settings.minutes'));
+            $commsRows[] = [
+                'label' => __('settings.outgoing_comms_timeout'),
+                'value' => $timeoutVal,
+            ];
+        } else {
+            $commsRows[] = [
+                'label' => __('settings.outgoing_comms_alternate_heading'),
+                'value' => __('settings.path_print_off'),
+            ];
+        }
+        $poolNames = [];
         if (function_exists('outgoing_dispatch_user_ids')) {
             $ids = outgoing_dispatch_user_ids();
             if ($ids !== []) {
@@ -231,25 +259,26 @@ $pathBuild = static function (string $p) use ($pathPerson, $pathTimeout, $pathSt
                 $st = db()->prepare(
                     "SELECT id, name_ar, name_en, job_title, job_title_en
                      FROM `tblusers`
-                     WHERE id IN ($marks) AND role = 'communications' AND is_active = 1
+                     WHERE id IN ($marks) AND is_active = 1
                      ORDER BY id"
                 );
                 $st->execute($ids);
                 foreach ($st->fetchAll() ?: [] as $cu) {
                     $job = function_exists('user_job_title') ? user_job_title($cu) : '';
-                    $commsNames[] = user_display_name($cu) . ($job !== '' ? ' — ' . $job : '');
+                    $poolNames[] = user_display_name($cu) . ($job !== '' ? ' — ' . $job : '');
                 }
             }
         }
+        $commsRows[] = [
+            'label' => __('settings.outgoing_comms_stage_users'),
+            'value' => $poolNames !== [] ? implode("\n", $poolNames) : __('settings.outgoing_comms_stage_empty'),
+        ];
         $stages[] = [
             'icon' => 'bi-printer',
             'title' => __('settings.outgoing_comms_stage_title'),
             'status' => ['label' => __('settings.path_print_always'), 'class' => 'is-always'],
             'desc' => __('settings.outgoing_comms_stage_desc'),
-            'rows' => [[
-                'label' => __('settings.outgoing_comms_stage_users'),
-                'value' => $commsNames !== [] ? implode("\n", $commsNames) : __('settings.outgoing_comms_stage_empty'),
-            ]],
+            'rows' => $commsRows,
         ];
         $flow[] = __('settings.outgoing_comms_stage_title');
     } elseif ($p === 'incoming') {

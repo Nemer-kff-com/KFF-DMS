@@ -27,7 +27,7 @@ function ensure_internal_correspondence_schema(): void
                 "ALTER TABLE `tblsequences`
                  MODIFY COLUMN `seq_type` " . (function_exists('dms_sequences_type_enum_sql')
                     ? dms_sequences_type_enum_sql()
-                    : "ENUM('incoming','outgoing','internal','circular','archive') NOT NULL")
+                    : "ENUM('incoming','outgoing','internal','circular','archive','archive_general','archive_scholarships','archive_projects','archive_finance') NOT NULL")
             );
         } catch (Throwable $e) {
             // تجاهل

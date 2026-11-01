@@ -270,9 +270,9 @@ $hasSecondaryActions = $secondaryActions !== [];
 
             <?php
             $corrPrintType = (string) ($corr['type'] ?? '');
-            $canPrintForm = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'form', $user);
-            $canPrintEnvelope = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'envelope', $user);
-            $canPrintThermal = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'thermal', $user);
+            $canPrintForm = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'form', $user, $corr);
+            $canPrintEnvelope = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'envelope', $user, $corr);
+            $canPrintThermal = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'thermal', $user, $corr);
             $showPrintEnvelope = $canPrintEnvelope && !$isCancelled && !$isElectronic;
             $showPrintThermal = $canPrintThermal && !$isCancelled && !$isElectronic;
             $showPrintMail = !$isCancelled && mail_draft_user_allowed($user);

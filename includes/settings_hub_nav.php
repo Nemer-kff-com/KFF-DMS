@@ -2,7 +2,7 @@
 /**
  * شريط تنقل موحّد لإعدادات النظام / البريد / واتساب — روابط خفيفة بدون دمج النماذج.
  *
- * @var string $settingsHubActive org|numbering|approval_outgoing|approval_incoming|approval_internal|storage|email|whatsapp
+ * @var string $settingsHubActive org|numbering|approval_outgoing|approval_incoming|approval_internal|storage|email|whatsapp|load_check
  */
 $settingsHubActive = (string) ($settingsHubActive ?? 'org');
 $settingsHubItems = [
@@ -60,6 +60,13 @@ $settingsHubItems = [
         'href' => base_url('admin/whatsapp_settings.php'),
         'icon' => 'bi-whatsapp',
         'label' => __('settings.tab_whatsapp'),
+        'mode' => 'link',
+    ],
+    [
+        'key' => 'load_check',
+        'href' => base_url('admin/load_check.php'),
+        'icon' => 'bi-speedometer2',
+        'label' => __('settings.tab_load_check'),
         'mode' => 'link',
     ],
 ];

@@ -6,6 +6,12 @@
 require_once __DIR__ . '/archive_extra.php';
 require_once __DIR__ . '/archive_registers.php';
 
+/** يُرفع عند إضافة ترحيلات أرشيف جديدة لإعادة تشغيل ensure مرة واحدة. */
+function dms_archive_schema_version(): string
+{
+    return '3';
+}
+
 function ensure_archive_schema(): void
 {
     static $done = false;
@@ -13,6 +19,20 @@ function ensure_archive_schema(): void
         return;
     }
     $done = true;
+
+    // مسار سريع: الجداول موجودة مسبقاً ولا حاجة لإعادة CREATE/ALTER/backfill في كل طلب
+    try {
+        if (function_exists('setting')
+            && setting('archive_schema_version', '') === dms_archive_schema_version()
+            && function_exists('dms_db_table_exists')
+            && dms_db_table_exists('tblarchive_items')
+        ) {
+            return;
+        }
+    } catch (Throwable $e) {
+        // متابعة الترحيل الكامل
+    }
+
     try {
         db()->exec(
             "CREATE TABLE IF NOT EXISTS `tblarchive_items` (
@@ -82,6 +102,13 @@ function ensure_archive_schema(): void
         archive_ensure_extra_schema();
         if (function_exists('archive_ensure_register_schema')) {
             archive_ensure_register_schema();
+        }
+        if (function_exists('set_setting')) {
+            set_setting(
+                'archive_schema_version',
+                dms_archive_schema_version(),
+                'إصدار مخطط الأرشيف (تخطي الترحيل الثقيل بعد اكتماله)'
+            );
         }
     } catch (Throwable $e) {
         // قاعدة غير جاهزة
@@ -197,13 +224,14 @@ function archive_migrate_seq_to_sequences(): void
     }
     try {
         $rows = db()->query('SELECT seq_year, last_number FROM `tblarchive_seq`')->fetchAll();
+        $seqType = function_exists('dms_archive_seq_type') ? dms_archive_seq_type('general') : 'archive_general';
         $ins = db()->prepare(
             'INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number)
-             VALUES (\'archive\', ?, \'\', ?)
+             VALUES (?, ?, \'\', ?)
              ON DUPLICATE KEY UPDATE last_number = GREATEST(last_number, VALUES(last_number))'
         );
         foreach ($rows as $row) {
-            $ins->execute([(int) ($row['seq_year'] ?? 0), (int) ($row['last_number'] ?? 0)]);
+            $ins->execute([$seqType, (int) ($row['seq_year'] ?? 0), (int) ($row['last_number'] ?? 0)]);
         }
     } catch (Throwable $e) {
         // الجدول أو عمود النوع غير جاهز
@@ -255,6 +283,7 @@ function next_archive_no(): string
     $year = function_exists('corr_numbering_year') ? corr_numbering_year() : (function_exists('corr_numbering_hijri_year') ? corr_numbering_hijri_year() : ((int) date('Y') - 579));
     $prefix = archive_prefix();
     $scope = archive_seq_scope($prefix);
+    $seqType = function_exists('dms_archive_seq_type') ? dms_archive_seq_type('general') : 'archive_general';
     if (function_exists('ensure_sequences_schema')) {
         ensure_sequences_schema();
     }
@@ -265,14 +294,14 @@ function next_archive_no(): string
     }
     try {
         $stmt = $pdo->prepare(
-            "SELECT last_number FROM `tblsequences` WHERE seq_type = 'archive' AND seq_year = ? AND seq_scope = ? FOR UPDATE"
+            'SELECT last_number FROM `tblsequences` WHERE seq_type = ? AND seq_year = ? AND seq_scope = ? FOR UPDATE'
         );
-        $stmt->execute([$year, $scope]);
+        $stmt->execute([$seqType, $year, $scope]);
         $last = $stmt->fetchColumn();
         if ($last === false) {
             $pdo->prepare(
-                "INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number) VALUES ('archive', ?, ?, 0)"
-            )->execute([$year, $scope]);
+                'INSERT INTO `tblsequences` (seq_type, seq_year, seq_scope, last_number) VALUES (?, ?, ?, 0)'
+            )->execute([$seqType, $year, $scope]);
             $last = 0;
         }
         $usedMax = archive_max_used_sequence($year, $prefix);
@@ -290,8 +319,8 @@ function next_archive_no(): string
             throw new RuntimeException(__('archive.number_fail'));
         }
         $pdo->prepare(
-            "UPDATE `tblsequences` SET last_number = ? WHERE seq_type = 'archive' AND seq_year = ? AND seq_scope = ?"
-        )->execute([$seq, $year, $scope]);
+            'UPDATE `tblsequences` SET last_number = ? WHERE seq_type = ? AND seq_year = ? AND seq_scope = ?'
+        )->execute([$seq, $seqType, $year, $scope]);
         if ($ownTx) {
             $pdo->commit();
         }

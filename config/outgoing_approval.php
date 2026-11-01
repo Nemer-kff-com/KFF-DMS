@@ -2575,10 +2575,352 @@ function outgoing_approval_after_edit(int $corrId, array $user): void
     }
 }
 
-/** مستخدمو الاتصالات الإدارية الذين تُحال إليهم طباعة الصادر بعد الاعتماد. @return list<int> */
-function outgoing_dispatch_user_ids(): array
+/** هل يملك المستخدم صلاحية مرحلة الاتصالات (بدون استثناء المسار)؟ */
+function outgoing_user_has_dispatch(?array $user): bool
 {
-    return function_exists('outgoing_review_user_ids') ? outgoing_review_user_ids([]) : [];
+    return $user !== null && function_exists('user_can') && user_can('outgoing.dispatch', $user);
+}
+
+/**
+ * صلاحيات تُمنح تلقائياً عند تعيين مسؤول مرحلة الاتصالات، وتُسحب عند إزالته
+ * (فقط ما سُجّل كمنح تلقائي — لا تُمسّ صلاحيات الدور ولا المنح اليدوي السابق).
+ *
+ * @return list<string>
+ */
+function outgoing_comms_auto_perm_codes(): array
+{
+    return [
+        'outgoing.dispatch',
+        'outgoing.print_form',
+        'outgoing.print_envelope',
+        'outgoing.print_thermal',
+        'outgoing.view_thermal',
+    ];
+}
+
+/** @return array<string,list<string>> user_id => perm codes */
+function outgoing_comms_auto_grants_map(): array
+{
+    $raw = json_decode((string) setting('outgoing_comms_auto_grants', '{}'), true);
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $uid => $codes) {
+        $id = (int) $uid;
+        if ($id <= 0 || !is_array($codes)) {
+            continue;
+        }
+        $list = array_values(array_unique(array_filter(array_map('strval', $codes))));
+        if ($list !== []) {
+            $out[(string) $id] = $list;
+        }
+    }
+    return $out;
+}
+
+/** @param array<string,list<string>> $map */
+function outgoing_comms_save_auto_grants_map(array $map): void
+{
+    $clean = [];
+    foreach ($map as $uid => $codes) {
+        $id = (int) $uid;
+        if ($id <= 0 || !is_array($codes)) {
+            continue;
+        }
+        $list = array_values(array_unique(array_filter(array_map('strval', $codes))));
+        if ($list !== []) {
+            $clean[(string) $id] = $list;
+        }
+    }
+    set_setting(
+        'outgoing_comms_auto_grants',
+        $clean === [] ? '{}' : (string) json_encode($clean, JSON_UNESCAPED_UNICODE),
+        'منح صلاحيات مرحلة الاتصالات التلقائية (داخلي)'
+    );
+}
+
+/**
+ * منح الصلاحيات الناقصة لمسؤول معيَّن وتتبع ما أُضيف فقط.
+ */
+function outgoing_comms_grant_auto_perms(int $userId, ?int $actorId = null): void
+{
+    if ($userId <= 0 || !function_exists('ensure_user_permissions_schema')) {
+        return;
+    }
+    try {
+        $st = db()->prepare('SELECT id, role, role_id, is_active FROM `tblusers` WHERE id = ? LIMIT 1');
+        $st->execute([$userId]);
+        $user = $st->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return;
+    }
+    if (!$user || (int) ($user['is_active'] ?? 0) !== 1 || (string) ($user['role'] ?? '') === 'admin') {
+        return;
+    }
+    ensure_user_permissions_schema();
+    if (function_exists('dms_user_permission_overrides_all')) {
+        dms_user_permission_overrides_all(true);
+    }
+    $map = outgoing_comms_auto_grants_map();
+    $tracked = $map[(string) $userId] ?? [];
+    $upsert = db()->prepare(
+        'INSERT INTO `tbluser_permissions` (user_id, perm_code, effect, created_by) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE effect = VALUES(effect), created_by = VALUES(created_by)'
+    );
+    foreach (outgoing_comms_auto_perm_codes() as $code) {
+        if (function_exists('dms_user_perm_applicable') && !dms_user_perm_applicable($user, $code)) {
+            continue;
+        }
+        if (function_exists('user_can') && user_can($code, $user)) {
+            continue;
+        }
+        $upsert->execute([$userId, $code, 'grant', $actorId]);
+        if (!in_array($code, $tracked, true)) {
+            $tracked[] = $code;
+        }
+    }
+    if ($tracked !== []) {
+        $map[(string) $userId] = array_values(array_unique($tracked));
+        outgoing_comms_save_auto_grants_map($map);
+    }
+    if (function_exists('dms_user_permission_overrides_all')) {
+        dms_user_permission_overrides_all(true);
+    }
+}
+
+/**
+ * سحب المنح التلقائية فقط إن لم يعد المستخدم أساسياً ولا بديلاً.
+ *
+ * @param list<int> $stillAssigned
+ */
+function outgoing_comms_revoke_auto_perms(int $userId, array $stillAssigned = []): void
+{
+    if ($userId <= 0) {
+        return;
+    }
+    foreach ($stillAssigned as $keep) {
+        if ((int) $keep === $userId) {
+            return;
+        }
+    }
+    $map = outgoing_comms_auto_grants_map();
+    $tracked = $map[(string) $userId] ?? [];
+    if ($tracked === []) {
+        return;
+    }
+    if (function_exists('ensure_user_permissions_schema')) {
+        ensure_user_permissions_schema();
+    }
+    $del = db()->prepare(
+        "DELETE FROM `tbluser_permissions` WHERE user_id = ? AND perm_code = ? AND effect = 'grant'"
+    );
+    foreach ($tracked as $code) {
+        $del->execute([$userId, $code]);
+    }
+    unset($map[(string) $userId]);
+    outgoing_comms_save_auto_grants_map($map);
+    if (function_exists('dms_user_permission_overrides_all')) {
+        dms_user_permission_overrides_all(true);
+    }
+}
+
+/**
+ * مزامنة منح/سحب صلاحيات مرحلة الاتصالات عند تغيّر الأساسي أو البديل.
+ */
+function outgoing_comms_sync_assignee_permissions(int $oldPrimary, int $oldAlternate, int $newPrimary, int $newAlternate, ?int $actorId = null): void
+{
+    $oldIds = array_values(array_unique(array_filter([$oldPrimary, $oldAlternate], static fn (int $id): bool => $id > 0)));
+    $newIds = array_values(array_unique(array_filter([$newPrimary, $newAlternate], static fn (int $id): bool => $id > 0)));
+    foreach (array_diff($oldIds, $newIds) as $uid) {
+        outgoing_comms_revoke_auto_perms((int) $uid, $newIds);
+    }
+    foreach ($newIds as $uid) {
+        outgoing_comms_grant_auto_perms((int) $uid, $actorId);
+    }
+}
+
+function outgoing_dispatch_primary_user_id(): int
+{
+    return (int) setting('outgoing_comms_primary_user_id', '0');
+}
+
+/** البديل إن كان مفعّلاً، وإلا 0 */
+function outgoing_dispatch_alternate_user_id(): int
+{
+    if (setting('outgoing_comms_alternate_enabled', '1') !== '1') {
+        return 0;
+    }
+    return (int) setting('outgoing_comms_alternate_user_id', '0');
+}
+
+function outgoing_dispatch_minutes(): int
+{
+    $raw = trim((string) setting('outgoing_comms_minutes', ''));
+    return outgoing_approval_clamp_minutes($raw === '' ? 120 : (int) $raw);
+}
+
+function outgoing_dispatch_timeout_label(): string
+{
+    $m = outgoing_dispatch_minutes();
+    if (setting('outgoing_comms_unit', 'hours') === 'hours' && $m % 60 === 0) {
+        return ($m / 60) . ' ' . __('settings.hours');
+    }
+    return $m . ' ' . __('settings.minutes');
+}
+
+/**
+ * مستخدمون نشطون يملكون outgoing.dispatch (مجمّع المرحلة).
+ *
+ * @param list<int> $excludeIds
+ * @return list<int>
+ */
+function outgoing_dispatch_user_ids(array $excludeIds = []): array
+{
+    $exclude = array_values(array_filter(array_map('intval', $excludeIds)));
+    try {
+        $rows = db()->query(
+            "SELECT id, name_ar, name_en, email, role, role_id, is_active
+             FROM `tblusers`
+             WHERE is_active = 1
+             ORDER BY id"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+    $ids = [];
+    foreach ($rows as $row) {
+        $id = (int) ($row['id'] ?? 0);
+        if ($id <= 0 || in_array($id, $exclude, true)) {
+            continue;
+        }
+        // المجمّع = من لديهم الصلاحية فعلياً؛ المدير يبقى احتياطاً عبر can_dispatch دون إغراق الإشعارات
+        if ((string) ($row['role'] ?? '') === 'admin') {
+            continue;
+        }
+        if (outgoing_user_has_dispatch($row)) {
+            $ids[] = $id;
+        }
+    }
+    return $ids;
+}
+
+/**
+ * توجيه مرحلة الاتصالات: الأساسي → البديل → مجمّع من يملكون الصلاحية.
+ *
+ * @param list<int> $excludeIds
+ * @return array{assignee:int, notify:list<int>}|null
+ */
+function outgoing_dispatch_route(array $excludeIds = []): ?array
+{
+    $exclude = array_values(array_filter(array_map('intval', $excludeIds)));
+    foreach (outgoing_active_user_ids([outgoing_dispatch_primary_user_id(), outgoing_dispatch_alternate_user_id()]) as $id) {
+        if (in_array($id, $exclude, true) || !outgoing_dispatch_assignee_eligible($id)) {
+            continue;
+        }
+        return ['assignee' => $id, 'notify' => [$id]];
+    }
+    $pool = outgoing_dispatch_user_ids($exclude);
+    return $pool === [] ? null : ['assignee' => 0, 'notify' => $pool];
+}
+
+function outgoing_dispatch_assignee_eligible(int $assigneeId): bool
+{
+    if ($assigneeId <= 0) {
+        return false;
+    }
+    try {
+        $st = db()->prepare('SELECT id, role, role_id, is_active FROM `tblusers` WHERE id = ? LIMIT 1');
+        $st->execute([$assigneeId]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return false;
+    }
+    return $row
+        && (int) ($row['is_active'] ?? 0) === 1
+        && outgoing_user_has_dispatch($row);
+}
+
+/** هل المعاملة في مرحلة طباعة الاتصالات (بعد الاعتماد أو مسار المراجعة فقط)؟ */
+function outgoing_is_comms_print_stage(array $corr): bool
+{
+    if (($corr['type'] ?? '') !== 'outgoing') {
+        return false;
+    }
+    $s = outgoing_approval_status_of($corr);
+    // with_comms المسار الحالي؛ approved صفوف قديمة قبل توحيد الحالة
+    return in_array($s, ['with_comms', 'approved'], true)
+        && !in_array((string) ($corr['status'] ?? ''), ['sent', 'delivered', 'closed'], true)
+        && !correspondence_is_cancelled($corr);
+}
+
+/**
+ * هل المستخدم مؤهّل لتنفيذ مرحلة الاتصالات على هذه المعاملة؟
+ * يشترط صلاحية outgoing.dispatch (أو مدير النظام) + الإسناد أو المجمّع.
+ */
+function outgoing_user_can_dispatch(array $user, array $corr): bool
+{
+    if (!outgoing_is_comms_print_stage($corr)) {
+        return false;
+    }
+    $uid = (int) ($user['id'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+    $isAdmin = function_exists('appr_user_is_admin')
+        ? appr_user_is_admin($user)
+        : ((string) ($user['role'] ?? '') === 'admin');
+    if (!$isAdmin && !outgoing_user_has_dispatch($user)) {
+        return false;
+    }
+    $assignee = (int) ($corr['issue_approval_assignee_id'] ?? 0);
+    if ($assignee > 0 && outgoing_dispatch_assignee_eligible($assignee)) {
+        return $assignee === $uid || $isAdmin;
+    }
+    // مجمّع: أي من يملك الصلاحية (والمدير)
+    return $isAdmin || outgoing_user_has_dispatch($user);
+}
+
+function outgoing_user_may_see_dispatch_queue(?array $user = null): bool
+{
+    $user = $user ?? (function_exists('current_user') ? current_user() : null);
+    if ($user === null) {
+        return false;
+    }
+    $uid = (int) ($user['id'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+    if (outgoing_user_has_dispatch($user)
+        || $uid === outgoing_dispatch_primary_user_id()
+        || $uid === outgoing_dispatch_alternate_user_id()
+    ) {
+        return true;
+    }
+    return function_exists('appr_user_has_assigned_pending')
+        && appr_user_has_assigned_pending($uid, ['with_comms']);
+}
+
+/**
+ * @return list<string>
+ */
+function outgoing_dispatch_awaiting_sql(?array $user = null, string $alias = 'c'): array
+{
+    $user = $user ?? (function_exists('current_user') ? current_user() : null);
+    $uid = (int) ($user['id'] ?? 0);
+    if ($uid <= 0 || !outgoing_user_may_see_dispatch_queue($user)) {
+        return ['1=0'];
+    }
+    $who = "{$alias}.issue_approval_assignee_id = {$uid}";
+    if (outgoing_user_has_dispatch($user)) {
+        $who = "({$who} OR IFNULL({$alias}.issue_approval_assignee_id, 0) = 0)";
+    }
+    return [
+        "{$alias}.type = 'outgoing'",
+        "{$alias}.issue_approval_status IN ('with_comms','approved')",
+        "IFNULL({$alias}.status,'') NOT IN ('sent','delivered','closed')",
+        $who,
+    ];
 }
 
 function corr_print_perm(string $type, string $kind): string
@@ -2589,28 +2931,42 @@ function corr_print_perm(string $type, string $kind): string
     return $type . '.print_' . $kind;
 }
 
-function corr_user_can_print(string $type, string $kind, ?array $user = null): bool
+function corr_user_can_print(string $type, string $kind, ?array $user = null, ?array $corr = null): bool
 {
     $user = $user ?? (function_exists('current_user') ? current_user() : null);
-
-    return $user !== null && function_exists('user_can') && user_can(corr_print_perm($type, $kind), $user);
+    if ($user === null || !function_exists('user_can') || !user_can(corr_print_perm($type, $kind), $user)) {
+        return false;
+    }
+    if ($corr !== null && function_exists('outgoing_is_comms_print_stage') && outgoing_is_comms_print_stage($corr)) {
+        return outgoing_user_can_dispatch($user, $corr);
+    }
+    return true;
 }
 
 /** معاينة الملصق الحراري في صفحة العرض — أو ضمنياً إن وُجدت صلاحية طباعته. */
-function corr_user_can_view_thermal(string $type, ?array $user = null): bool
+function corr_user_can_view_thermal(string $type, ?array $user = null, ?array $corr = null): bool
 {
     $user = $user ?? (function_exists('current_user') ? current_user() : null);
     if ($user === null || !function_exists('user_can')) {
         return false;
     }
     $type = in_array($type, ['outgoing', 'incoming', 'internal'], true) ? $type : 'outgoing';
-
-    return user_can($type . '.view_thermal', $user) || user_can($type . '.print_thermal', $user);
+    if (!user_can($type . '.view_thermal', $user) && !user_can($type . '.print_thermal', $user)) {
+        return false;
+    }
+    if ($corr !== null && function_exists('outgoing_is_comms_print_stage') && outgoing_is_comms_print_stage($corr)) {
+        return outgoing_user_can_dispatch($user, $corr);
+    }
+    return true;
 }
 
-function outgoing_require_print_perm(string $perm, array $user, string $backUrl): void
+function outgoing_require_print_perm(string $perm, array $user, string $backUrl, ?array $corr = null): void
 {
-    if (function_exists('user_can') && user_can($perm, $user)) {
+    $allowed = function_exists('user_can') && user_can($perm, $user);
+    if ($allowed && $corr !== null && function_exists('outgoing_is_comms_print_stage') && outgoing_is_comms_print_stage($corr)) {
+        $allowed = outgoing_user_can_dispatch($user, $corr);
+    }
+    if ($allowed) {
         return;
     }
     if (function_exists('flash')) {
@@ -2625,19 +2981,31 @@ function outgoing_require_print_perm(string $perm, array $user, string $backUrl)
 /** آخر خطوة في الصادر: الإحالة إلى الاتصالات الإدارية للطباعة، بعد آخر مرحلة مفعّلة. */
 function outgoing_handoff_print_to_communications(int $corrId): void
 {
-    $ids = outgoing_dispatch_user_ids();
-    if ($ids === [] || $corrId <= 0) {
+    if ($corrId <= 0) {
         return;
     }
-    $assignee = count($ids) === 1 ? $ids[0] : 0;
+    $route = outgoing_dispatch_route([]);
+    if ($route === null) {
+        db()->prepare(
+            "UPDATE `tblcorrespondence` SET issue_approval_assignee_id = NULL
+             WHERE id = ? AND type = 'outgoing' AND issue_approval_status IN ('approved', 'with_comms')"
+        )->execute([$corrId]);
+        return;
+    }
+    $assignee = (int) ($route['assignee'] ?? 0);
+    $notify = array_values(array_unique(array_filter(array_map('intval', $route['notify'] ?? []))));
+    $now = date('Y-m-d H:i:s');
     db()->prepare(
-        "UPDATE `tblcorrespondence` SET issue_approval_assignee_id = ?
+        "UPDATE `tblcorrespondence` SET
+            issue_approval_assignee_id = ?,
+            issue_approval_reassigned_at = ?,
+            issue_approval_escalated_at = NULL
          WHERE id = ? AND type = 'outgoing' AND issue_approval_status IN ('approved', 'with_comms')"
-    )->execute([$assignee > 0 ? $assignee : null, $corrId]);
+    )->execute([$assignee > 0 ? $assignee : null, $now, $corrId]);
     if (function_exists('log_activity')) {
         log_activity(null, $corrId, 'issue_print_handoff', __('activity.action.issue_print_handoff'));
     }
-    if (!function_exists('dms_notify_users') || !function_exists('get_correspondence')) {
+    if ($notify === [] || !function_exists('dms_notify_users') || !function_exists('get_correspondence')) {
         return;
     }
     $corr = get_correspondence($corrId);
@@ -2648,7 +3016,7 @@ function outgoing_handoff_print_to_communications(int $corrId): void
     $subjectLine = trim((string) ($corr['subject'] ?? ''));
     $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
     $printBody = str_replace(':ref', $ref, __($electronic ? 'issue_appr.notify_print_body_electronic' : 'issue_appr.notify_print_body'));
-    dms_notify_users($ids, [
+    dms_notify_users($notify, [
         'type' => 'outgoing_issue_approval',
         'title' => __('issue_appr.notify_print_title'),
         'body' => $printBody,
@@ -2662,6 +3030,77 @@ function outgoing_handoff_print_to_communications(int $corrId): void
         'email_rows' => function_exists('outgoing_approval_email_rows') ? outgoing_approval_email_rows($corr) : [],
         'email_cta' => __('notify.email_view_correspondence'),
     ]);
+}
+
+/** تصعيد مرحلة الاتصالات: الأساسي → البديل بعد انتهاء المهلة. */
+function outgoing_dispatch_escalate_if_due(array $corr): bool
+{
+    $corrId = (int) ($corr['id'] ?? 0);
+    if ($corrId <= 0 || !outgoing_is_comms_print_stage($corr)) {
+        return false;
+    }
+    $primaryId = outgoing_dispatch_primary_user_id();
+    $altId = outgoing_dispatch_alternate_user_id();
+    if ($primaryId <= 0 || $altId <= 0 || $altId === $primaryId
+        || (int) ($corr['issue_approval_assignee_id'] ?? 0) !== $primaryId
+    ) {
+        return false;
+    }
+    if (!outgoing_dispatch_assignee_eligible($altId)) {
+        return false;
+    }
+    $started = strtotime((string) ($corr['issue_approval_reassigned_at'] ?? ''));
+    if ($started <= 0) {
+        $started = strtotime((string) ($corr['issue_approval_decided_at'] ?? ''));
+    }
+    if ($started <= 0 || time() < $started + outgoing_dispatch_minutes() * 60) {
+        return false;
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $stmt = db()->prepare(
+        "UPDATE `tblcorrespondence` SET
+            issue_approval_status = 'with_comms',
+            issue_approval_assignee_id = ?,
+            issue_approval_escalated_at = ?,
+            issue_approval_reassigned_at = ?
+         WHERE id = ? AND type = 'outgoing'
+           AND issue_approval_status IN ('with_comms', 'approved')
+           AND issue_approval_assignee_id = ?"
+    );
+    $stmt->execute([$altId, $now, $now, $corrId, $primaryId]);
+    if ($stmt->rowCount() === 0) {
+        return false;
+    }
+
+    if (function_exists('log_activity')) {
+        log_activity(null, $corrId, 'issue_dispatch_escalate', __('activity.action.issue_dispatch_escalate'));
+    }
+    if (function_exists('dms_notify_users')) {
+        $ref = format_ref_number($corr['ref_number'] ?? $corrId);
+        $subjectLine = trim((string) ($corr['subject'] ?? ''));
+        $body = str_replace(
+            [':ref', ':timeout'],
+            [$ref, outgoing_dispatch_timeout_label()],
+            __('issue_appr.notify_dispatch_escalated_body')
+        );
+        $deptId = (int) ($corr['department_id'] ?? 0) ?: null;
+        dms_notify_users([$altId, $primaryId], [
+            'type' => 'outgoing_issue_approval',
+            'title' => __('issue_appr.notify_dispatch_escalated_title'),
+            'body' => $body,
+            'link' => 'outgoing/view.php?id=' . $corrId,
+            'correspondence_id' => $corrId,
+            'department_id' => $deptId,
+            'dedupe_key' => 'issue_dispatch_esc_' . $corrId . '_' . $started,
+            'email' => true,
+            'email_intro' => $body,
+            'email_details' => trim($ref . ($subjectLine !== '' ? ' — ' . $subjectLine : '')),
+            'email_rows' => function_exists('outgoing_approval_email_rows') ? outgoing_approval_email_rows($corr) : [],
+            'email_cta' => __('notify.email_view_correspondence'),
+        ]);
+    }
+    return true;
 }
 
 /** الصادر الذي أنهى المراحل المفعّلة بلا اعتماد: يصبح لدى الاتصالات الإدارية للطباعة. */
@@ -2724,7 +3163,10 @@ function outgoing_approval_decide(int $corrId, array $user, bool $approve, strin
     if ($isOverride) {
         $note = appr_admin_override_note($note);
     }
-    $status = $approve ? 'approved' : 'rejected';
+    // الصادر بعد الاعتماد يدخل مباشرة مرحلة الاتصالات (with_comms) — متوافق مع مسار المراجعة فقط
+    $status = !$approve
+        ? 'rejected'
+        : ((($corr['type'] ?? '') === 'outgoing') ? 'with_comms' : 'approved');
     $now = date('Y-m-d H:i:s');
     $stmt = db()->prepare(
         "UPDATE `tblcorrespondence` SET
@@ -2813,6 +3255,10 @@ function outgoing_approval_escalate_if_due(int $corrId): bool
         return appr_with($t, static fn (): bool => outgoing_approval_escalate_if_due($corrId));
     }
     $status = outgoing_approval_status_of($corr);
+
+    if (($corr['type'] ?? '') === 'outgoing' && $status === 'with_comms') {
+        return outgoing_dispatch_escalate_if_due($corr);
+    }
 
     if ($status === 'pending_review') {
         return outgoing_review_escalate_if_due($corr);
@@ -3614,13 +4060,41 @@ function outgoing_approval_run_escalations(?array $user = null): void
         }
         return;
     }
-    if (!outgoing_approval_is_configured()) {
-        return;
-    }
 
     ensure_outgoing_approval_schema();
     try {
         $ids = [];
+        if (appr_p() === 'outgoing') {
+            $dispatchPrimary = outgoing_dispatch_primary_user_id();
+            if ($dispatchPrimary > 0 && outgoing_dispatch_alternate_user_id() > 0) {
+                $stmt = db()->prepare(
+                    "SELECT id FROM `tblcorrespondence`
+                     WHERE type = 'outgoing'
+                       AND issue_approval_status IN ('with_comms', 'approved')
+                       AND IFNULL(status,'') NOT IN ('sent','delivered','closed')
+                       AND issue_approval_assignee_id = ?
+                       AND (
+                            (issue_approval_reassigned_at IS NOT NULL
+                             AND issue_approval_reassigned_at <= (NOW() - INTERVAL ? MINUTE))
+                         OR (issue_approval_reassigned_at IS NULL
+                             AND issue_approval_decided_at IS NOT NULL
+                             AND issue_approval_decided_at <= (NOW() - INTERVAL ? MINUTE))
+                       )
+                     ORDER BY id ASC
+                     LIMIT 30"
+                );
+                $mins = outgoing_dispatch_minutes();
+                $stmt->execute([$dispatchPrimary, $mins, $mins]);
+                $ids = array_merge($ids, $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+            }
+        }
+        if (!outgoing_approval_is_configured()) {
+            $ids = array_unique(array_map('intval', $ids));
+            foreach ($ids as $id) {
+                outgoing_approval_escalate_if_due((int) $id);
+            }
+            return;
+        }
         $reviewPrimary = outgoing_review_primary_user_id();
         if ($reviewPrimary > 0 && outgoing_review_alternate_user_id() > 0) {
             $stmt = db()->prepare(

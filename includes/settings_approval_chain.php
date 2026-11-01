@@ -30,6 +30,7 @@ $renderUserSelect = static function (string $selectId) use ($approvalUsers, $app
             <option value="<?= (int) $au['id'] ?>" <?= $current === (int) $au['id'] ? 'selected' : '' ?>
                     data-job-title="<?= e(user_job_title($au)) ?>"
                     data-name="<?= e(user_display_name($au)) ?>"
+                    data-email="<?= e((string) ($au['email'] ?? '')) ?>"
                     data-photo="<?= e($approverPhotoUrl($au)) ?>">
                 <?= e(user_display_name($au)) ?> — <?= e((string) ($au['email'] ?? '')) ?>
             </option>
@@ -185,56 +186,8 @@ $approvalTip = $stageToggleTips('settings.approval_stage_title');
 </div>
 </div>
     </div>
+</div>
 <?php if ($p === 'outgoing'): ?>
-<?php
-$commsUsers = [];
-if (function_exists('outgoing_dispatch_user_ids')) {
-    $commsIds = outgoing_dispatch_user_ids();
-    if ($commsIds !== []) {
-        $marks = implode(',', array_fill(0, count($commsIds), '?'));
-        $commsStmt = db()->prepare("SELECT id, name_ar, name_en, job_title, job_title_en, photo_path FROM `tblusers` WHERE id IN ($marks) AND role = 'communications' AND is_active = 1 ORDER BY id");
-        $commsStmt->execute($commsIds);
-        $commsUsers = $commsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    }
-}
-?>
-<div class="settings-approver-block settings-comms-stage mt-3">
-    <div class="settings-approver-block-head">
-        <span class="settings-approver-step settings-approver-step-comms"><i class="bi bi-printer" aria-hidden="true"></i></span>
-        <div class="flex-grow-1 min-w-0">
-            <div class="settings-approver-block-title"><?= e(__('settings.outgoing_comms_stage_title')) ?></div>
-            <div class="settings-review-desc"><?= e(__('settings.outgoing_comms_stage_desc')) ?></div>
-        </div>
-    </div>
-    <div class="settings-approver-stage-body">
-        <?php if ($commsUsers === []): ?>
-            <div class="alert alert-warning py-2 px-3 small mb-0"><?= e(__('settings.outgoing_comms_stage_empty')) ?></div>
-        <?php else: ?>
-            <div class="form-text mb-2"><?= e(__('settings.outgoing_comms_stage_users')) ?></div>
-            <div class="settings-comms-users">
-                <?php foreach ($commsUsers as $commsUser):
-                    $commsPhoto = function_exists('user_photo_url') ? user_photo_url($commsUser) : '';
-                    $commsJob = function_exists('user_job_title') ? user_job_title($commsUser) : '';
-                    ?>
-                    <div class="settings-approver-person">
-                        <span class="settings-approver-avatar-wrap">
-                            <?php if ($commsPhoto !== ''): ?>
-                                <img src="<?= e($commsPhoto) ?>" alt="" class="settings-approver-avatar">
-                            <?php else: ?>
-                                <span class="settings-approver-avatar is-fallback"><i class="bi bi-person" aria-hidden="true"></i></span>
-                            <?php endif; ?>
-                        </span>
-                        <div class="settings-approver-person-text">
-                            <div class="settings-approver-person-name"><?= e(user_display_name($commsUser)) ?></div>
-                            <?php if ($commsJob !== ''): ?>
-                                <div class="settings-approver-person-job"><?= e($commsJob) ?></div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
+<div class="settings-chain-arrow"><i class="bi bi-arrow-down" aria-hidden="true"></i><?= e(__('settings.outgoing_comms_stage_title')) ?></div>
+<?php require __DIR__ . '/settings_comms_stage.php'; ?>
 <?php endif; ?>
-</div>

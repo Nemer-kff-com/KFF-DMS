@@ -18,7 +18,7 @@ $dmsDb = [
     'host' => 'localhost',
     'name' => 'dms',
     'user' => 'root',
-    'pass' => '',
+    'pass' => 'KFFadmin@1976',
     'charset' => 'utf8mb4',
 ];
 

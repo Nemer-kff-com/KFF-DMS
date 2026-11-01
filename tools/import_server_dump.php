@@ -6,6 +6,9 @@
  *   - جهات المراسلة (tblentities) — استبدال كامل
  *   - معاملات الوارد والصادر (tblcorrespondence) — استبدال صفوف الوارد/الصادر
  *   - المرفقات (tbldocuments + tblcorr_attachments) المرتبطة بها
+ *   - عدّادات الترقيم (tblsequences):
+ *       وارد/صادر/داخلي من السيرفر + مزامنة من أعلى رقم فعلي في المعاملات المستوردة
+ *       وعدّادات الأرشيف المنفصلة (عام/منح/مشاريع/مالية) مع ترحيل النوع القديم archive/reg-*
  * ثم يعلّم الوارد/الصادر كـ approved (معاملات قديمة بلا مسار اعتماد):
  *   - الشارة في القوائم: «معتمد» (وليس الاتصالات)
  *   - لا يُخترع decided_by من المنشئ/المدير حتى لا يظهر اسم مضلّل تحت الشارة
@@ -203,6 +206,154 @@ $pdo->exec("ALTER TABLE `{$name}`.tblentities AUTO_INCREMENT=" . ($maxE + 1));
 $pdo->exec("ALTER TABLE `{$name}`.tblcorrespondence AUTO_INCREMENT=" . ($maxC + 1));
 $pdo->exec("ALTER TABLE `{$name}`.tbldocuments AUTO_INCREMENT=" . ($maxD + 1));
 $pdo->exec("ALTER TABLE `{$name}`.tblcorr_attachments AUTO_INCREMENT=" . ($maxA + 1));
+
+echo "== 5) sequences (last numbers) ==\n";
+$hasSeqLocal = (int) $pdo->query(
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=" . $pdo->quote($name) . " AND table_name='tblsequences'"
+)->fetchColumn() > 0;
+$hasSeqSrc = (int) $pdo->query(
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=" . $pdo->quote($tmpDb) . " AND table_name='tblsequences'"
+)->fetchColumn() > 0;
+
+$seqEnumSql = "ENUM('incoming','outgoing','internal','circular','archive','archive_general','archive_scholarships','archive_projects','archive_finance') NOT NULL";
+
+/**
+ * أعلى تسلسل من أرقام مرجعية لنوع معيّن (سنة هجرية بخانتين أو 4).
+ */
+$importMaxSeqFromRefs = static function (PDO $pdo, string $schema, string $type) use ($name, $tmpDb): int {
+    if (!in_array($schema, [$name, $tmpDb], true)) {
+        return 0;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT ref_number FROM `{$schema}`.tblcorrespondence WHERE `type` = ?");
+        $stmt->execute([$type]);
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+    } catch (Throwable $e) {
+        return 0;
+    }
+    $max = 0;
+    foreach ($rows as $ref) {
+        $ref = trim((string) $ref, "() \t");
+        if (preg_match('~(?:^|/)(\d{2,4})/(\d+)$~u', $ref, $m)) {
+            $max = max($max, (int) $m[2]);
+        } elseif (preg_match('~^(\d+)$~u', $ref, $m)) {
+            $max = max($max, (int) $m[1]);
+        }
+    }
+    return $max;
+};
+
+if ($hasSeqLocal) {
+    // توسيع ENUM المحلي ليشمل عدّادات الأرشيف المنفصلة قبل أي نسخ
+    try {
+        $typeCol = (string) ($pdo->query("SHOW COLUMNS FROM `{$name}`.tblsequences LIKE 'seq_type'")->fetch(PDO::FETCH_ASSOC)['Type'] ?? '');
+        if ($typeCol === ''
+            || stripos($typeCol, 'archive_general') === false
+            || stripos($typeCol, 'archive_scholarships') === false
+            || stripos($typeCol, 'archive_projects') === false
+            || stripos($typeCol, 'archive_finance') === false
+        ) {
+            $pdo->exec("ALTER TABLE `{$name}`.tblsequences MODIFY COLUMN `seq_type` {$seqEnumSql}");
+            echo "seq_type ENUM expanded\n";
+        }
+    } catch (Throwable $e) {
+        echo "seq ENUM note: " . $e->getMessage() . "\n";
+    }
+
+    $upsert = $pdo->prepare(
+        "INSERT INTO `{$name}`.tblsequences (seq_type, seq_year, seq_scope, last_number)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE last_number = GREATEST(last_number, VALUES(last_number))"
+    );
+
+    if ($hasSeqSrc) {
+        // 1) الوارد / الصادر / الداخلي كما في السيرفر
+        $srcCorr = $pdo->query(
+            "SELECT seq_type, seq_year, seq_scope, last_number
+             FROM `{$tmpDb}`.tblsequences
+             WHERE seq_type IN ('incoming','outgoing','internal')"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($srcCorr as $row) {
+            $upsert->execute([
+                (string) $row['seq_type'],
+                (int) $row['seq_year'],
+                (string) ($row['seq_scope'] ?? ''),
+                (int) $row['last_number'],
+            ]);
+        }
+        echo "copied correspondence counters from dump: " . count($srcCorr) . "\n";
+
+        // 2) ترحيل عدّاد الأرشيف القديم (archive + scope) إلى الأنواع المنفصلة
+        $scopeMap = [
+            'reg-scholarships' => 'archive_scholarships',
+            'reg-projects' => 'archive_projects',
+            'reg-finance' => 'archive_finance',
+        ];
+        $srcArch = $pdo->query(
+            "SELECT seq_type, seq_year, seq_scope, last_number
+             FROM `{$tmpDb}`.tblsequences
+             WHERE seq_type IN ('archive','archive_general','archive_scholarships','archive_projects','archive_finance')"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($srcArch as $row) {
+            $type = (string) $row['seq_type'];
+            $scope = (string) ($row['seq_scope'] ?? '');
+            $year = (int) $row['seq_year'];
+            $last = (int) $row['last_number'];
+            if ($type === 'archive') {
+                $type = $scopeMap[$scope] ?? 'archive_general';
+                $scope = isset($scopeMap[$scope]) ? '' : $scope;
+            }
+            $upsert->execute([$type, $year, $scope, $last]);
+        }
+        echo "mapped archive counters from dump: " . count($srcArch) . "\n";
+    } else {
+        echo "source tblsequences missing — will sync from correspondence only\n";
+    }
+
+    // 3) مزامنة إلزامية من أعلى رقم فعلي في المعاملات المستوردة (لا تعتمد على dump وحده)
+    $yearGuess = (int) date('Y') - 579;
+    try {
+        $y = $pdo->query(
+            "SELECT seq_year FROM `{$name}`.tblsequences
+             WHERE seq_type IN ('incoming','outgoing','internal')
+             ORDER BY seq_year DESC LIMIT 1"
+        )->fetchColumn();
+        if ($y !== false) {
+            $yearGuess = (int) $y;
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+    foreach (['incoming', 'outgoing', 'internal'] as $corrType) {
+        $fromLocal = $importMaxSeqFromRefs($pdo, $name, $corrType);
+        $fromSrc = $hasSeqSrc ? $importMaxSeqFromRefs($pdo, $tmpDb, $corrType) : 0;
+        $usedMax = max($fromLocal, $fromSrc);
+        if ($usedMax > 0) {
+            $upsert->execute([$corrType, $yearGuess, '', $usedMax]);
+            echo "sync {$corrType} from data max={$usedMax} (year {$yearGuess})\n";
+        }
+    }
+
+    // 4) ضمان وجود صفوف عدّادات الأرشيف الأربعة
+    foreach (['archive_general', 'archive_scholarships', 'archive_projects', 'archive_finance'] as $archType) {
+        $upsert->execute([$archType, $yearGuess, '', 0]);
+    }
+
+    $seqRows = $pdo->query(
+        "SELECT seq_type, seq_year, seq_scope, last_number FROM `{$name}`.tblsequences
+         WHERE seq_type IN (
+            'incoming','outgoing','internal',
+            'archive_general','archive_scholarships','archive_projects','archive_finance'
+         )
+         ORDER BY seq_type, seq_year, seq_scope"
+    )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($seqRows as $sr) {
+        $sc = ($sr['seq_scope'] ?? '') === '' ? '' : ('/' . $sr['seq_scope']);
+        echo "seq {$sr['seq_type']}{$sc} {$sr['seq_year']}={$sr['last_number']}\n";
+    }
+} else {
+    echo "sequences skipped (local table missing)\n";
+}
 
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
 $pdo->exec("DROP DATABASE IF EXISTS `{$tmpDb}`");

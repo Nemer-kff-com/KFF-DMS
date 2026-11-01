@@ -29,6 +29,13 @@ function dms_permission_catalog(): array
             'outgoing.print_envelope' => $p('طباعة ملصق الظرف', 'Print envelope label', ['admin', 'communications'], true, ['admin', 'communications', 'archive', 'department', 'viewer']),
             'outgoing.view_thermal' => $p('معاينة الملصق الحراري', 'View thermal sticker', ['admin', 'communications'], true, $printRoles),
             'outgoing.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
+            'outgoing.dispatch' => $p(
+                'مرحلة الاتصالات — تنفيذ الطباعة بعد الاعتماد',
+                'Communications stage — print after approval',
+                ['admin', 'communications'],
+                true,
+                ['admin', 'communications', 'archive', 'department', 'viewer']
+            ),
             'view.confidential.outgoing' => $p('الاطلاع على المرفقات السرية', 'View confidential attachments', [], true, $printRoles),
         ]],
         'incoming' => ['label' => 'perm.group_incoming', 'icon' => 'bi-inbox', 'items' => [
@@ -841,7 +848,11 @@ function dms_permission_for_href(string $href): ?string
         'admin/settings.php' => 'admin.settings',
         'admin/email_settings.php' => 'admin.settings',
         'admin/whatsapp_settings.php' => 'admin.settings',
+        'admin/load_check.php' => 'admin.settings',
+        'admin/load_check_run.php' => 'admin.settings',
+        'admin/check_assets.php' => 'admin.settings',
         'admin/sidebar_menu.php' => 'admin.sidebar',
+        'admin/system_logs.php' => 'admin.logs',
         'admin/activity_log.php' => 'admin.logs',
         'admin/security_log.php' => 'admin.logs',
         'admin/active_sessions.php' => 'admin.logs',

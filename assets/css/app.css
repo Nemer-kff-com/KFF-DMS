@@ -7281,6 +7281,23 @@ body.print-corr .print-qr-block {
 .print-departments-table col.c-name { width: 36%; }
 .print-departments-table col.c-receipt { width: 36%; }
 .print-departments-table col.c-status { width: 14%; }
+.print-roles-table col.c-num { width: 3.5%; }
+.print-roles-table col.c-name { width: 58%; }
+.print-roles-table col.c-users { width: 12%; }
+.print-roles-table col.c-system { width: 12%; }
+.print-roles-table col.c-status { width: 14.5%; }
+.print-roles-table .c-num,
+.print-roles-table .c-users,
+.print-roles-table .c-system,
+.print-roles-table .c-status {
+  text-align: center;
+  white-space: nowrap;
+}
+.print-roles-table td.c-num {
+  width: 2.2rem;
+  max-width: 2.2rem;
+  padding-inline: .2rem;
+}
 .print-departments-table th,
 .print-departments-table td {
   font-size: 9pt;
