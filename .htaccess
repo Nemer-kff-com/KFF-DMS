@@ -71,11 +71,8 @@ RewriteRule (^|/)error_log$ - [F,L]
 </Files>
 
 <IfModule mod_headers.c>
+    # Security response headers are sent by PHP (config/security.php).
+    # Keep only server-banner cleanup here to avoid duplicate headers.
     Header unset X-Powered-By
     Header always unset X-Powered-By
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "SAMEORIGIN"
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set X-XSS-Protection "1; mode=block"
-    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
 </IfModule>

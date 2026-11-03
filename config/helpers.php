@@ -134,13 +134,19 @@ function dms_project_base(): string
     return $cached;
 }
 
-/** بروتوكول الطلب الحالي (مع دعم البروكسي) */
+/** بروتوكول الطلب الحالي (مع دعم البروكسي الموثوق فقط) */
 function dms_request_scheme(): string
 {
-    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
-        $proto = strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']);
-        if (str_contains($proto, ',')) {
-            $proto = trim(explode(',', $proto)[0]);
+    // نفس بوابة الثقة المستخدمة في config/security.php (لا تثق بترويسات عميل عشوائي)
+    if (function_exists('dms_trust_proxy_headers') && dms_trust_proxy_headers()) {
+        $proto = function_exists('dms_forwarded_proto')
+            ? dms_forwarded_proto()
+            : '';
+        if ($proto === '' && !empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+            $proto = strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']);
+            if (str_contains($proto, ',')) {
+                $proto = trim(explode(',', $proto, 2)[0]);
+            }
         }
         if ($proto === 'https' || $proto === 'http') {
             return $proto;

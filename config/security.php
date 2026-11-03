@@ -34,13 +34,45 @@ function dms_is_local_remote_addr(): bool
 }
 
 /**
+ * قراءة علم بيئة DMS_TRUST_PROXY (getenv و $_SERVER / $_ENV لـ Apache SetEnv).
+ */
+function dms_env_flag(string $name): string
+{
+    $raw = getenv($name);
+    if ($raw === false || $raw === '') {
+        $raw = $_SERVER[$name] ?? $_ENV[$name] ?? '';
+    }
+
+    return strtolower(trim((string) $raw));
+}
+
+/**
  * هل يُوثق النظام ترويسات البروكسي؟
- * فعّل فقط خلف بروكسي موثوق (مثل Cloudflare) عبر DMS_TRUST_PROXY=1
+ * يتطلب DMS_TRUST_PROXY=1 وأن يكون REMOTE_ADDR هو نفق محلي موثوق (127.0.0.1 / ::1)
+ * مثل Cloudflare Tunnel → لا تُوثق ترويسات عميل عشوائي على الشبكة.
  */
 function dms_trust_proxy_headers(): bool
 {
-    $flag = strtolower(trim((string) (getenv('DMS_TRUST_PROXY') ?: '')));
-    return in_array($flag, ['1', 'true', 'yes', 'on'], true);
+    $flag = dms_env_flag('DMS_TRUST_PROXY');
+    if (!in_array($flag, ['1', 'true', 'yes', 'on'], true)) {
+        return false;
+    }
+
+    return dms_is_local_remote_addr();
+}
+
+/** قيمة X-Forwarded-Proto الأولى (إن وُجدت) */
+function dms_forwarded_proto(): string
+{
+    $fwd = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($fwd === '') {
+        return '';
+    }
+    if (str_contains($fwd, ',')) {
+        $fwd = trim(explode(',', $fwd, 2)[0]);
+    }
+
+    return $fwd;
 }
 
 /** هل الاتصال عبر HTTPS؟ */
@@ -52,12 +84,10 @@ function dms_is_https_request(): bool
     if ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
         return true;
     }
-    if (dms_trust_proxy_headers()) {
-        $fwd = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-        if ($fwd === 'https') {
-            return true;
-        }
+    if (dms_trust_proxy_headers() && dms_forwarded_proto() === 'https') {
+        return true;
     }
+
     return false;
 }
 
@@ -104,14 +134,27 @@ function dms_send_security_headers(): void
     header('X-XSS-Protection: 1; mode=block');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
-    if (dms_is_https_request()) {
-        if (dms_is_local_host()) {
-            // إلغاء HSTS السابق على الشبكة المحلية إن وُجد في المتصفح
-            header('Strict-Transport-Security: max-age=0');
-        } else {
-            header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
-        }
+    // HSTS فقط على HTTPS مؤكد لضيف عام (خلف نفق موثوق / TLS مباشر)
+    if (dms_is_https_request() && !dms_is_local_host()) {
+        header('Strict-Transport-Security: max-age=86400');
     }
+
+    // CSP للمراقبة فقط — لا يمنع محتوى (Report-Only)
+    header(
+        "Content-Security-Policy-Report-Only: "
+        . "default-src 'self'; "
+        . "base-uri 'self'; "
+        . "object-src 'none'; "
+        . "frame-ancestors 'self'; "
+        . "script-src 'self' 'unsafe-inline'; "
+        . "style-src 'self' 'unsafe-inline'; "
+        . "img-src 'self' data: blob: https://flagcdn.com; "
+        . "font-src 'self' data:; "
+        . "connect-src 'self'; "
+        . "frame-src 'self'; "
+        . "worker-src 'self' blob:; "
+        . "form-action 'self'"
+    );
 }
 
 /** ضبط كوكي الجلسة قبل session_start() */

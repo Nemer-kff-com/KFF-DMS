@@ -1,0 +1,14 @@
+---
+description: Always delete temporary probe/debug pages and code after work
+alwaysApply: true
+---
+
+# No temporary leftovers
+
+After any modification or diagnostic work in DMS:
+
+- Delete temporary probe/debug scripts (e.g. `_tmp_*.php`, `tmp_*.php`, `*probe*.php` created for inspection).
+- Remove throwaway inline debug code (`var_dump`, `print_r`, `dd`, temporary `echo` diagnostics) before finishing.
+- Do not leave unused temporary pages in the project root or elsewhere.
+- Prefer one-off Shell/`php -r` checks over committing temporary PHP files when possible.
+- If a temporary file was created during the session, delete it before ending the task unless the user explicitly asks to keep it.
