@@ -41,8 +41,9 @@ if ($token !== '' && preg_match('/^[a-f0-9]{32}$/', $token)) {
         if (!isset($_GET['lang']) && empty($_SESSION['dms_lang'])) {
             $_SESSION['dms_lang'] = correspondence_letter_channel_lang($corr);
         }
-        $letterText = correspondence_letter_text($corr, dms_lang_code());
-        $rsvpRequired = correspondence_rsvp_required($corr);
+        $isConfPublic = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr);
+        $letterText = $isConfPublic ? '' : correspondence_letter_text($corr, dms_lang_code());
+        $rsvpRequired = $isConfPublic ? false : correspondence_rsvp_required($corr);
     }
 }
 
@@ -171,16 +172,18 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
         <div class="verify-simple-type"><?= e($typeLabel) ?></div>
         <div class="verify-simple-number" dir="ltr"><?= e(format_ref_caption((string) ($corr['type'] ?? ''), $corr['ref_number'] ?? '')) ?></div>
         <?php
-        $verifyParty = function_exists('correspondence_archived_party')
-            ? correspondence_archived_party($corr)
-            : ['prefix' => '', 'person' => ''];
-        $verifyPrefix = trim((string) ($verifyParty['prefix'] ?? ''));
-        $verifyPerson = trim((string) ($verifyParty['person'] ?? ''));
-        if ($verifyPerson === '') {
-            $verifyPerson = trim((string) ($corr['party_name'] ?? ''));
-        }
-        if ($verifyPrefix !== '' || $verifyPerson !== ''):
-        ?>
+        $verifyIsConf = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr);
+        if (!$verifyIsConf) {
+            $verifyParty = function_exists('correspondence_archived_party')
+                ? correspondence_archived_party($corr)
+                : ['prefix' => '', 'person' => ''];
+            $verifyPrefix = trim((string) ($verifyParty['prefix'] ?? ''));
+            $verifyPerson = trim((string) ($verifyParty['person'] ?? ''));
+            if ($verifyPerson === '') {
+                $verifyPerson = trim((string) ($corr['party_name'] ?? ''));
+            }
+            if ($verifyPrefix !== '' || $verifyPerson !== '') {
+                ?>
             <div class="verify-simple-party mt-3">
                 <?php if ($verifyPrefix !== ''): ?>
                     <div class="verify-simple-party-prefix"><?= e($verifyPrefix) ?></div>
@@ -189,14 +192,20 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
                     <div class="verify-simple-party-name"><?= e($verifyPerson) ?></div>
                 <?php endif; ?>
             </div>
-        <?php
-        endif;
-        $verifySubject = trim((string) ($corr['subject'] ?? ''));
+                <?php
+            }
+        }
+        $verifySubject = $verifyIsConf
+            ? (function_exists('dms_conf_public_subject_label') ? dms_conf_public_subject_label($corr) : __('conf.redacted_subject'))
+            : trim((string) ($corr['subject'] ?? ''));
         if ($verifySubject !== ''):
         ?>
             <div class="verify-simple-subject mt-3">
                 <div class="verify-simple-subject-text"><?= e($verifySubject) ?></div>
             </div>
+        <?php endif; ?>
+        <?php if ($verifyIsConf): ?>
+            <p class="verify-simple-hint mt-2 mb-0"><?= e(__('conf.verify_hint')) ?></p>
         <?php endif; ?>
 
         <?php if ($focusRsvp && $rsvpRequired): ?>

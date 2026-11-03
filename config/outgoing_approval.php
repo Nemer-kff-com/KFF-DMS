@@ -3014,8 +3014,8 @@ function outgoing_handoff_print_to_communications(int $corrId): void
     }
     $ref = format_ref_number($corr['ref_number'] ?? $corrId);
     $subjectLine = trim((string) ($corr['subject'] ?? ''));
-    $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
-    $printBody = str_replace(':ref', $ref, __($electronic ? 'issue_appr.notify_print_body_electronic' : 'issue_appr.notify_print_body'));
+    $paper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
+    $printBody = str_replace(':ref', $ref, __($paper ? 'issue_appr.notify_print_body' : 'issue_appr.notify_print_body_electronic'));
     dms_notify_users($notify, [
         'type' => 'outgoing_issue_approval',
         'title' => __('issue_appr.notify_print_title'),

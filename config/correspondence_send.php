@@ -196,6 +196,81 @@ function dms_delivery_status_label(?array $row): string
     };
 }
 
+/** أسطر «موجهة إلى» كما تُطبع على الخطاب. */
+function dms_corr_letter_addressee_lines(array $corr): array
+{
+    if (!function_exists('print_direction_parts') || !function_exists('print_direction_part_has_content')) {
+        return [];
+    }
+    $to = print_direction_parts($corr)['to'] ?? [];
+    if (!is_array($to)) {
+        return [];
+    }
+    if (function_exists('letter_apply_addressee_flags') && function_exists('letter_display_flags')) {
+        $to = letter_apply_addressee_flags($to, letter_display_flags($corr));
+    }
+    if (!print_direction_part_has_content($to)) {
+        return [];
+    }
+    $prefix = trim((string) ($to['prefix'] ?? ''));
+    $person = trim((string) ($to['person'] ?? ''));
+    $honorific = trim((string) ($to['honorific'] ?? ''));
+    $job = trim((string) ($to['job'] ?? ''));
+    $org = trim((string) ($to['org'] ?? ''));
+    if ($org !== '' && $person !== '' && $org === $person) {
+        $org = '';
+    }
+    $name = trim($prefix . ($prefix !== '' && $person !== '' ? ' ' : '') . $person);
+    if ($honorific !== '') {
+        $name = trim($name . ' ' . $honorific);
+    }
+    $lines = [];
+    if ($name !== '') {
+        $lines[] = $name;
+    }
+    if ($job !== '') {
+        $lines[] = $job;
+    }
+    if ($org !== '') {
+        $lines[] = $org;
+    }
+    foreach ($to['titles'] ?? [] as $title) {
+        $title = trim((string) $title);
+        if ($title !== '') {
+            $lines[] = $title;
+        }
+    }
+
+    return $lines;
+}
+
+/** رقم صادر ظاهر في البريد — بلا أرقام المسودة المؤقتة. */
+function dms_corr_public_ref(array $corr): string
+{
+    $raw = trim((string) ($corr['ref_number'] ?? ''));
+    if ($raw === '' || str_starts_with($raw, 'OD-') || str_starts_with($raw, 'ODTMP-')) {
+        return '';
+    }
+
+    return function_exists('format_ref_number') ? format_ref_number($raw) : $raw;
+}
+
+function dms_corr_letter_addressee_html(array $corr, string $font): string
+{
+    $lines = dms_corr_letter_addressee_lines($corr);
+    if ($lines === []) {
+        return '';
+    }
+    $html = '';
+    foreach ($lines as $i => $line) {
+        $weight = $i === 0 ? '700' : '400';
+        $html .= '<div style="margin:0 0 2px;font-weight:' . $weight . ';font-family:' . $font . ';color:#000">'
+            . e($line) . '</div>';
+    }
+
+    return $html;
+}
+
 function dms_corr_email_bodies(array $corr): array
 {
     $lang = function_exists('correspondence_letter_channel_lang') ? correspondence_letter_channel_lang($corr) : 'ar';
@@ -207,10 +282,24 @@ function dms_corr_email_bodies(array $corr): array
     $name = dms_corr_honored_name($corr);
     $number = format_ref_number($corr['ref_number'] ?? '');
     $subject = (string) ($corr['subject'] ?? '');
+    $confRedact = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+        && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted();
+    if ($confRedact) {
+        $safe = function_exists('dms_conf_safe_notify_bits')
+            ? dms_conf_safe_notify_bits($corr, $subject)
+            : ['subject' => $number];
+        $subject = (string) ($safe['subject'] ?? $number);
+    }
     $date = format_date($corr['corr_date'] ?? null);
     $link = dms_corr_verify_url($corr);
-    $letter = function_exists('correspondence_letter_text') ? correspondence_letter_text($corr, $lang) : '';
+    $letter = $confRedact
+        ? ''
+        : (function_exists('correspondence_letter_text') ? correspondence_letter_text($corr, $lang) : '');
+    $publicRef = dms_corr_public_ref($corr);
     $mailSubject = $subject !== '' ? $subject : ($org . ' — ' . $number);
+    if ($letter !== '' && $publicRef !== '' && !str_contains($mailSubject, $publicRef)) {
+        $mailSubject = ($subject !== '' ? $subject . ' — ' : '') . $publicRef;
+    }
     $greet = $name !== '' ? $name : $t('send.recipient');
     $dir = $lang === 'en' ? 'ltr' : 'rtl';
     $align = $lang === 'en' ? 'left' : 'right';
@@ -295,28 +384,40 @@ function dms_corr_email_bodies(array $corr): array
 
     $html = '<div style="font-family:' . $font . ';'
         . (function_exists('letter_email_mso_style') ? letter_email_mso_style($fontMso) : '')
-        . 'font-size:12pt;direction:' . $dir . ';text-align:' . $align . ';color:#000;line-height:1.5;max-width:640px">'
-        . '<div style="margin:0 0 18px;font-size:12pt;color:#000;font-weight:bold;font-family:' . $font . ';line-height:1.5">'
-        . '<div style="margin:0 0 4px;color:#000;font-weight:bold;font-family:' . $font . '">'
-        . '<strong style="color:#000;font-weight:bold;font-family:' . $font . '">' . e($t('corr.number'))
-        . ': <span dir="ltr">' . e($number) . '</span></strong></div>'
-        . '<div style="margin:0;color:#000;font-weight:bold;font-family:' . $font . '">'
-        . '<strong style="color:#000;font-weight:bold;font-family:' . $font . '">' . e($t('corr.date'))
-        . ': ' . e($date) . '</strong></div>'
-        . '</div>';
+        . 'font-size:12pt;direction:' . $dir . ';text-align:' . $align . ';color:#000;line-height:1.5;max-width:640px">';
     if ($letter !== '') {
-        // نص الخطاب يتضمن التحية واسم المستلم — لا نكررها من القالب
+        if ($publicRef !== '' || $date !== '') {
+            $html .= '<div style="margin:0 0 14px;font-family:' . $font . ';color:#000;line-height:1.6">';
+            if ($publicRef !== '') {
+                $html .= '<div>' . e($t('corr.number')) . ': <span dir="ltr">' . e($publicRef) . '</span></div>';
+            }
+            if ($date !== '') {
+                $html .= '<div>' . e($t('corr.date')) . ': ' . e($date) . '</div>';
+            }
+            $html .= '</div>';
+        }
         $html .= '<div style="margin:0 0 20px;line-height:1.5;font-size:12pt;font-family:' . $font . ';color:#000">'
             . render_letter_body_html($letter, true, $corr)
             . '</div>';
     } else {
-        $html .= '<p style="margin:0 0 10px;font-family:' . $font . ';color:#000">' . e($t('send.email_peace')) . '</p>'
+        $html .= '<div style="margin:0 0 18px;font-size:12pt;color:#000;font-weight:bold;font-family:' . $font . ';line-height:1.5">'
+            . '<div style="margin:0 0 4px;color:#000;font-weight:bold;font-family:' . $font . '">'
+            . '<strong style="color:#000;font-weight:bold;font-family:' . $font . '">' . e($t('corr.number'))
+            . ': <span dir="ltr">' . e($number) . '</span></strong></div>'
+            . '<div style="margin:0;color:#000;font-weight:bold;font-family:' . $font . '">'
+            . '<strong style="color:#000;font-weight:bold;font-family:' . $font . '">' . e($t('corr.date'))
+            . ': ' . e($date) . '</strong></div>'
+            . '</div>'
+            . '<p style="margin:0 0 10px;font-family:' . $font . ';color:#000">' . e($t('send.email_peace')) . '</p>'
             . '<p style="margin:0 0 18px;font-weight:700;font-size:16px;font-family:' . $font . ';color:#000">' . e($greet) . '</p>'
             . '<p style="margin:0 0 12px;font-family:' . $font . ';color:#000">' . e($t('send.email_intro')) . '</p>'
             . '<p style="margin:0 0 16px;font-weight:700;font-family:' . $font . ';color:#000">' . e($subject) . '</p>';
     }
     if ($needsRsvp) {
-        $ask = e($t('rsvp.email_ask'));
+        $askKey = function_exists('correspondence_rsvp_ask_key')
+            ? correspondence_rsvp_ask_key($corr, 'email')
+            : 'rsvp.email_ask';
+        $ask = e($t($askKey));
         if ($qrImg !== '') {
             $html .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
                 . 'style="margin:18px 0 8px;border:0;border-collapse:collapse;width:100%;max-width:640px">'
@@ -343,12 +444,26 @@ function dms_corr_email_bodies(array $corr): array
     }
     $html .= '</div>';
 
-    $text = $t('corr.number') . ': ' . $number . "\n"
-        . $t('corr.date') . ': ' . $date . "\n\n"
-        . ($letter !== ''
-            ? letter_body_plain($letter, $corr) . "\n\n"
-            : ($t('send.email_peace') . "\n" . $greet . "\n\n" . $t('send.email_intro') . "\n" . $subject . "\n\n"))
-        . ($needsRsvp ? $t('rsvp.email_ask') . "\n" . ($link !== '' ? $link . "\n" : '') : '')
+    if ($letter !== '') {
+        $textParts = [];
+        if ($publicRef !== '') {
+            $textParts[] = $t('corr.number') . ': ' . $publicRef;
+        }
+        if ($date !== '') {
+            $textParts[] = $t('corr.date') . ': ' . $date;
+        }
+        $textParts[] = '';
+        $textParts[] = letter_body_plain($letter, $corr);
+        $text = implode("\n", $textParts) . "\n\n";
+    } else {
+        $text = $t('corr.number') . ': ' . $number . "\n"
+            . $t('corr.date') . ': ' . $date . "\n\n"
+            . $t('send.email_peace') . "\n" . $greet . "\n\n" . $t('send.email_intro') . "\n" . $subject . "\n\n";
+    }
+    $textAsk = function_exists('correspondence_rsvp_ask_key')
+        ? $t(correspondence_rsvp_ask_key($corr, 'email'))
+        : $t('rsvp.email_ask');
+    $text .= ($needsRsvp ? $textAsk . "\n" . ($link !== '' ? $link . "\n" : '') : '')
         . ($link !== '' && !$needsRsvp ? $t('send.email_verify') . "\n" . $link : '');
     $text = rtrim($text);
 
@@ -369,15 +484,13 @@ function dms_corr_email_bodies(array $corr): array
  *
  * @return array{ok:bool,to?:string,recipient?:string,subject?:string,html?:string,text?:string,error?:string}
  */
-function dms_corr_email_preview(array $corr): array
+/**
+ * نص البريد كما سيصل، مع الصور مضمّنة للعرض في المتصفح.
+ *
+ * @return array{to:string,recipient:string,subject:string,html:string,text:string}
+ */
+function dms_corr_email_message_view(array $corr): array
 {
-    $to = dms_corr_email_address($corr);
-    if ($to === '') {
-        return [
-            'ok' => false,
-            'error' => __('send.err_no_email'),
-        ];
-    }
     $bodies = dms_corr_email_bodies($corr);
     $html = (string) ($bodies['html'] ?? '');
     foreach ($bodies['embeds'] ?? [] as $emb) {
@@ -397,7 +510,6 @@ function dms_corr_email_preview(array $corr): array
         if ($bin === false || $bin === '') {
             continue;
         }
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         $mime = match ($ext) {
             'jpg', 'jpeg' => 'image/jpeg',
             'gif' => 'image/gif',
@@ -417,13 +529,26 @@ function dms_corr_email_preview(array $corr): array
     }
 
     return [
-        'ok' => true,
-        'to' => $to,
+        'to' => dms_corr_email_address($corr),
         'recipient' => function_exists('dms_corr_honored_name') ? dms_corr_honored_name($corr) : '',
         'subject' => (string) ($bodies['subject'] ?? ''),
         'html' => $html,
         'text' => (string) ($bodies['text'] ?? ''),
     ];
+}
+
+function dms_corr_email_preview(array $corr): array
+{
+    $to = dms_corr_email_address($corr);
+    if ($to === '') {
+        return [
+            'ok' => false,
+            'error' => __('send.err_no_email'),
+        ];
+    }
+    $view = dms_corr_email_message_view($corr);
+
+    return ['ok' => true] + $view;
 }
 
 function dms_corr_whatsapp_text(array $corr): string
@@ -445,15 +570,22 @@ function dms_corr_whatsapp_text(array $corr): string
         }
     }
     $letter = function_exists('correspondence_letter_text') ? correspondence_letter_text($corr, $lang) : '';
-    $lines = [
-        $t('corr.number') . ': ' . $number,
-        $t('corr.date') . ': ' . $date,
-        '',
-    ];
+    $lines = [];
     if ($letter !== '') {
+        $waRef = dms_corr_public_ref($corr);
+        if ($waRef !== '') {
+            $lines[] = $t('corr.number') . ': ' . $waRef;
+        }
+        if ($date !== '') {
+            $lines[] = $t('corr.date') . ': ' . $date;
+        }
+        $lines[] = '';
         $lines[] = letter_body_plain($letter, $corr);
         $lines[] = '';
     } else {
+        $lines[] = $t('corr.number') . ': ' . $number;
+        $lines[] = $t('corr.date') . ': ' . $date;
+        $lines[] = '';
         $lines[] = $t('send.email_peace');
         $lines[] = $name !== '' ? $name : $t('send.recipient');
         $lines[] = '';
@@ -465,7 +597,9 @@ function dms_corr_whatsapp_text(array $corr): string
         $lines[] = $t('send.email_verify') . ': ' . $link;
     }
     if ($needsRsvp) {
-        $lines[] = $t('rsvp.email_ask');
+        $lines[] = $t(function_exists('correspondence_rsvp_ask_key')
+            ? correspondence_rsvp_ask_key($corr, 'whatsapp')
+            : 'rsvp.email_ask');
         if ($link !== '') {
             $lines[] = $link;
         }
@@ -477,6 +611,12 @@ function dms_corr_email_attachments(array $corr): array
 {
     $corrId = (int) ($corr['id'] ?? 0);
     if ($corrId < 1 || !function_exists('get_documents')) {
+        return [];
+    }
+    // لا تُرفق ملفات سرية عبر البريد/واتساب الخارجي
+    if (function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+        && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted()
+    ) {
         return [];
     }
     $closeKinds = function_exists('correspondence_close_doc_kind_values')
@@ -732,6 +872,28 @@ function dms_send_outgoing_channel(array $corr, string $channel, array $user): a
             'channel' => $channel,
             'recipient' => '',
             'error' => __('send.err_cancelled'),
+            'provider' => '',
+        ];
+    }
+    $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
+    $paper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
+    if (in_array($channel, ['email', 'whatsapp'], true) && !$electronic) {
+        return [
+            'ok' => false,
+            'status' => 'skipped',
+            'channel' => $channel,
+            'recipient' => '',
+            'error' => __('send.skip_not_electronic'),
+            'provider' => '',
+        ];
+    }
+    if ($channel === 'delivery' && !$paper) {
+        return [
+            'ok' => false,
+            'status' => 'skipped',
+            'channel' => $channel,
+            'recipient' => '',
+            'error' => __('send.skip_not_paper'),
             'provider' => '',
         ];
     }

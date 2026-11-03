@@ -28,10 +28,7 @@ if ($thermalType === 'outgoing') {
         ? correspondence_type_folder('outgoing')
         : 'outgoing';
     $back = base_url($folder . '/view.php?id=' . $id);
-    if (function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr)) {
-        flash('warning', __('out_prep.print_not_electronic'));
-        redirect($back);
-    }
+    // الإلكتروني: ملصق الظرف غير مناسب؛ الملصق الحراري يبقى متاحاً للصق الرقم على النسخة/الملف بعد الاعتماد
     if (function_exists('outgoing_can_print_thermal') && !outgoing_can_print_thermal($corr)) {
         flash('warning', function_exists('outgoing_thermal_wait_message') ? outgoing_thermal_wait_message() : __('out_prep.thermal_blocked'));
         redirect($back);

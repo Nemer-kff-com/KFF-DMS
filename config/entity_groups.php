@@ -242,18 +242,40 @@ function correspondence_letter_person_name(array $row): string
     return '';
 }
 
+function correspondence_linked_letter_template(array $corr): ?array
+{
+    static $cache = [];
+    $id = (int) ($corr['batch_letter_template_id'] ?? $corr['letter_template_id'] ?? 0);
+    if ($id <= 0) {
+        return null;
+    }
+    if (!array_key_exists($id, $cache)) {
+        if (!function_exists('get_letter_template')) {
+            require_once __DIR__ . '/letter_templates.php';
+        }
+        $cache[$id] = get_letter_template($id);
+    }
+
+    return is_array($cache[$id]) ? $cache[$id] : null;
+}
+
 function correspondence_letter_channel_lang(array $corr): string
 {
     if (!letter_name_is_english(correspondence_letter_person_name($corr))) {
         return 'ar';
     }
-    $en = trim((string) ($corr['letter_body_en'] ?? ''));
-    if ($en === '') {
-        $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
-    }
-    $ar = trim((string) ($corr['letter_body'] ?? ''));
-    if ($ar === '') {
-        $ar = trim((string) ($corr['batch_letter_body'] ?? ''));
+    $tpl = correspondence_linked_letter_template($corr);
+    $en = trim((string) ($tpl['body_en'] ?? ''));
+    $ar = trim((string) ($tpl['body'] ?? ''));
+    if ($tpl === null) {
+        $en = trim((string) ($corr['letter_body_en'] ?? ''));
+        if ($en === '') {
+            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
+        }
+        $ar = trim((string) ($corr['letter_body'] ?? ''));
+        if ($ar === '') {
+            $ar = trim((string) ($corr['batch_letter_body'] ?? ''));
+        }
     }
     if ($en !== '' || $ar === '') {
         return 'en';
@@ -265,6 +287,19 @@ function correspondence_letter_channel_lang(array $corr): string
 function correspondence_letter_raw(array $corr, ?string $lang = null): string
 {
     $lang = $lang ?? correspondence_letter_channel_lang($corr);
+    $tpl = correspondence_linked_letter_template($corr);
+    if ($tpl) {
+        if ($lang === 'en') {
+            $en = trim((string) ($tpl['body_en'] ?? ''));
+            if ($en !== '') {
+                return $en;
+            }
+        }
+        $ar = trim((string) ($tpl['body'] ?? ''));
+        if ($ar !== '') {
+            return $ar;
+        }
+    }
     if ($lang === 'en') {
         $en = trim((string) ($corr['letter_body_en'] ?? ''));
         if ($en === '') {
@@ -338,13 +373,23 @@ function apply_letter_placeholders(string $body, array $row, string $lang = 'ar'
         '{org}' => $workplace,
         '{org_name}' => $workplace,
         '{workplace}' => $workplace,
+        '{from_title}' => '',
         '{from_name}' => '',
         '{from_job}' => '',
     ];
     if (function_exists('letter_signature_context')) {
         $signer = letter_signature_context($row);
-        $map['{from_name}'] = trim((string) ($signer['name'] ?? ''));
-        $map['{from_job}'] = trim(implode(' ', array_map('strval', $signer['titles'] ?? [])));
+        $markFrom = static function (string $value): string {
+            $value = trim($value);
+            if ($value === '' || !function_exists('letter_mark_from_field')) {
+                return $value;
+            }
+
+            return letter_mark_from_field($value);
+        };
+        $map['{from_title}'] = $markFrom((string) ($signer['prefix'] ?? ''));
+        $map['{from_name}'] = $markFrom((string) ($signer['person'] ?? ''));
+        $map['{from_job}'] = $markFrom(implode(' ', array_map('strval', $signer['titles'] ?? [])));
     }
     return strtr($body, $map);
 }
@@ -356,9 +401,13 @@ function correspondence_letter_text(array $corr, ?string $lang = null): string
     if ($raw === '') {
         return '';
     }
-    $en = trim((string) ($corr['letter_body_en'] ?? ''));
-    if ($en === '') {
-        $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
+    $tpl = correspondence_linked_letter_template($corr);
+    $en = trim((string) ($tpl['body_en'] ?? ''));
+    if ($tpl === null) {
+        $en = trim((string) ($corr['letter_body_en'] ?? ''));
+        if ($en === '') {
+            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
+        }
     }
     $used = ($lang === 'en' && $en !== '') ? 'en' : 'ar';
 
@@ -507,6 +556,9 @@ function outgoing_batch_items(int $batchId, ?array $user = null): array
 {
     ensure_entity_groups_schema();
     ensure_entities_schema();
+    if (function_exists('ensure_letter_templates_schema')) {
+        ensure_letter_templates_schema();
+    }
     $user = $user ?? (function_exists('current_user') ? current_user() : null);
     $sql = "SELECT c.*, d.name AS department_name, d.name_en AS department_name_en,
                    idpt.name AS issuing_department_name, idpt.name_en AS issuing_department_name_en,
@@ -517,7 +569,8 @@ function outgoing_batch_items(int $batchId, ?array $user = null): array
                    e.phone AS entity_phone, e.email AS entity_email,
                    b.letter_body AS batch_letter_body,
                    b.letter_body_en AS batch_letter_body_en,
-                   b.requires_rsvp AS batch_requires_rsvp
+                   b.requires_rsvp AS batch_requires_rsvp,
+                   b.letter_template_id AS batch_letter_template_id
             FROM `tblcorrespondence` c
             LEFT JOIN `tbldepartments` d ON d.id = c.department_id
             LEFT JOIN `tbldepartments` idpt ON idpt.id = c.issuing_department_id

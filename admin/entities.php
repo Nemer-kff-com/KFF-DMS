@@ -544,7 +544,7 @@ require __DIR__ . '/../includes/header.php';
 
                         <th class="entities-col-letter"><?= e(__('entities.directed_to')) ?></th>
 
-                        <th class="entities-col-name"><?= e(__('entities.section_basic')) ?></th>
+                        <th class="entities-col-name"><?= e(__('entities.col_job_org')) ?></th>
 
                         <th class="entities-col-scope"><?= e(__('entities.scope')) ?></th>
 

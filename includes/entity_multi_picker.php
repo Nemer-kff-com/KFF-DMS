@@ -20,6 +20,7 @@ $pickLabel = (string) ($pickLabel ?? __('bulk.add_recipients'));
 $editLabel = (string) ($editLabel ?? __('bulk.edit_recipients'));
 $emptyText = (string) ($emptyText ?? __('bulk.no_recipients'));
 $hintText = (string) ($hintText ?? __('bulk.or_pick'));
+$showDeliveryMode = !empty($showDeliveryMode);
 $groupNames = [];
 foreach ($groups as $g) {
     $groupNames[(string) (int) $g['id']] = (string) $g['name'];
@@ -144,6 +145,14 @@ $modalId = $pickerId . '-modal';
   var summaryReview = <?= json_encode(__('bulk.summary_review'), JSON_UNESCAPED_UNICODE) ?>;
   var noEmailTpl = <?= json_encode(__('bulk.no_email_count'), JSON_UNESCAPED_UNICODE) ?>;
   var showNames = <?= $showSelectedNames ? 'true' : 'false' ?>;
+  var showDelivery = <?= $showDeliveryMode ? 'true' : 'false' ?>;
+  var deliveryLabels = <?= json_encode([
+      'electronic' => __('bulk.delivery_electronic'),
+      'paper' => __('bulk.delivery_paper'),
+      'both' => __('bulk.delivery_both'),
+  ], JSON_UNESCAPED_UNICODE) ?>;
+  var deliveryApplyAll = <?= json_encode(__('bulk.delivery_apply_all'), JSON_UNESCAPED_UNICODE) ?>;
+  var deliveryEdit = <?= json_encode($editLabel, JSON_UNESCAPED_UNICODE) ?>;
   var initial = <?= json_encode($selectedPayloads, JSON_UNESCAPED_UNICODE) ?>;
   var groupMap = <?= json_encode($groupMembers, JSON_UNESCAPED_UNICODE) ?>;
   var groupNames = <?= json_encode($groupNames, JSON_UNESCAPED_UNICODE) ?>;
@@ -238,10 +247,21 @@ $modalId = $pickerId . '-modal';
     renderSelected();
   }
 
+  function deliveryOf(item) {
+    var mode = item && item.delivery;
+    return mode === 'electronic' || mode === 'both' ? mode : 'paper';
+  }
+  function withDelivery(item, previous) {
+    var next = Object.assign({}, item);
+    if (previous && previous.delivery) next.delivery = deliveryOf(previous);
+    else next.delivery = deliveryOf(next);
+    return next;
+  }
   function addDraft(item, skipRender) {
     if (!item || !item.id) return;
     var key = keyOf(item.id);
     if (!hasDraft(key)) draftOrder.push(key);
+    item = withDelivery(item, draft[key] || selected[key]);
     draft[key] = item;
     if (!skipRender) {
       renderDraftUi();
@@ -276,7 +296,7 @@ $modalId = $pickerId . '-modal';
     if (!item || !item.id) return;
     var key = keyOf(item.id);
     if (!hasCommitted(key)) order.push(key);
-    selected[key] = item;
+    selected[key] = withDelivery(item, selected[key]);
     if (!skipRender) renderSelected();
   }
 
@@ -292,19 +312,31 @@ $modalId = $pickerId . '-modal';
     return groupNames[String(id)] || '';
   }
 
+  function fillDeliverySelect(select, current) {
+    Object.keys(deliveryLabels).forEach(function (mode) {
+      var opt = document.createElement('option');
+      opt.value = mode;
+      opt.textContent = deliveryLabels[mode];
+      if (mode === current) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
   function renderSelected() {
     listEl.textContent = '';
     inputsEl.textContent = '';
     var n = 0;
     order.forEach(function (key) {
-      if (selected[key] && !(selected[key].email || '').trim()) n++;
-      if (selected[key]) {
-        var hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = inputName;
-        hidden.value = String(selected[key].id);
-        inputsEl.appendChild(hidden);
-      }
+      var item = selected[key];
+      if (!item) return;
+      var mode = deliveryOf(item);
+      item.delivery = mode;
+      var wantsMail = mode === 'electronic' || mode === 'both';
+      if (wantsMail && !(item.email || '').trim()) n++;
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = inputName;
+      hidden.value = String(item.id);
+      inputsEl.appendChild(hidden);
     });
     if (!order.length) {
       var empty = el('p', 'bulk-selected-empty mb-0', emptyText);
@@ -325,7 +357,7 @@ $modalId = $pickerId . '-modal';
         wrap.appendChild(chip);
       });
       listEl.appendChild(wrap);
-    } else {
+    } else if (!showDelivery) {
       var card = el('button', 'bulk-selected-summary');
       card.type = 'button';
       var iconWrap = el('span', 'bulk-selected-summary-icon');
@@ -340,6 +372,54 @@ $modalId = $pickerId . '-modal';
       card.appendChild(body);
       card.addEventListener('click', openPicker);
       listEl.appendChild(card);
+    }
+    if (showDelivery && order.length) {
+      var panel = el('div', 'bulk-delivery-list');
+      var bar = el('div', 'bulk-delivery-bar');
+      var editBtn = el('button', 'btn btn-sm btn-outline-secondary', deliveryEdit);
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', openPicker);
+      bar.appendChild(editBtn);
+      var applyLabel = el('label', 'bulk-delivery-apply');
+      applyLabel.appendChild(el('span', '', deliveryApplyAll));
+      var apply = document.createElement('select');
+      apply.className = 'form-select form-select-sm';
+      var applyBlank = document.createElement('option');
+      applyBlank.value = '';
+      applyBlank.textContent = '—';
+      apply.appendChild(applyBlank);
+      fillDeliverySelect(apply, '');
+      applyBlank.selected = true;
+      apply.addEventListener('change', function () {
+        if (!apply.value) return;
+        order.forEach(function (key) {
+          if (selected[key]) selected[key].delivery = apply.value;
+        });
+        renderSelected();
+      });
+      applyLabel.appendChild(apply);
+      bar.appendChild(applyLabel);
+      panel.appendChild(bar);
+      order.forEach(function (key) {
+        var item = selected[key];
+        if (!item) return;
+        var row = el('div', 'bulk-delivery-row');
+        var who = el('div', 'bulk-delivery-who');
+        who.appendChild(el('div', 'bulk-delivery-name', itemLabel(item)));
+        var sub = item.job || ((item.org && item.org !== itemLabel(item)) ? item.org : '');
+        if (sub) who.appendChild(el('div', 'bulk-delivery-sub', sub));
+        row.appendChild(who);
+        var select = document.createElement('select');
+        select.className = 'form-select form-select-sm';
+        select.name = 'recipient_delivery[' + String(item.id) + ']';
+        fillDeliverySelect(select, deliveryOf(item));
+        select.addEventListener('change', function () {
+          item.delivery = deliveryOf({ delivery: select.value });
+        });
+        row.appendChild(select);
+        panel.appendChild(row);
+      });
+      listEl.appendChild(panel);
     }
   }
 

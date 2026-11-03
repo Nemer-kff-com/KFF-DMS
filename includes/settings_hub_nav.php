@@ -2,7 +2,7 @@
 /**
  * شريط تنقل موحّد لإعدادات النظام / البريد / واتساب — روابط خفيفة بدون دمج النماذج.
  *
- * @var string $settingsHubActive org|numbering|approval_outgoing|approval_incoming|approval_internal|storage|email|whatsapp|load_check
+ * @var string $settingsHubActive org|numbering|approval_outgoing|approval_incoming|approval_internal|storage|confidential|email|whatsapp|load_check
  */
 $settingsHubActive = (string) ($settingsHubActive ?? 'org');
 $settingsHubItems = [
@@ -47,6 +47,13 @@ $settingsHubItems = [
         'icon' => 'bi-signpost-split',
         'label' => __('settings.tab_storage'),
         'mode' => 'settings',
+    ],
+    [
+        'key' => 'confidential',
+        'href' => base_url('admin/confidential_settings.php'),
+        'icon' => 'bi-eye-slash',
+        'label' => __('settings.tab_confidential'),
+        'mode' => 'link',
     ],
     [
         'key' => 'email',

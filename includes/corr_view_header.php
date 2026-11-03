@@ -143,7 +143,7 @@ $hasSecondaryActions = $secondaryActions !== [];
                 <?php endif; ?>
                 <?php if ($hasReceipt): ?>
                     <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
-                <?php elseif (!$isElectronic && !empty($canIssueActions)): ?>
+                <?php elseif (!empty($isPaper) && !empty($canIssueActions)): ?>
                     <span class="badge text-bg-secondary"><?= e(__('receipt.pending')) ?></span>
                 <?php endif; ?>
                 <?php if ($rsvpRequired): ?>
@@ -273,8 +273,9 @@ $hasSecondaryActions = $secondaryActions !== [];
             $canPrintForm = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'form', $user, $corr);
             $canPrintEnvelope = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'envelope', $user, $corr);
             $canPrintThermal = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'thermal', $user, $corr);
-            $showPrintEnvelope = $canPrintEnvelope && !$isCancelled && !$isElectronic;
-            $showPrintThermal = $canPrintThermal && !$isCancelled && !$isElectronic;
+            $showPrintEnvelope = $canPrintEnvelope && !$isCancelled && !empty($isPaper);
+            // الحراري للصق رقم الصادر على النسخة/الملف — يظهر حتى للصادر الإلكتروني بعد الاعتماد
+            $showPrintThermal = $canPrintThermal && !$isCancelled;
             $showPrintMail = !$isCancelled && mail_draft_user_allowed($user);
             $showPrintClose = !$isCancelled && correspondence_is_closed($corr) && trim((string) ($corr['close_action'] ?? '')) !== '';
             $showPrintMenu = !$ccViewerOnly && ($hasLetterPrint || $canPrintForm || $showPrintEnvelope || $showPrintThermal || $showPrintMail || $showPrintClose);

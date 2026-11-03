@@ -33,10 +33,15 @@ if ($selectedIds) {
     foreach ($selectedRows as $row) {
         $byId[(int) $row['id']] = entity_picker_payload($row, false);
     }
+    $postedDelivery = is_array($_POST['recipient_delivery'] ?? null) ? $_POST['recipient_delivery'] : [];
     foreach ($selectedIds as $id) {
-        if (isset($byId[$id])) {
-            $selectedPayloads[] = $byId[$id];
+        if (!isset($byId[$id])) {
+            continue;
         }
+        $payload = $byId[$id];
+        $mode = (string) ($postedDelivery[$id] ?? $postedDelivery[(string) $id] ?? 'paper');
+        $payload['delivery'] = in_array($mode, ['electronic', 'paper', 'both'], true) ? $mode : 'paper';
+        $selectedPayloads[] = $payload;
     }
 }
 
@@ -148,6 +153,8 @@ $corr = null;
                                     <?php
                                     $inputName = 'entity_ids[]';
                                     $pickerId = 'bulk-recipients';
+                                    $showDeliveryMode = true;
+                                    $hintText = __('bulk.delivery_per_hint');
                                     require __DIR__ . '/../includes/entity_multi_picker.php';
                                     ?>
                                 </div>
@@ -201,11 +208,14 @@ $corr = null;
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label" for="confidentiality"><?= e(__('corr.confidentiality')) ?></label>
-                                        <select name="confidentiality" id="confidentiality" class="form-select">
-                                            <?php foreach ($confidentialityRows as $c): ?>
-                                                <option value="<?= e($c['code']) ?>" <?= (string) $v('confidentiality', 'normal') === (string) $c['code'] ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
+                                        <div class="input-group conf-with-override">
+                                            <select name="confidentiality" id="confidentiality" class="form-select" data-conf-level-select>
+                                                <?php foreach ($confidentialityRows as $c): ?>
+                                                    <option value="<?= e($c['code']) ?>" <?= (string) $v('confidentiality', 'normal') === (string) $c['code'] ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <?php require __DIR__ . '/../includes/conf_attach_overrides_fields.php'; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -263,10 +273,6 @@ $corr = null;
                                 <div class="corr-field-card-title"><i class="bi bi-send me-1"></i><?= e(__('corr.section_options')) ?></div>
                                 <div class="corr-field-card-body flex-grow-1 d-flex flex-column">
                                     <div class="corr-option-grid corr-option-grid-compact corr-option-stack flex-grow-1">
-                                        <label class="corr-option-card" title="<?= e(__('corr.intend_electronic_hint')) ?>">
-                                            <input type="checkbox" class="form-check-input" name="intend_electronic" id="intend_electronic" value="1" <?= !empty($_POST['intend_electronic']) ? 'checked' : '' ?>>
-                                            <span class="corr-option-title"><?= e(__('corr.intend_electronic')) ?></span>
-                                        </label>
                                         <label class="corr-option-card" title="<?= e(__('rsvp.require_hint')) ?>">
                                             <input class="form-check-input" type="checkbox" name="requires_rsvp" id="requires_rsvp" value="1" <?= !empty($_POST['requires_rsvp']) ? 'checked' : '' ?>>
                                             <span class="corr-option-title"><?= e(__('rsvp.require')) ?></span>
@@ -278,7 +284,7 @@ $corr = null;
                     </div>
                 </div>
 
-                <?php require __DIR__ . '/../includes/corr_outgoing_letter_fields.php'; ?>
+                <?php $letterSectionAlways = true; require __DIR__ . '/../includes/corr_outgoing_letter_fields.php'; ?>
 
                 <div class="admin-form-section admin-form-section-last">
                     <label class="form-label" for="notes"><?= e(__('corr.notes')) ?></label>

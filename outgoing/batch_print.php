@@ -8,7 +8,34 @@ ensure_entity_groups_schema();
 $id = (int) ($_GET['id'] ?? 0);
 $batch = $id ? get_outgoing_batch($id) : null;
 $items = $id ? outgoing_batch_items($id, $user) : [];
-$items = array_values(array_filter($items, static fn(array $row): bool => !correspondence_is_cancelled($row)));
+$idFilter = [];
+$rawIds = $_GET['ids'] ?? null;
+if (is_array($rawIds)) {
+    foreach ($rawIds as $rawId) {
+        $vid = (int) $rawId;
+        if ($vid > 0) {
+            $idFilter[$vid] = true;
+        }
+    }
+} elseif (is_string($rawIds) && trim($rawIds) !== '') {
+    foreach (explode(',', $rawIds) as $rawId) {
+        $vid = (int) trim($rawId);
+        if ($vid > 0) {
+            $idFilter[$vid] = true;
+        }
+    }
+}
+$items = array_values(array_filter($items, static function (array $row) use ($idFilter): bool {
+    if (correspondence_is_cancelled($row)) {
+        return false;
+    }
+    $rowId = (int) ($row['id'] ?? 0);
+    if ($idFilter !== [] && !isset($idFilter[$rowId])) {
+        return false;
+    }
+
+    return function_exists('correspondence_intend_paper') && correspondence_intend_paper($row);
+}));
 if (!$batch) {
     flash('danger', __('corr.not_found'));
     redirect(base_url('outgoing/index.php'));

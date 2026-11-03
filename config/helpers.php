@@ -1205,6 +1205,13 @@ function ensure_org_settings(): void
             'outgoing_comms_alternate_enabled' => '1',
             'outgoing_comms_minutes' => '120',
             'outgoing_comms_unit' => 'hours',
+            'confidentiality_restricts_visibility' => '1',
+            'conf_attach_prep_signer' => '1',
+            'conf_attach_reviewer' => '1',
+            'conf_attach_approver' => '1',
+            'conf_attach_comms' => '1',
+            'conf_attach_cc' => '1',
+            'conf_external_notify_mode' => 'redacted',
             'circular_prefix' => '',
             'internal_prefix' => '',
             'incoming_prefix' => '',
@@ -1239,7 +1246,7 @@ function ensure_org_settings(): void
  * إصدار ترحيل المخطط — زِد الرقم عند إضافة ensure_* جديدة تحتاج التشغيل مرة.
  * عند التطابق يُتخطى فحص SHOW TABLES / ALTER في كل طلب (تحسين أداء السيرفر).
  */
-const DMS_SCHEMA_BOOTSTRAP_VERSION = '20261010.2';
+const DMS_SCHEMA_BOOTSTRAP_VERSION = '20261103.2';
 
 function dms_schema_bootstrap_flag_path(): string
 {
@@ -1287,6 +1294,12 @@ function dms_run_schema_bootstrap(): void
     ensure_archive_schema();
     ensure_security_schema();
     ensure_correspondence_receipt_schema();
+    if (function_exists('ensure_confidential_attach_overrides_schema')) {
+        ensure_confidential_attach_overrides_schema();
+    }
+    if (function_exists('ensure_register_confidentiality_schema')) {
+        ensure_register_confidentiality_schema();
+    }
     if (is_file(__DIR__ . '/couriers.php')) {
         require_once __DIR__ . '/couriers.php';
         if (function_exists('ensure_outgoing_courier_schema')) {
@@ -7290,6 +7303,9 @@ function get_correspondence(int $id): ?array
     if (function_exists('ensure_corr_letter_schema')) {
         ensure_corr_letter_schema();
     }
+    if (function_exists('ensure_letter_templates_schema')) {
+        ensure_letter_templates_schema();
+    }
     $stmt = db()->prepare(
         "SELECT c.*, d.name AS department_name, d.name_en AS department_name_en,
                 d.directed_from AS department_directed_from,
@@ -7315,7 +7331,8 @@ function get_correspondence(int $id): ?array
                 e.email AS entity_email,
                 b.letter_body AS batch_letter_body,
                 b.letter_body_en AS batch_letter_body_en,
-                b.requires_rsvp AS batch_requires_rsvp
+                b.requires_rsvp AS batch_requires_rsvp,
+                b.letter_template_id AS batch_letter_template_id
          FROM `tblcorrespondence` c
          LEFT JOIN `tbldepartments` d ON d.id = c.department_id
          LEFT JOIN `tbldepartments` idpt ON idpt.id = IFNULL(c.issuing_department_id, c.department_id)
@@ -7412,6 +7429,15 @@ function ensure_corr_electronic_schema(): void
                  ADD COLUMN `intend_electronic` TINYINT(1) NOT NULL DEFAULT 0
                  COMMENT 'سيُرسل إلكترونياً (بريد)' {$after}"
             );
+            $cols['intend_electronic'] = true;
+        }
+        if (empty($cols['intend_paper'])) {
+            $after = !empty($cols['intend_electronic']) ? 'AFTER `intend_electronic`' : '';
+            db()->exec(
+                "ALTER TABLE `tblcorrespondence`
+                 ADD COLUMN `intend_paper` TINYINT(1) NOT NULL DEFAULT 0
+                 COMMENT 'سيُسلّم ورقياً (ملصق ظرف)' {$after}"
+            );
         }
     } catch (Throwable $e) {
         error_log('DMS electronic schema: ' . $e->getMessage());
@@ -7454,6 +7480,45 @@ function corr_external_date_value($raw): ?string
 function correspondence_intend_electronic(array $corr): bool
 {
     return (int) ($corr['intend_electronic'] ?? 0) === 1;
+}
+
+/** ورقي، أو إلكتروني وورقي معاً. الصف القديم غير الإلكتروني يُعدّ ورقياً. */
+function correspondence_intend_paper(array $corr): bool
+{
+    if ((int) ($corr['intend_paper'] ?? 0) === 1) {
+        return true;
+    }
+
+    return (int) ($corr['intend_electronic'] ?? 0) !== 1;
+}
+
+/** @return 'electronic'|'paper'|'both' */
+function correspondence_delivery_mode(array $corr): string
+{
+    $electronic = correspondence_intend_electronic($corr);
+    $paper = correspondence_intend_paper($corr);
+    if ($electronic && $paper) {
+        return 'both';
+    }
+
+    return $electronic ? 'electronic' : 'paper';
+}
+
+function correspondence_paper_sql(string $alias = 'c'): string
+{
+    $alias = preg_replace('/[^A-Za-z0-9_]/', '', $alias) ?: 'c';
+
+    return '(IFNULL(' . $alias . '.intend_paper, 0) = 1 OR IFNULL(' . $alias . '.intend_electronic, 0) = 0)';
+}
+
+/** @return array{0:int,1:int} */
+function correspondence_delivery_flags(string $mode): array
+{
+    return match ($mode) {
+        'both' => [1, 1],
+        'paper' => [0, 1],
+        default => [1, 0],
+    };
 }
 
 /** نص الخطاب العربي/الإنجليزي على الصادر الفردي (إضافةً لنص دفعة الجماعي) */
@@ -7523,6 +7588,7 @@ function correspondence_outgoing_draft_row(array $data, ?array $user = null, boo
         'letter_body_en' => $letterBodyEn !== '' ? $letterBodyEn : null,
         'rsvp_required' => $rsvp,
         'intend_electronic' => !empty($data['intend_electronic']) ? 1 : 0,
+        'intend_paper' => !empty($data['intend_paper']) ? 1 : 0,
         'department_id' => $deptId > 0 ? $deptId : null,
         'issuing_department_id' => $issuingId > 0 ? $issuingId : null,
         'entity_id' => $entityId > 0 ? $entityId : null,
@@ -7780,14 +7846,28 @@ function correspondence_rsvp_required(array $corr): bool
         || (int) ($corr['batch_requires_rsvp'] ?? 0) === 1;
 }
 
-/** تنبيه طلب الرد على الحضور في الخطاب الورقي (خارج نص القالب الرسمي) */
+/** جملة تأكيد الحضور: الورقي بالمسح، والإلكتروني بالمسح أو النقر. المشترك يفرّق بين الطباعة والبريد. */
+function correspondence_rsvp_ask_key(array $corr, string $surface = 'print'): string
+{
+    $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
+    $paper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
+    $message = $surface === 'email' || $surface === 'whatsapp';
+    if ($message) {
+        return $electronic ? 'rsvp.email_ask' : 'rsvp.print_ask';
+    }
+
+    return ($paper || !$electronic) ? 'rsvp.print_ask' : 'rsvp.email_ask';
+}
+
+/** تنبيه طلب الرد على الحضور في الخطاب (خارج نص القالب الرسمي) */
 function render_letter_rsvp_notice(array $corr, string $lang = 'ar'): void
 {
     if (!correspondence_rsvp_required($corr)) {
         return;
     }
     $lang = $lang === 'en' ? 'en' : 'ar';
-    $text = function_exists('__lang') ? __lang('rsvp.print_ask', $lang) : __('rsvp.print_ask');
+    $askKey = correspondence_rsvp_ask_key($corr, 'print');
+    $text = function_exists('__lang') ? __lang($askKey, $lang) : __($askKey);
     $qrUri = dms_corr_qr_data_uri($corr, 160, true);
     echo '<div class="letter-rsvp-block">';
     echo '<div class="letter-rsvp-note">' . e($text) . '</div>';
@@ -8090,7 +8170,7 @@ function department_scope_sql(?array $user = null, string $alias = 'c'): array
     return [$sql, $params];
 }
 
-/** هل يحق للمستخدم رؤية/تعديل هذه المعاملة حسب القسم؟ */
+/** هل يحق للمستخدم رؤية/تعديل هذه المعاملة حسب القسم؟ (+ طبقة سرية الرؤية) */
 function user_can_access_correspondence(?array $corr, ?array $user = null): bool
 {
     if (!$corr) {
@@ -8100,60 +8180,61 @@ function user_can_access_correspondence(?array $corr, ?array $user = null): bool
     if (!$user) {
         return false;
     }
+
+    $allowed = false;
     if (function_exists('outgoing_prep_is_superseded') && outgoing_prep_is_superseded($corr)) {
-        return outgoing_user_can_view_superseded_prep($user, $corr);
-    }
-    if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
-        return outgoing_user_can_access_prep($user, $corr);
-    }
-    if (
+        $allowed = outgoing_user_can_view_superseded_prep($user, $corr);
+    } elseif (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
+        $allowed = outgoing_user_can_access_prep($user, $corr);
+    } elseif (
         !function_exists('user_needs_department_scope')
         || !user_needs_department_scope($user)
     ) {
-        return true;
-    }
-
-    // معتمد إصدار الصادر (أول / تصعيد / بديل) يحتاج فتح المعاملة عبر الإشعار أو لوحة الاعتماد
-    if (function_exists('outgoing_user_can_access_for_approval')
+        $allowed = true;
+    } elseif (function_exists('outgoing_user_can_access_for_approval')
         && outgoing_user_can_access_for_approval($user, $corr)
     ) {
-        return true;
+        $allowed = true;
+    } elseif (function_exists('incoming_approval_is_held') && incoming_approval_is_held($corr)) {
+        $allowed = (int) ($corr['created_by'] ?? 0) > 0 && (int) $corr['created_by'] === (int) ($user['id'] ?? 0);
+    } else {
+        $ids = function_exists('user_department_ids') ? user_department_ids($user) : [];
+        if ($ids) {
+            $corrDept = (int) ($corr['department_id'] ?? 0);
+            if ($corrDept > 0 && in_array($corrDept, $ids, true)) {
+                $allowed = true;
+            }
+            $issuingDept = (int) ($corr['issuing_department_id'] ?? 0);
+            if (!$allowed && $issuingDept > 0 && in_array($issuingDept, $ids, true)) {
+                $allowed = true;
+            }
+            $createdBy = (int) ($corr['created_by'] ?? 0);
+            if (!$allowed && $createdBy > 0 && $createdBy === (int) ($user['id'] ?? 0)) {
+                $allowed = true;
+            }
+            if (!$allowed) {
+                try {
+                    [$inSql, $inParams] = dms_sql_in('to_department_id', $ids);
+                    $stmt = db()->prepare(
+                        "SELECT 1 FROM `tblreferrals` WHERE correspondence_id = ? AND {$inSql} LIMIT 1"
+                    );
+                    $stmt->execute(array_merge([(int) $corr['id']], $inParams));
+                    $allowed = (bool) $stmt->fetchColumn();
+                } catch (Throwable $e) {
+                    $allowed = false;
+                }
+            }
+        }
     }
 
-    if (function_exists('incoming_approval_is_held') && incoming_approval_is_held($corr)) {
-        return (int) ($corr['created_by'] ?? 0) > 0 && (int) $corr['created_by'] === (int) ($user['id'] ?? 0);
-    }
-
-    $ids = function_exists('user_department_ids') ? user_department_ids($user) : [];
-    if (!$ids) {
+    if (!$allowed) {
         return false;
     }
-
-    $corrDept = (int) ($corr['department_id'] ?? 0);
-    if ($corrDept > 0 && in_array($corrDept, $ids, true)) {
-        return true;
+    if (function_exists('user_passes_confidential_visibility')) {
+        return user_passes_confidential_visibility($corr, $user);
     }
 
-    $issuingDept = (int) ($corr['issuing_department_id'] ?? 0);
-    if ($issuingDept > 0 && in_array($issuingDept, $ids, true)) {
-        return true;
-    }
-
-    $createdBy = (int) ($corr['created_by'] ?? 0);
-    if ($createdBy > 0 && $createdBy === (int) ($user['id'] ?? 0)) {
-        return true;
-    }
-
-    try {
-        [$inSql, $inParams] = dms_sql_in('to_department_id', $ids);
-        $stmt = db()->prepare(
-            "SELECT 1 FROM `tblreferrals` WHERE correspondence_id = ? AND {$inSql} LIMIT 1"
-        );
-        $stmt->execute(array_merge([(int) $corr['id']], $inParams));
-        return (bool) $stmt->fetchColumn();
-    } catch (Throwable $e) {
-        return false;
-    }
+    return true;
 }
 
 /** أي درجة سرية غير «عادي» تقيّد الاطلاع على المرفقات */
@@ -8178,8 +8259,8 @@ function view_confidential_perm_for_type(string $type): string
 }
 
 /**
- * مرفقات المعاملة السرية: من يملك صلاحية سرية هذا النوع (والمدير)، والمنشئ، ومعتمدو المعاملة، و«للاطلاع».
- * يُشترط فوق ذلك حق فتح المعاملة نفسها.
+ * مرفقات المعاملة السرية: طبقة D (منشئ/صلاحية/مدير) ثم مسار + مفاتيح B/C.
+ * يُشترط فوق ذلك حق فتح المعاملة نفسها عند الاستدعاء من الواجهة.
  */
 function user_can_view_corr_files(array $corr, ?array $user = null): bool
 {
@@ -8190,6 +8271,9 @@ function user_can_view_corr_files(array $corr, ?array $user = null): bool
     if (!$user) {
         return false;
     }
+    if (function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user)) {
+        return true;
+    }
     $perm = view_confidential_perm_for_type((string) ($corr['type'] ?? ''));
     if ($perm !== '' && user_can($perm, $user)) {
         return true;
@@ -8198,10 +8282,36 @@ function user_can_view_corr_files(array $corr, ?array $user = null): bool
     if ($uid > 0 && $uid === (int) ($corr['created_by'] ?? 0)) {
         return true;
     }
-    if (function_exists('outgoing_user_can_access_for_approval') && outgoing_user_can_access_for_approval($user, $corr)) {
-        return true;
+
+    $pathOk = false;
+    if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)
+        && function_exists('outgoing_user_can_access_prep') && outgoing_user_can_access_prep($user, $corr)
+    ) {
+        $pathOk = true;
     }
-    return function_exists('corr_cc_user_can_view') && corr_cc_user_can_view($corr, $user);
+    if (!$pathOk && function_exists('outgoing_user_can_access_for_approval')
+        && outgoing_user_can_access_for_approval($user, $corr)
+    ) {
+        $pathOk = true;
+    }
+    if (!$pathOk && function_exists('outgoing_user_can_dispatch') && outgoing_user_can_dispatch($user, $corr)) {
+        $pathOk = true;
+    }
+    if (!$pathOk && function_exists('corr_cc_user_can_view') && corr_cc_user_can_view($corr, $user)) {
+        $pathOk = true;
+    }
+    if (!$pathOk) {
+        return false;
+    }
+    if (function_exists('user_confidential_attach_stages')
+        && function_exists('user_confidential_attach_stages_allow')
+    ) {
+        $stages = user_confidential_attach_stages($corr, $user);
+
+        return user_confidential_attach_stages_allow($corr, $stages);
+    }
+
+    return true;
 }
 
 /** مرفق بعينه: صاحب الرفع يبقى قادراً على فتح ما رفعه */
@@ -8218,6 +8328,7 @@ function user_can_view_corr_document(array $corr, array $doc, ?array $user = nul
 function outgoing_missing_receipt_count(?array $user = null, ?int $days = null): int
 {
     ensure_correspondence_receipt_schema();
+    ensure_corr_electronic_schema();
     $user = $user ?? current_user();
     $days = $days ?? outgoing_receipt_alert_days();
     $where = [
@@ -8226,7 +8337,7 @@ function outgoing_missing_receipt_count(?array $user = null, ?int $days = null):
         "c.status <> 'delivered'",
         "c.status <> 'closed'",
         "c.status <> 'cancelled'",
-        'IFNULL(c.intend_electronic, 0) = 0',
+        correspondence_paper_sql('c'),
         "c.corr_date <= DATE_SUB(CURDATE(), INTERVAL ? DAY)",
         '(c.outgoing_prep_status IS NULL OR c.outgoing_prep_status NOT IN (\'draft\',\'pending_signer\',\'superseded\'))',
     ];

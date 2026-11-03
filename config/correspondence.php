@@ -52,6 +52,16 @@ function correspondence_list_where(string $type, array $filters = [], ?array $us
         }
     }
 
+    if (function_exists('sql_confidential_visibility_clause')) {
+        [$confSql, $confParams] = sql_confidential_visibility_clause('c', $user);
+        if ($confSql !== '' && $confSql !== '1=1') {
+            $where[] = $confSql;
+            foreach ($confParams as $p) {
+                $params[] = $p;
+            }
+        }
+    }
+
     if (!empty($filters['q'])) {
         if (function_exists('ensure_correspondence_party_snapshot_schema')) {
             ensure_correspondence_party_snapshot_schema();
@@ -153,7 +163,7 @@ function correspondence_list_where(string $type, array $filters = [], ?array $us
             $where[] = "(c.receipt_name IS NULL OR c.receipt_name = '')";
             $where[] = "c.status <> 'delivered'";
             $where[] = "c.status <> 'cancelled'";
-            $where[] = 'IFNULL(c.intend_electronic, 0) = 0';
+            $where[] = correspondence_paper_sql('c');
         } elseif ($filters['receipt'] === 'recorded') {
             $where[] = "(c.receipt_name IS NOT NULL AND c.receipt_name <> '')";
         } elseif ($filters['receipt'] === 'overdue_missing') {
@@ -162,7 +172,7 @@ function correspondence_list_where(string $type, array $filters = [], ?array $us
             $where[] = "c.status <> 'cancelled'";
             $where[] = "c.status <> 'delivered'";
             $where[] = "c.status <> 'closed'";
-            $where[] = 'IFNULL(c.intend_electronic, 0) = 0';
+            $where[] = correspondence_paper_sql('c');
             $where[] = 'c.corr_date <= DATE_SUB(CURDATE(), INTERVAL ? DAY)';
             $params[] = $days;
         }
@@ -177,7 +187,7 @@ function correspondence_list_where(string $type, array $filters = [], ?array $us
         if ($channel === 'electronic') {
             $where[] = 'IFNULL(c.intend_electronic, 0) = 1';
         } elseif ($channel === 'paper') {
-            $where[] = 'IFNULL(c.intend_electronic, 0) = 0';
+            $where[] = correspondence_paper_sql('c');
         }
     }
 
@@ -577,6 +587,16 @@ function save_correspondence(string $type, array $data, ?array $file, array $use
             ]
         ));
         $corrId = $id;
+        if (function_exists('dms_normalize_conf_attach_overrides_input')
+            && function_exists('dms_db_column_exists')
+            && dms_db_column_exists('tblcorrespondence', 'confidential_attach_overrides')
+        ) {
+            $ovJson = confidentiality_is_restricted($confidentiality)
+                ? dms_normalize_conf_attach_overrides_input($data['conf_attach_override'] ?? null)
+                : null;
+            db()->prepare('UPDATE `tblcorrespondence` SET confidential_attach_overrides = ? WHERE id = ?')
+                ->execute([$ovJson, $corrId]);
+        }
         log_activity((int)$user['id'], $corrId, 'update', 'تحديث معاملة ' . type_label($type));
         if ($oldStatus !== null && $oldStatus !== $status) {
             log_activity(
@@ -614,6 +634,17 @@ function save_correspondence(string $type, array $data, ?array $file, array $use
             ]
         ));
         $corrId = (int) db()->lastInsertId();
+        if (function_exists('dms_normalize_conf_attach_overrides_input')
+            && function_exists('dms_db_column_exists')
+            && dms_db_column_exists('tblcorrespondence', 'confidential_attach_overrides')
+            && confidentiality_is_restricted($confidentiality)
+        ) {
+            $ovJson = dms_normalize_conf_attach_overrides_input($data['conf_attach_override'] ?? null);
+            if ($ovJson !== null) {
+                db()->prepare('UPDATE `tblcorrespondence` SET confidential_attach_overrides = ? WHERE id = ?')
+                    ->execute([$ovJson, $corrId]);
+            }
+        }
         if ($asOutgoingDraft && function_exists('outgoing_prep_bind_id_ref')) {
             try {
                 outgoing_prep_bind_id_ref($corrId);
@@ -1171,11 +1202,17 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
     ensure_entities_schema();
     ensure_correspondence_party_snapshot_schema();
     ensure_entity_groups_schema();
+    if (function_exists('ensure_letter_templates_schema')) {
+        ensure_letter_templates_schema();
+    }
     if (function_exists('ensure_corr_rsvp_schema')) {
         ensure_corr_rsvp_schema();
     }
     if (function_exists('ensure_corr_letter_schema')) {
         ensure_corr_letter_schema();
+    }
+    if (function_exists('ensure_corr_electronic_schema')) {
+        ensure_corr_electronic_schema();
     }
     if (!user_can('outgoing.bulk', $user)) {
         throw new RuntimeException(__('auth.forbidden'));
@@ -1184,10 +1221,10 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
     $subject = trim((string) ($data['subject'] ?? ''));
     $letterBody = trim((string) ($data['letter_body'] ?? '')) ?: null;
     $letterBodyEn = trim((string) ($data['letter_body_en'] ?? '')) ?: null;
-    $intendElectronic = !empty($data['intend_electronic']) ? 1 : 0;
-    if (!$intendElectronic) {
-        $letterBody = null;
-        $letterBodyEn = null;
+    $postedDelivery = is_array($data['recipient_delivery'] ?? null) ? $data['recipient_delivery'] : [];
+    $fallbackMode = (string) ($data['delivery_mode'] ?? '');
+    if (!in_array($fallbackMode, ['electronic', 'paper', 'both'], true)) {
+        $fallbackMode = !empty($data['intend_electronic']) ? 'electronic' : 'paper';
     }
     $requiresRsvp = (!empty($data['requires_rsvp']) || !empty($data['rsvp_required'])) ? 1 : 0;
     $corrDate = $data['corr_date'] ?? date('Y-m-d');
@@ -1198,6 +1235,7 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
     $categoryId = (int) ($data['category_id'] ?? 0) ?: null;
     $notes = trim((string) ($data['notes'] ?? '')) ?: null;
     $groupId = (int) ($data['entity_group_id'] ?? 0) ?: null;
+    $letterTemplateId = (int) ($data['letter_template_id'] ?? 0) ?: null;
     [$deptId, $issuingDeptId] = outgoing_resolve_sign_from($user, (int) ($data['issuing_department_id'] ?? 0));
     $allowedStatus = correspondence_assignable_status_codes();
     $allowedPriority = array_values(array_filter(array_map(
@@ -1259,7 +1297,20 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
         && outgoing_prep_enabled()
         && function_exists('outgoing_prep_placeholder_ref')
         && function_exists('outgoing_prep_bind_id_ref');
-    if (!$asDraft && !$intendElectronic && $uploadFiles === []) {
+    $anyPaperOnly = false;
+    $recipientModes = [];
+    foreach ($recipients as $entity) {
+        $entityId = (int) $entity['id'];
+        $mode = (string) ($postedDelivery[$entityId] ?? $postedDelivery[(string) $entityId] ?? $fallbackMode);
+        if (!in_array($mode, ['electronic', 'paper', 'both'], true)) {
+            $mode = 'paper';
+        }
+        $recipientModes[$entityId] = $mode;
+        if ($mode === 'paper') {
+            $anyPaperOnly = true;
+        }
+    }
+    if (!$asDraft && $anyPaperOnly && $uploadFiles === []) {
         throw new RuntimeException(__('out_prep.attachment_before_review'));
     }
     if (function_exists('ensure_outgoing_prep_schema')) {
@@ -1279,9 +1330,9 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
     $pdo->beginTransaction();
     try {
         $pdo->prepare(
-            "INSERT INTO `tbloutgoing_batches` (subject, letter_body, letter_body_en, requires_rsvp, entity_group_id, created_by)
-             VALUES (?, ?, ?, ?, ?, ?)"
-        )->execute([$subject, $letterBody, $letterBodyEn, $requiresRsvp, $groupId, (int) $user['id']]);
+            "INSERT INTO `tbloutgoing_batches` (subject, letter_body, letter_body_en, requires_rsvp, entity_group_id, created_by, letter_template_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([$subject, $letterBody, $letterBodyEn, $requiresRsvp, $groupId, (int) $user['id'], $letterTemplateId]);
         $batchId = (int) $pdo->lastInsertId();
         $refs = $asDraft ? [] : next_ref_numbers('outgoing', count($recipients), $deptId);
         $insert = $pdo->prepare(
@@ -1290,8 +1341,8 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
              snap_title_prefix, snap_person_name, snap_job_title, snap_honorific, snap_org_name,
              snap_from_prefix, snap_from_person, snap_from_job, snap_from_org, snap_from_signature,
              external_ref, corr_date, reply_due,
-             status, priority, confidentiality, category_id, notes, letter_body, letter_body_en, qr_token, linked_id, batch_id, department_id, issuing_department_id, created_by, rsvp_required, intend_electronic, outgoing_prep_status)
-            VALUES ('outgoing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)"
+             status, priority, confidentiality, category_id, notes, letter_body, letter_body_en, qr_token, linked_id, batch_id, department_id, issuing_department_id, created_by, rsvp_required, intend_electronic, intend_paper, outgoing_prep_status)
+            VALUES ('outgoing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
         $seedDocs = [];
         foreach ($recipients as $i => $entity) {
@@ -1330,7 +1381,7 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
                     $issuingDeptId,
                     (int) $user['id'],
                     $requiresRsvp,
-                    $intendElectronic,
+                    ...correspondence_delivery_flags($recipientModes[(int) $entity['id']] ?? 'paper'),
                     $asDraft ? 'draft' : null,
                 ]
             ));
@@ -1338,6 +1389,17 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
             if ($asDraft) {
                 outgoing_prep_bind_id_ref($corrId);
                 $ref = 'OD-' . $corrId;
+            }
+            if (function_exists('dms_normalize_conf_attach_overrides_input')
+                && function_exists('dms_db_column_exists')
+                && function_exists('confidentiality_is_restricted')
+                && dms_db_column_exists('tblcorrespondence', 'confidential_attach_overrides')
+            ) {
+                $ovJson = confidentiality_is_restricted($confidentiality)
+                    ? dms_normalize_conf_attach_overrides_input($data['conf_attach_override'] ?? null)
+                    : null;
+                $pdo->prepare('UPDATE `tblcorrespondence` SET confidential_attach_overrides = ? WHERE id = ?')
+                    ->execute([$ovJson, $corrId]);
             }
             save_correspondence_enclosures($corrId, correspondence_enclosures_from_request($data));
             if ($uploadFiles !== []) {
@@ -1392,4 +1454,41 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
     }
 
     return $batchId;
+}
+
+function outgoing_batch_set_recipient_modes(int $batchId, array $modes): void
+{
+    if (function_exists('ensure_corr_electronic_schema')) {
+        ensure_corr_electronic_schema();
+    }
+    $st = db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET intend_electronic = ?, intend_paper = ?
+         WHERE id = ? AND batch_id = ? AND type = 'outgoing'"
+    );
+    foreach ($modes as $corrId => $mode) {
+        $corrId = (int) $corrId;
+        $mode = (string) $mode;
+        if ($corrId <= 0 || !in_array($mode, ['electronic', 'paper', 'both'], true)) {
+            continue;
+        }
+        [$electronic, $paper] = correspondence_delivery_flags($mode);
+        $st->execute([$electronic, $paper, $corrId, $batchId]);
+    }
+}
+
+function outgoing_batch_set_delivery_mode(int $batchId, string $mode): void
+{
+    if (!in_array($mode, ['electronic', 'paper', 'both'], true)) {
+        throw new InvalidArgumentException(__('bulk.delivery_mode'));
+    }
+    if (function_exists('ensure_corr_electronic_schema')) {
+        ensure_corr_electronic_schema();
+    }
+    [$electronic, $paper] = correspondence_delivery_flags($mode);
+    db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET intend_electronic = ?, intend_paper = ?
+         WHERE batch_id = ? AND type = 'outgoing'"
+    )->execute([$electronic, $paper, $batchId]);
 }

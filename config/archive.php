@@ -510,15 +510,43 @@ function user_can_access_archive(array $item, ?array $user = null): bool
     if (!$user || !user_can_archive_section('general', 'view', $user)) {
         return false;
     }
+    $allowed = false;
     if (!function_exists('user_needs_department_scope') || !user_needs_department_scope($user)) {
+        $allowed = true;
+    } else {
+        $uid = (int) ($user['id'] ?? 0);
+        if ($uid > 0 && $uid === (int) ($item['created_by'] ?? 0)) {
+            $allowed = true;
+        } else {
+            $deptId = (int) ($item['department_id'] ?? 0);
+            $allowed = $deptId > 0 && function_exists('user_can_access_department') && user_can_access_department($deptId, $user);
+        }
+    }
+    if (!$allowed) {
+        return false;
+    }
+    if (!function_exists('confidentiality_is_restricted')
+        || !confidentiality_is_restricted($item['confidentiality'] ?? '')
+    ) {
+        return true;
+    }
+    if (function_exists('dms_confidentiality_visibility_enabled')
+        && !dms_confidentiality_visibility_enabled()
+    ) {
+        return true;
+    }
+    if (function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user)) {
         return true;
     }
     $uid = (int) ($user['id'] ?? 0);
     if ($uid > 0 && $uid === (int) ($item['created_by'] ?? 0)) {
         return true;
     }
-    $deptId = (int) ($item['department_id'] ?? 0);
-    return $deptId > 0 && function_exists('user_can_access_department') && user_can_access_department($deptId, $user);
+    if (function_exists('user_can') && user_can('view.confidential.general', $user)) {
+        return true;
+    }
+
+    return false;
 }
 
 function user_can_edit_archive(array $item, ?array $user = null): bool
@@ -527,7 +555,7 @@ function user_can_edit_archive(array $item, ?array $user = null): bool
     return can_edit_archive($user) && user_can_access_archive($item, $user);
 }
 
-/** ملف عنصر أرشيف سري: من يملك صلاحية سرية هذا الأرشيف (والمدير)، ومن أضاف العنصر، ومن رفع الملف */
+/** ملف عنصر أرشيف سري: منشئ / صلاحية سرية / مدير / رافع الملف */
 function user_can_view_archive_file(array $item, array $file, ?array $user = null): bool
 {
     if (!confidentiality_is_restricted($item['confidentiality'] ?? '')) {
@@ -536,6 +564,9 @@ function user_can_view_archive_file(array $item, array $file, ?array $user = nul
     $user = $user ?? current_user();
     if (!$user) {
         return false;
+    }
+    if (function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user)) {
+        return true;
     }
     if (user_can('view.confidential.general', $user)) {
         return true;
@@ -588,9 +619,9 @@ function archive_list_where(array $filters = [], ?array $user = null): array
     $where = ['1=1'];
     $params = [];
 
+    $uid = (int) ($user['id'] ?? 0);
     if (function_exists('user_needs_department_scope') && user_needs_department_scope($user)) {
         $ids = function_exists('user_department_ids') ? user_department_ids($user) : [];
-        $uid = (int) ($user['id'] ?? 0);
         if (!$ids) {
             $where[] = 'a.created_by = ?';
             $params[] = $uid;
@@ -599,6 +630,15 @@ function archive_list_where(array $filters = [], ?array $user = null): array
             $where[] = "({$inSql} OR a.created_by = ?)";
             $params = array_merge($params, $inParams, [$uid]);
         }
+    }
+    // السري: لا يظهر بمجرد القسم أو «كل الأقسام» — فقط منشئ / صلاحية سرية / مدير
+    if (function_exists('dms_confidentiality_visibility_enabled')
+        && dms_confidentiality_visibility_enabled()
+        && !(function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user))
+        && !(function_exists('user_can') && user_can('view.confidential.general', $user))
+    ) {
+        $where[] = "(IFNULL(a.confidentiality,'normal') IN ('','normal') OR a.created_by = ?)";
+        $params[] = $uid;
     }
 
     if (!empty($filters['q'])) {
@@ -862,6 +902,14 @@ function save_archive_item(array $data, array $user, ?int $id = null): int
     }
     $extraJson = archive_extra_encode(archive_extra_from_post($data));
     $hasExtra = function_exists('dms_db_column_exists') && dms_db_column_exists('tblarchive_items', 'extra_json');
+    $ovJson = null;
+    if (function_exists('dms_normalize_conf_attach_overrides_input')
+        && function_exists('confidentiality_is_restricted')
+        && confidentiality_is_restricted($conf)
+    ) {
+        $ovJson = dms_normalize_conf_attach_overrides_input($data['conf_attach_override'] ?? null);
+    }
+    $hasOv = function_exists('dms_db_column_exists') && dms_db_column_exists('tblarchive_items', 'confidential_attach_overrides');
 
     if ($id) {
         if ($hasExtra) {
@@ -882,6 +930,10 @@ function save_archive_item(array $data, array $user, ?int $id = null): int
                 $title, $titleEn, $docType, $docDate, $docYear, $party, $oldRef, $location,
                 $deptId, $categoryId, $conf, $keywords, $notes, $corrId, $id,
             ]);
+        }
+        if ($hasOv) {
+            db()->prepare('UPDATE `tblarchive_items` SET confidential_attach_overrides = ? WHERE id = ?')
+                ->execute([$ovJson, $id]);
         }
         log_activity((int) $user['id'], null, 'archive_update', '', $id);
         return $id;
@@ -908,6 +960,10 @@ function save_archive_item(array $data, array $user, ?int $id = null): int
         ]);
     }
     $newId = (int) db()->lastInsertId();
+    if ($hasOv && $ovJson !== null) {
+        db()->prepare('UPDATE `tblarchive_items` SET confidential_attach_overrides = ? WHERE id = ?')
+            ->execute([$ovJson, $newId]);
+    }
     log_activity((int) $user['id'], null, 'archive_create', '', $newId);
     return $newId;
 }

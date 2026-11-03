@@ -38,6 +38,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enable_rsvp'])) {
     redirect(base_url('outgoing/batch.php?id=' . $id));
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['recipient_delivery']) && is_array($_POST['recipient_delivery'])) {
+    $deliveryAjax = (string) ($_POST['ajax'] ?? '') === '1';
+    verify_csrf();
+    try {
+        if (!user_can('outgoing.bulk', $user)) {
+            throw new RuntimeException(__('auth.forbidden'));
+        }
+        outgoing_batch_set_recipient_modes($id, $_POST['recipient_delivery']);
+        if ($deliveryAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => true, 'message' => __('bulk.delivery_saved')], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        flash('success', __('bulk.delivery_saved'));
+    } catch (Throwable $e) {
+        if ($deliveryAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        flash('danger', $e->getMessage());
+    }
+    redirect(base_url('outgoing/batch.php?id=' . $id));
+}
+
 $rsvpOn = !empty($batch['requires_rsvp']) || correspondence_rsvp_required($items[0] ?? []);
 $rsvpSummary = batch_rsvp_summary($items);
 
@@ -52,9 +78,16 @@ $canSendMsg = $sendMsgUi === 'allow';
 $canDeliver = $deliverUi === 'allow';
 $canSend = $canSendMsg || $canDeliver;
 $showSendGroup = $sendMsgUi !== 'hide' || $deliverUi !== 'hide';
-$batchElectronic = $items !== []
-    && function_exists('correspondence_intend_electronic')
-    && correspondence_intend_electronic($items[0]);
+$batchElectronic = false;
+$batchPaper = false;
+foreach ($items as $row) {
+    if (function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($row)) {
+        $batchElectronic = true;
+    }
+    if (function_exists('correspondence_intend_paper') && correspondence_intend_paper($row)) {
+        $batchPaper = true;
+    }
+}
 $apprSummary = function_exists('outgoing_batch_approval_summary')
     ? outgoing_batch_approval_summary($items, $user)
     : ['configured' => false, 'can_issue' => true, 'block_reason' => '', 'can_request' => false, 'can_decide' => false];
@@ -73,6 +106,7 @@ $noEmail = 0;
 $anySent = 0;
 $deliverySent = 0;
 $issuableAny = 0;
+$issuablePaper = 0;
 $issuableEmail = 0;
 $issuableMobile = 0;
 foreach ($items as $row) {
@@ -81,12 +115,17 @@ foreach ($items as $row) {
     $hasMobile = dms_corr_mobile_number($row) !== '';
     $rowIssuable = !correspondence_is_cancelled($row)
         && (!function_exists('outgoing_can_issue') || outgoing_can_issue($row));
+    $rowElectronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($row);
+    $rowPaper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($row);
     if ($rowIssuable) {
         $issuableAny++;
-        if ($hasEmail) {
+        if ($rowPaper) {
+            $issuablePaper++;
+        }
+        if ($rowElectronic && $hasEmail) {
             $issuableEmail++;
         }
-        if ($hasMobile) {
+        if ($rowElectronic && $hasMobile) {
             $issuableMobile++;
         }
     }
@@ -153,6 +192,18 @@ $hasBatchSecondary = $batchSecondary !== [];
     <div class="corr-view-title-wrap">
         <h1 class="page-title"><?= e((string) ($batch['subject'] ?? __('bulk.result_title'))) ?></h1>
         <p class="page-sub"><?= e(__('bulk.result_title')) ?> · <?= e(str_replace(':count', (string) count($items), __('bulk.result_count'))) ?></p>
+        <?php
+        $batchSignerLines = function_exists('letter_signer_lines') ? letter_signer_lines($items[0]) : [];
+        $batchSignerName = trim((string) (letter_signature_context($items[0])['person'] ?? ''));
+        ?>
+        <?php if ($batchSignerLines !== []): ?>
+        <div class="batch-from-once">
+            <div class="batch-from-label"><?= e(__('corr.issuing_department')) ?></div>
+            <?php foreach ($batchSignerLines as $signerLine): ?>
+                <div class="<?= $batchSignerName !== '' && $signerLine === $batchSignerName ? 'batch-from-name' : '' ?>"><?= e($signerLine) ?></div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </div>
     <div class="page-header-actions corr-view-actions">
         <div class="corr-actions-group corr-actions-primary">
@@ -174,21 +225,34 @@ $hasBatchSecondary = $batchSecondary !== [];
                         </a>
                     </li>
                     <?php endif; ?>
+                    <?php if ($batchPaper): ?>
                     <li>
-                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_print.php?id=' . $id)) ?>" target="_blank" rel="noopener">
+                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_print.php?id=' . $id)) ?>" target="_blank" rel="noopener"
+                           data-batch-print-selected
+                           data-print-paper="1"
+                           data-print-base="<?= e(base_url('outgoing/batch_print.php?id=' . $id)) ?>">
                             <i class="bi bi-file-text me-2"></i><?= e(__('bulk.print_letters')) ?>
                         </a>
                     </li>
-                    <?php if ($canPrintEnvelope && !$batchElectronic): ?>
+                    <?php endif; ?>
+                    <?php if ($canPrintEnvelope && $batchPaper): ?>
                     <li>
-                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_labels.php?id=' . $id)) ?>" target="_blank" rel="noopener">
+                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_labels.php?id=' . $id)) ?>" target="_blank" rel="noopener"
+                           data-batch-print-selected
+                           data-print-paper="1"
+                           data-print-base="<?= e(base_url('outgoing/batch_labels.php?id=' . $id)) ?>"
+                           title="<?= e(__('bulk.print_selected_hint')) ?>">
                             <i class="bi bi-sticky me-2"></i><?= e(__('bulk.print_labels')) ?>
                         </a>
                     </li>
                     <?php endif; ?>
-                    <?php if ($canPrintThermal && !$batchElectronic): ?>
+                    <?php if ($canPrintThermal && $batchPaper): ?>
                     <li>
-                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_thermal.php?id=' . $id)) ?>" target="_blank" rel="noopener">
+                        <a class="dropdown-item" href="<?= e(base_url('outgoing/batch_thermal.php?id=' . $id)) ?>" target="_blank" rel="noopener"
+                           data-batch-print-selected
+                           data-print-paper="1"
+                           data-print-base="<?= e(base_url('outgoing/batch_thermal.php?id=' . $id)) ?>"
+                           title="<?= e(__('bulk.thermal_selected_hint')) ?>">
                             <i class="bi bi-upc me-2"></i><?= e(__('thermal.print')) ?>
                         </a>
                     </li>
@@ -251,15 +315,18 @@ $hasBatchSecondary = $batchSecondary !== [];
                 <?php
                 $emailBtnOk = $emailReady && $issuableEmail > 0;
                 $waBtnOk = $waReady && $issuableMobile > 0;
-                $deliveryBtnOk = $issuableAny > 0;
+                $deliveryBtnOk = $issuablePaper > 0;
                 $sendBlockTip = $issuableAny > 0 ? '' : $batchBlockReason;
                 ?>
                 <?php if ($canSendMsg && $batchElectronic): ?>
                 <button class="btn btn-kff" type="submit" name="channel" value="email" data-batch-send data-need-ready="<?= $emailBtnOk ? '1' : '0' ?>" data-confirm="<?= e(__('send.confirm_batch_email')) ?>" <?= $emailBtnOk ? '' : 'disabled' ?> title="<?= e($sendBlockTip) ?>">
                     <i class="bi bi-envelope me-1"></i><?= e(__('send.batch_email')) ?>
                 </button>
-                <button class="btn btn-outline-secondary" type="button" id="batch-email-preview-btn" <?= $emailCount > 0 ? '' : 'disabled' ?> title="<?= e(__('send.email_preview')) ?>">
-                    <i class="bi bi-eye me-1"></i><?= e(__('send.email_preview')) ?>
+                <button class="letter-token-btn is-format is-icon" type="button" id="batch-email-preview-btn" <?= $emailCount > 0 ? '' : 'disabled' ?>
+                        data-bs-toggle="tooltip" data-bs-placement="top"
+                        title="<?= e(__('tpl.preview_email')) ?>"
+                        aria-label="<?= e(__('tpl.preview_email')) ?>">
+                    <i class="bi bi-envelope-open" aria-hidden="true"></i>
                 </button>
                 <button class="btn btn-success" type="submit" name="channel" value="whatsapp" data-batch-send data-need-ready="<?= $waBtnOk ? '1' : '0' ?>" data-confirm="<?= e(__('send.confirm_batch_wa')) ?>" <?= $waBtnOk ? '' : 'disabled' ?> title="<?= e($sendBlockTip) ?>">
                     <i class="bi bi-whatsapp me-1"></i><?= e(__('send.batch_wa')) ?>
@@ -268,6 +335,16 @@ $hasBatchSecondary = $batchSecondary !== [];
                 <?= dms_perm_denied_btn(__('send.batch_email'), 'bi-envelope', 'btn-kff') ?>
                 <?= dms_perm_denied_btn(__('send.batch_wa'), 'bi-whatsapp', 'btn-success') ?>
                 <?php endif; ?>
+                <a class="letter-token-btn is-format is-icon<?= $batchPaper ? '' : ' d-none' ?>" href="<?= e(base_url('outgoing/batch_print.php?id=' . $id)) ?>" target="_blank" rel="noopener"
+                   data-batch-letter-preview
+                   data-batch-print-selected
+                   data-print-paper="1"
+                   data-print-base="<?= e(base_url('outgoing/batch_print.php?id=' . $id)) ?>"
+                   data-bs-toggle="tooltip" data-bs-placement="top"
+                   title="<?= e(__('tpl.preview_letter')) ?>"
+                   aria-label="<?= e(__('tpl.preview_letter')) ?>">
+                    <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                </a>
                 <?php if ($canDeliver): ?>
                 <button class="btn btn-outline-warning" type="submit" name="channel" value="delivery" data-batch-send data-need-ready="<?= $deliveryBtnOk ? '1' : '0' ?>" data-confirm="<?= e(__('send.confirm_batch_delivery')) ?>" <?= $deliveryBtnOk ? '' : 'disabled' ?> title="<?= e($sendBlockTip) ?>">
                     <i class="bi bi-clipboard-check me-1"></i><?= e(__('send.batch_delivery')) ?>
@@ -424,9 +501,6 @@ $batchUnsent = $batchTotal - (int) $anySent;
             <span class="batch-chip<?= $batchUnsent > 0 ? ' is-warn' : '' ?>"><?= e(__('send.stat_unsent')) ?> <b><?= (int) $batchUnsent ?></b></span>
             <span class="batch-chip"><?= e(__('send.email')) ?> <b><?= (int) $emailSent ?></b> · <?= e(__('send.stat_unsent')) ?> <?= (int) $emailPending ?></span>
             <span class="batch-chip"><?= e(__('send.delivery')) ?> <b><?= (int) $deliverySent ?></b></span>
-            <?php if ((int) $noEmail > 0): ?>
-            <span class="batch-chip is-muted"><?= e(__('send.stat_no_email')) ?> <b><?= (int) $noEmail ?></b></span>
-            <?php endif; ?>
             <?php if ($rsvpOn): ?>
             <span class="batch-chip is-ok"><?= e(__('rsvp.attending')) ?> <b><?= (int) $rsvpSummary['attending'] ?></b></span>
             <span class="batch-chip is-danger"><?= e(__('rsvp.declined')) ?> <b><?= (int) $rsvpSummary['declined'] ?></b></span>
@@ -442,6 +516,12 @@ $batchUnsent = $batchTotal - (int) $anySent;
     </div>
 </div>
 
+<?php if ($canBulkOps): ?>
+<form method="post" id="batch-delivery-form" class="d-none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="batch_id" value="<?= (int) $id ?>">
+</form>
+<?php endif; ?>
 <div class="card-panel">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="batch-results-table">
@@ -454,7 +534,8 @@ $batchUnsent = $batchTotal - (int) $anySent;
                     <?php endif; ?>
                     <th><?= e(__('corr.number')) ?></th>
                     <th><?= e(__('corr.party_to')) ?></th>
-                    <th><?= e(__('entities.section_basic')) ?></th>
+                    <th><?= e(__('entities.col_job_org')) ?></th>
+                    <th><?= e(__('bulk.delivery_mode')) ?></th>
                     <th class="text-center"><?= e(__('send.email')) ?></th>
                     <th class="text-center batch-send-icon-col" title="<?= e(__('send.do_email')) ?>"><i class="bi bi-envelope"></i></th>
                     <th class="text-center"><?= e(__('send.whatsapp')) ?></th>
@@ -484,11 +565,15 @@ $batchUnsent = $batchTotal - (int) $anySent;
                 $rowBlock = (!$rowCanIssue && function_exists('outgoing_approval_block_reason'))
                     ? outgoing_approval_block_reason($r)
                     : '';
+                $rowElectronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($r);
+                $rowPaper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($r);
+                $rowMode = function_exists('correspondence_delivery_mode') ? correspondence_delivery_mode($r) : ($rowElectronic ? 'electronic' : 'paper');
+                $rowPaperOnly = $rowMode === 'paper';
                 ?>
                 <tr<?= $rowCancelled ? ' class="table-secondary"' : '' ?>>
                     <?php if ($canSend): ?>
                         <td class="batch-select-col">
-                            <input type="checkbox" class="form-check-input batch-select-row" name="ids[]" value="<?= (int) $r['id'] ?>" form="batch-send-form"<?= ($rowCancelled || !$rowCanIssue) ? ' disabled' : ' checked' ?> data-can-issue="<?= ($rowCancelled || !$rowCanIssue) ? '0' : '1' ?>" data-has-email="<?= $email !== '' ? '1' : '0' ?>" data-has-mobile="<?= $mobile !== '' ? '1' : '0' ?>">
+                            <input type="checkbox" class="form-check-input batch-select-row" name="ids[]" value="<?= (int) $r['id'] ?>" form="batch-send-form"<?= ($rowCancelled || !$rowCanIssue || $rowPaperOnly) ? ' disabled' : ' checked' ?> data-can-issue="<?= ($rowCancelled || !$rowCanIssue) ? '0' : '1' ?>" data-has-email="<?= $email !== '' ? '1' : '0' ?>" data-has-mobile="<?= $mobile !== '' ? '1' : '0' ?>" data-electronic="<?= $rowElectronic ? '1' : '0' ?>" data-paper="<?= $rowPaper ? '1' : '0' ?>">
                         </td>
                     <?php endif; ?>
                     <td class="fw-semibold" dir="ltr"><?= e($r['ref_number']) ?></td>
@@ -496,60 +581,73 @@ $batchUnsent = $batchTotal - (int) $anySent;
                     $partyArchived = correspondence_archived_party($r);
                     render_entity_party_columns($partyArchived);
                     ?>
-                    <td class="batch-channel-cell">
-                        <div class="batch-channel-stack">
-                        <?php if ($email !== ''): ?>
-                            <div class="batch-channel-value" dir="ltr"><?= e($email) ?></div>
+                    <td class="batch-delivery-cell">
+                        <?php if ($canBulkOps && !$rowCancelled): ?>
+                            <select class="form-select form-select-sm" name="recipient_delivery[<?= (int) $r['id'] ?>]" form="batch-delivery-form">
+                                <?php foreach ([
+                                    'electronic' => 'bulk.delivery_electronic',
+                                    'paper' => 'bulk.delivery_paper',
+                                    'both' => 'bulk.delivery_both',
+                                ] as $mode => $label): ?>
+                                    <option value="<?= e($mode) ?>" <?= $rowMode === $mode ? 'selected' : '' ?>><?= e(__($label)) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         <?php else: ?>
-                            <span class="text-muted small"><?= e(__('send.missing_email')) ?></span>
+                            <?= e(__('bulk.delivery_' . $rowMode)) ?>
                         <?php endif; ?>
-                        <div class="batch-channel-status small <?= (($last['email']['status'] ?? '') === 'sent') ? 'text-success' : ((($last['email']['status'] ?? '') === 'failed') ? 'text-danger' : 'text-muted') ?>">
-                            <?= e(dms_delivery_status_label($last['email'] ?? null)) ?>
+                    </td>
+                    <td class="batch-channel-cell">
+                        <?php if ($email !== ''): ?>
+                        <div class="batch-channel-stack">
+                            <div class="batch-channel-value" dir="ltr"><?= e($email) ?></div>
+                            <div class="batch-channel-status small <?= (($last['email']['status'] ?? '') === 'sent') ? 'text-success' : ((($last['email']['status'] ?? '') === 'failed') ? 'text-danger' : 'text-muted') ?>">
+                                <?= e(dms_delivery_status_label($last['email'] ?? null)) ?>
+                            </div>
                         </div>
-                        </div>
+                        <?php endif; ?>
                     </td>
                     <td class="batch-send-icon-col text-center">
-                        <?php if ($canSendMsg && $rowCanIssue && $email !== '' && $rowMailReady): ?>
+                        <?php if ($email === ''): ?>
+                        <?php elseif ($canSendMsg && $rowCanIssue && $rowMailReady): ?>
                             <form method="post" action="<?= e(base_url('outgoing/send.php')) ?>" class="d-inline" data-confirm="<?= e(__('send.confirm_email')) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="correspondence_id" value="<?= (int) $r['id'] ?>">
                                 <input type="hidden" name="channel" value="email">
                                 <input type="hidden" name="return_batch" value="<?= (int) $id ?>">
-                                <button type="submit" class="batch-send-icon batch-send-icon--email<?= (($last['email']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?>" title="<?= e(__('send.do_email')) ?>">
+                                <button type="submit" class="batch-send-icon batch-send-icon--email<?= (($last['email']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?><?= $rowElectronic ? '' : ' is-disabled' ?>" data-channel-toggle="email" title="<?= e(__('send.do_email')) ?>"<?= $rowElectronic ? '' : ' disabled' ?>>
                                     <i class="bi <?= (($last['email']['status'] ?? '') === 'sent') ? 'bi-envelope-check' : 'bi-envelope' ?>"></i>
                                 </button>
                             </form>
                         <?php else: ?>
-                            <span class="batch-send-icon batch-send-icon--email is-disabled" title="<?= e(!$canSendMsg ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : ($email === '' ? __('send.need_entity_email') : __('send.need_email_settings')))) ?>">
+                            <span class="batch-send-icon batch-send-icon--email is-disabled" title="<?= e(!$canSendMsg ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : (!$rowElectronic ? __('send.skip_not_electronic') : ($email === '' ? __('send.need_entity_email') : __('send.need_email_settings'))))) ?>">
                                 <i class="bi bi-envelope"></i>
                             </span>
                         <?php endif; ?>
                     </td>
                     <td class="batch-channel-cell">
-                        <div class="batch-channel-stack">
                         <?php if ($mobile !== ''): ?>
+                        <div class="batch-channel-stack">
                             <div class="batch-channel-value" dir="ltr">+<?= e($mobile) ?></div>
-                        <?php else: ?>
-                            <span class="text-muted small"><?= e(__('send.missing_mobile')) ?></span>
+                            <div class="batch-channel-status small <?= (($last['whatsapp']['status'] ?? '') === 'sent') ? 'text-success' : ((($last['whatsapp']['status'] ?? '') === 'failed') ? 'text-danger' : 'text-muted') ?>">
+                                <?= e(dms_delivery_status_label($last['whatsapp'] ?? null)) ?>
+                            </div>
+                        </div>
                         <?php endif; ?>
-                        <div class="batch-channel-status small <?= (($last['whatsapp']['status'] ?? '') === 'sent') ? 'text-success' : ((($last['whatsapp']['status'] ?? '') === 'failed') ? 'text-danger' : 'text-muted') ?>">
-                            <?= e(dms_delivery_status_label($last['whatsapp'] ?? null)) ?>
-                        </div>
-                        </div>
                     </td>
                     <td class="batch-send-icon-col text-center">
-                        <?php if ($canSendMsg && $rowCanIssue && $mobile !== '' && $waReady): ?>
+                        <?php if ($mobile === ''): ?>
+                        <?php elseif ($canSendMsg && $rowCanIssue && $waReady): ?>
                             <form method="post" action="<?= e(base_url('outgoing/send.php')) ?>" class="d-inline" data-confirm="<?= e(__('send.confirm_wa')) ?>">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="correspondence_id" value="<?= (int) $r['id'] ?>">
                                 <input type="hidden" name="channel" value="whatsapp">
                                 <input type="hidden" name="return_batch" value="<?= (int) $id ?>">
-                                <button type="submit" class="batch-send-icon batch-send-icon--wa<?= (($last['whatsapp']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?>" title="<?= e(__('send.do_wa')) ?>">
+                                <button type="submit" class="batch-send-icon batch-send-icon--wa<?= (($last['whatsapp']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?><?= $rowElectronic ? '' : ' is-disabled' ?>" data-channel-toggle="whatsapp" title="<?= e(__('send.do_wa')) ?>"<?= $rowElectronic ? '' : ' disabled' ?>>
                                     <i class="bi bi-whatsapp"></i>
                                 </button>
                             </form>
                         <?php else: ?>
-                            <span class="batch-send-icon batch-send-icon--wa is-disabled" title="<?= e(!$canSendMsg ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : ($mobile === '' ? __('send.need_entity_mobile') : __('send.need_wa_settings')))) ?>">
+                            <span class="batch-send-icon batch-send-icon--wa is-disabled" title="<?= e(!$canSendMsg ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : (!$rowElectronic ? __('send.skip_not_electronic') : ($mobile === '' ? __('send.need_entity_mobile') : __('send.need_wa_settings'))))) ?>">
                                 <i class="bi bi-whatsapp"></i>
                             </span>
                         <?php endif; ?>
@@ -565,12 +663,12 @@ $batchUnsent = $batchTotal - (int) $anySent;
                                 <input type="hidden" name="correspondence_id" value="<?= (int) $r['id'] ?>">
                                 <input type="hidden" name="channel" value="delivery">
                                 <input type="hidden" name="return_batch" value="<?= (int) $id ?>">
-                                <button type="submit" class="batch-send-icon batch-send-icon--delivery<?= (($last['delivery']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?>" title="<?= e(__('send.do_delivery')) ?>">
+                                <button type="submit" class="batch-send-icon batch-send-icon--delivery<?= (($last['delivery']['status'] ?? '') === 'sent') ? ' is-sent' : '' ?><?= $rowPaper ? '' : ' is-disabled' ?>" data-channel-toggle="delivery" title="<?= e(__('send.do_delivery')) ?>"<?= $rowPaper ? '' : ' disabled' ?>>
                                     <i class="bi <?= (($last['delivery']['status'] ?? '') === 'sent') ? 'bi-clipboard-check-fill' : 'bi-clipboard-check' ?>"></i>
                                 </button>
                             </form>
                         <?php else: ?>
-                            <span class="batch-send-icon batch-send-icon--delivery is-disabled" title="<?= e(!$canDeliver ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : '')) ?>">
+                            <span class="batch-send-icon batch-send-icon--delivery is-disabled" title="<?= e(!$canDeliver ? __('perm.denied_tip') : (!$rowCanIssue ? ($rowBlock !== '' ? $rowBlock : __('issue_appr.blocked_pending')) : __('send.skip_not_paper'))) ?>">
                                 <i class="bi bi-clipboard-check"></i>
                             </span>
                         <?php endif; ?>
@@ -584,13 +682,26 @@ $batchUnsent = $batchTotal - (int) $anySent;
                         </td>
                     <?php endif; ?>
                     <td class="text-end text-nowrap">
-                        <?php if ($email !== ''): ?>
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary me-1"
+                        <?php if (!$rowCancelled): ?>
+                        <span class="batch-preview-icons">
+                            <a class="letter-token-btn is-format is-icon<?= $rowPaper ? '' : ' d-none' ?>" href="<?= e(base_url('outgoing/print.php?id=' . (int) $r['id'])) ?>" target="_blank" rel="noopener"
+                               data-preview-channel="paper"
+                               data-bs-toggle="tooltip" data-bs-placement="top"
+                               title="<?= e(__('tpl.preview_letter')) ?>"
+                               aria-label="<?= e(__('tpl.preview_letter')) ?>">
+                                <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                            </a>
+                            <?php if ($email !== ''): ?>
+                            <button type="button" class="letter-token-btn is-format is-icon<?= $rowElectronic ? '' : ' d-none' ?>"
+                                    data-preview-channel="electronic"
                                     data-email-preview="<?= (int) $r['id'] ?>"
-                                    title="<?= e(__('send.email_preview')) ?>">
-                                <i class="bi bi-envelope-open me-1"></i><?= e(__('send.email_preview')) ?>
+                                    data-bs-toggle="tooltip" data-bs-placement="top"
+                                    title="<?= e(__('tpl.preview_email')) ?>"
+                                    aria-label="<?= e(__('tpl.preview_email')) ?>">
+                                <i class="bi bi-envelope-open" aria-hidden="true"></i>
                             </button>
+                            <?php endif; ?>
+                        </span>
                         <?php endif; ?>
                         <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/view.php?id=' . (int) $r['id'])) ?>"><?= e(__('action.view')) ?></a>
                     </td>
@@ -643,11 +754,127 @@ $batchUnsent = $batchTotal - (int) $anySent;
 </div>
 <?php
 $previewUrlJson = json_encode(base_url('outgoing/email_preview.php'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$deliverySavedJson = json_encode(__('bulk.delivery_saved'), JSON_UNESCAPED_UNICODE);
 $pageScripts = <<<JS
 <script>
 (function () {
   var form = document.getElementById('batch-send-form');
   var table = document.getElementById('batch-results-table');
+  function boxes() {
+    if (!table) return [];
+    return Array.prototype.slice.call(table.querySelectorAll('.batch-select-row'));
+  }
+
+  var deliveryForm = document.getElementById('batch-delivery-form');
+  var deliverySaved = {$deliverySavedJson};
+  function deliveryToast(message, isError) {
+    if (window.DmsSwal && typeof window.DmsSwal.flash === 'function') {
+      window.DmsSwal.flash(isError ? 'danger' : 'success', message, isError ? 0 : 700);
+      return;
+    }
+    if (typeof dmsNotify === 'function') dmsNotify(isError ? 'danger' : 'success', message);
+  }
+  function applyDeliveryRow(sel, mode) {
+    var tr = sel.closest('tr');
+    if (!tr) return;
+    var electronic = mode !== 'paper';
+    var paper = mode !== 'electronic';
+    var box = tr.querySelector('.batch-select-row');
+    if (box && box.getAttribute('data-can-issue') !== '0') {
+      box.disabled = mode === 'paper';
+      box.checked = mode !== 'paper';
+      box.setAttribute('data-electronic', electronic ? '1' : '0');
+      box.setAttribute('data-paper', paper ? '1' : '0');
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    tr.querySelectorAll('[data-preview-channel]').forEach(function (el) {
+      var show = el.getAttribute('data-preview-channel') === 'paper' ? paper : electronic;
+      el.classList.toggle('d-none', !show);
+    });
+    tr.querySelectorAll('[data-channel-toggle]').forEach(function (btn) {
+      var ch = btn.getAttribute('data-channel-toggle');
+      var on = ch === 'delivery' ? paper : electronic;
+      btn.disabled = !on;
+      btn.classList.toggle('is-disabled', !on);
+    });
+    var letterHead = document.querySelector('[data-batch-letter-preview]');
+    if (letterHead) {
+      var anyPaper = boxes().some(function (b) { return b.getAttribute('data-paper') === '1'; });
+      letterHead.classList.toggle('d-none', !anyPaper);
+    }
+  }
+  if (table && deliveryForm) {
+    table.addEventListener('change', function (e) {
+      var sel = e.target && e.target.closest ? e.target.closest('select[name^="recipient_delivery"]') : null;
+      if (!sel) return;
+      var prev = sel.getAttribute('data-prev') || '';
+      var mode = sel.value;
+      if (prev === mode) return;
+      var idMatch = (sel.name || '').match(/\[(\d+)\]/);
+      if (!idMatch) return;
+      var seq = (Number(sel.dataset.seq) || 0) + 1;
+      sel.dataset.seq = String(seq);
+      sel.setAttribute('data-prev', mode);
+      applyDeliveryRow(sel, mode);
+      deliveryToast(deliverySaved);
+      var body = new URLSearchParams();
+      var csrf = deliveryForm.querySelector('input[name="csrf_token"]');
+      var batchInput = deliveryForm.querySelector('input[name="batch_id"]');
+      if (csrf) body.set('csrf_token', csrf.value);
+      if (batchInput) body.set('batch_id', batchInput.value);
+      body.set('ajax', '1');
+      body.set('recipient_delivery[' + idMatch[1] + ']', mode);
+      fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: body
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      }).then(function (pack) {
+        if (sel.dataset.seq !== String(seq)) return;
+        if (!pack.ok || !pack.data || !pack.data.ok) {
+          throw new Error((pack.data && pack.data.error) || '');
+        }
+      }).catch(function (err) {
+        if (sel.dataset.seq !== String(seq)) return;
+        sel.value = prev;
+        sel.setAttribute('data-prev', prev);
+        applyDeliveryRow(sel, prev);
+        deliveryToast((err && err.message) || deliverySaved, true);
+      });
+    });
+    table.querySelectorAll('select[name^="recipient_delivery"]').forEach(function (sel) {
+      sel.setAttribute('data-prev', sel.value);
+    });
+  }
+
+  document.querySelectorAll('[data-batch-print-selected]').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      var base = link.getAttribute('data-print-base') || link.getAttribute('href') || '';
+      if (!base) return;
+      var paperOnly = link.getAttribute('data-print-paper') === '1';
+      var picked = boxes().filter(function (b) {
+        return b.checked && !b.disabled && b.getAttribute('data-can-issue') !== '0';
+      });
+      var ids = picked.filter(function (b) {
+        return !paperOnly || b.getAttribute('data-paper') === '1';
+      }).map(function (b) { return b.value; });
+      if (paperOnly && picked.length && !ids.length) {
+        e.preventDefault();
+        return;
+      }
+      var url = base;
+      if (ids.length) {
+        url += (base.indexOf('?') >= 0 ? '&' : '?') + ids.map(function (id) {
+          return 'ids[]=' + encodeURIComponent(id);
+        }).join('&');
+      }
+      link.setAttribute('href', url);
+    });
+  });
+
   if (!form || !table) return;
   var master = table.querySelector('[data-batch-select-all]');
   var countEl = document.querySelector('[data-batch-selected-count]');
@@ -658,14 +885,12 @@ $pageScripts = <<<JS
   var previewFail = (modalEl && modalEl.getAttribute('data-preview-fail')) || '';
   var previewLoading = (modalEl && modalEl.getAttribute('data-preview-loading')) || '';
 
-  function boxes() {
-    return Array.prototype.slice.call(table.querySelectorAll('.batch-select-row'));
-  }
   function selectedFor(channel) {
     return boxes().filter(function (b) {
       if (!b.checked || b.disabled || b.getAttribute('data-can-issue') === '0') return false;
-      if (channel === 'email') return b.getAttribute('data-has-email') === '1';
-      if (channel === 'whatsapp') return b.getAttribute('data-has-mobile') === '1';
+      if (channel === 'email') return b.getAttribute('data-electronic') === '1' && b.getAttribute('data-has-email') === '1';
+      if (channel === 'whatsapp') return b.getAttribute('data-electronic') === '1' && b.getAttribute('data-has-mobile') === '1';
+      if (channel === 'delivery') return b.getAttribute('data-paper') === '1';
       return true;
     }).length;
   }

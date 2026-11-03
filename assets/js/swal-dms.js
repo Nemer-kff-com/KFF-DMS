@@ -130,7 +130,7 @@
   }
 
   /** رسالة نتيجة (مثل inv_swal_flash) — نافذة مركزية */
-  function flash(type, message) {
+  function flash(type, message, timer) {
     if (!message || typeof Swal === 'undefined') return Promise.resolve();
     var icon = mapType(type);
     var title = icon === 'success'
@@ -152,7 +152,7 @@
     }
 
     if (icon === 'success') {
-      opts.timer = 2200;
+      opts.timer = timer > 0 ? timer : 2200;
       opts.timerProgressBar = true;
       opts.showConfirmButton = false;
     } else {

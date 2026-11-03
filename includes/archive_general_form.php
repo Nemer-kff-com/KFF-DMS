@@ -90,11 +90,17 @@ $hasLinked = $linkedSelected > 0 && $linkedPayload;
         </div>
         <div class="col-md-6">
             <label class="form-label" for="archive_confidentiality"><?= e(__('corr.confidentiality')) ?></label>
-            <select name="confidentiality" id="archive_confidentiality" class="form-select">
-                <?php foreach (confidentiality_levels_list() as $c): ?>
-                    <option value="<?= e($c['code']) ?>" <?= (string)$v('confidentiality', 'normal') === $c['code'] ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
-                <?php endforeach; ?>
-            </select>
+            <div class="input-group conf-with-override">
+                <select name="confidentiality" id="archive_confidentiality" class="form-select" data-conf-level-select>
+                    <?php foreach (confidentiality_levels_list() as $c): ?>
+                        <option value="<?= e($c['code']) ?>" <?= (string)$v('confidentiality', 'normal') === $c['code'] ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php
+                $corr = null;
+                require __DIR__ . '/conf_attach_overrides_fields.php';
+                ?>
+            </div>
         </div>
         <?php
         $locationValue = $_SERVER['REQUEST_METHOD'] === 'POST'
@@ -331,4 +337,3 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 </script>
-                

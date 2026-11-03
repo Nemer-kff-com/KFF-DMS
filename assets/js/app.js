@@ -106,6 +106,9 @@
     if (btn.classList.contains('sidebar-rail-btn') || btn.classList.contains('gregorian-date-btn')) {
       return true;
     }
+    if (btn.classList.contains('conf-override-beside-btn')) {
+      return true;
+    }
     if (btn.getAttribute('name') === 'rsvp_response') {
       return true;
     }
@@ -787,8 +790,56 @@ function bindLetterPreview(root) {
   var fail = modalEl.getAttribute('data-preview-fail') || '';
   document.querySelectorAll('[data-letter-preview]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      var ta = document.getElementById(btn.getAttribute('data-letter-preview') || '');
-      if (!ta || !bodyEl || !url) {
+      if (window.bootstrap && bootstrap.Tooltip) {
+        var tip = bootstrap.Tooltip.getInstance(btn);
+        if (tip) tip.hide();
+      }
+      var lang = btn.getAttribute('data-letter-preview-lang') || 'ar';
+      var taId = btn.getAttribute('data-letter-preview') || '';
+      if (btn.getAttribute('data-letter-preview-active') === '1') {
+        var enId = btn.getAttribute('data-letter-preview-en') || 'body_en';
+        var enPane = document.getElementById(enId + '-pane');
+        if (enPane && enPane.classList.contains('active')) {
+          lang = 'en';
+          taId = enId;
+        }
+      }
+      var ta = document.getElementById(taId);
+      if (!ta) {
+        return;
+      }
+      if (btn.getAttribute('data-letter-preview-print') === '1') {
+        var printUrl = btn.getAttribute('data-letter-preview-print-url') || '';
+        var form = ta.closest('form') || document.querySelector('form.admin-form');
+        if (!printUrl || !form) {
+          return;
+        }
+        var printForm = document.createElement('form');
+        printForm.method = 'POST';
+        printForm.action = printUrl;
+        printForm.target = '_blank';
+        function addField(name, value) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value == null ? '' : String(value);
+          printForm.appendChild(input);
+        }
+        var csrf = form.querySelector('input[name="csrf_token"]');
+        if (csrf) {
+          addField('csrf_token', csrf.value);
+        }
+        addField('body', ta.value || '');
+        addField('lang', lang);
+        addField('template_id', btn.getAttribute('data-template-id') || '');
+        addField('department_id', (form.querySelector('[name="department_id"]') || {}).value || '');
+        addField('issuing_department_id', (form.querySelector('[name="issuing_department_id"]') || {}).value || '');
+        document.body.appendChild(printForm);
+        printForm.submit();
+        printForm.remove();
+        return;
+      }
+      if (!bodyEl || !url) {
         return;
       }
       bodyEl.innerHTML = '<p class="text-muted mb-0">…</p>';
@@ -797,7 +848,7 @@ function bindLetterPreview(root) {
       }
       var data = new URLSearchParams();
       data.set('body', ta.value || '');
-      data.set('lang', btn.getAttribute('data-letter-preview-lang') || 'ar');
+      data.set('lang', lang);
       var form = ta.closest('form') || document.querySelector('form.admin-form');
       function fieldVal(name) {
         var el = form ? form.querySelector('[name="' + name + '"]') : document.getElementById(name);
@@ -820,13 +871,16 @@ function bindLetterPreview(root) {
       data.set('department_id', fieldVal('department_id'));
       data.set('rsvp_required', fieldVal('rsvp_required') || fieldVal('requires_rsvp'));
       data.set('intend_electronic', fieldVal('intend_electronic') || '1');
+      if (btn.getAttribute('data-letter-preview-omit-parties') === '1') {
+        data.set('omit_parties', '1');
+      }
       if (form && form.getAttribute('data-corr-id')) {
         data.set('id', form.getAttribute('data-corr-id'));
       }
       if (form && form.getAttribute('data-corr-ref')) {
         data.set('ref_number', form.getAttribute('data-corr-ref'));
       }
-      if ((btn.getAttribute('data-letter-preview-lang') || 'ar') === 'en') {
+      if (lang === 'en') {
         data.set('letter_body_en', ta.value || '');
         data.set('letter_body', fieldVal('letter_body'));
       } else {

@@ -16,11 +16,13 @@ $letterEn = (string) (
     $_POST['letter_body_en']
     ?? ($corr['letter_body_en'] ?? '')
 );
-$letterSectionOpen = !empty($_POST['intend_electronic'])
+$letterSectionAlways = !empty($letterSectionAlways);
+$letterSectionOpen = $letterSectionAlways
+    || !empty($_POST['intend_electronic'])
     || (!empty($corr['intend_electronic']) && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST');
 ?>
 <div class="admin-form-section<?= $letterSectionOpen ? '' : ' d-none' ?>" id="outgoing-letter-section"
-     data-depends-on="intend_electronic">
+     <?= $letterSectionAlways ? 'data-letter-always="1"' : 'data-depends-on="intend_electronic"' ?>>
     <div class="admin-form-section-title d-flex flex-wrap align-items-center justify-content-between gap-2">
         <span><?= e(__('bulk.letter_body')) ?></span>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="outgoing-email-preview-btn"
@@ -31,7 +33,7 @@ $letterSectionOpen = !empty($_POST['intend_electronic'])
     <?php if ($templates): ?>
     <div class="mb-2">
         <label class="form-label" for="letter_template_id"><?= e(__('tpl.apply')) ?></label>
-        <select id="letter_template_id" class="form-select" data-letter-templates>
+        <select name="letter_template_id" id="letter_template_id" class="form-select" data-letter-templates>
             <option value=""><?= e(__('common.none')) ?></option>
             <?php foreach ($templates as $tpl): ?>
                 <option value="<?= (int) $tpl['id'] ?>"
@@ -88,7 +90,7 @@ $letterSectionOpen = !empty($_POST['intend_electronic'])
 (function () {
   var section = document.getElementById('outgoing-letter-section');
   var box = document.getElementById('intend_electronic');
-  if (section && box) {
+  if (section && box && section.getAttribute('data-letter-always') !== '1') {
     function syncLetterSection() {
       var on = !!box.checked;
       section.classList.toggle('d-none', !on);

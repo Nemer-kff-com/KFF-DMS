@@ -869,7 +869,7 @@ function outgoing_needs_issued_copy(array $corr): bool
         return false;
     }
 
-    return !(function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr));
+    return function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
 }
 
 /** الطباعة التي تحمل الرقم تكون بعد الاعتماد لدى الاتصالات الإدارية، فلا يُحبس الصادر عند المعد بانتظارها. */
@@ -895,7 +895,7 @@ function outgoing_request_missing_attachment(array $corr): bool
     if (($corr['type'] ?? '') !== 'outgoing') {
         return false;
     }
-    if (function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr)) {
+    if (function_exists('correspondence_intend_paper') && !correspondence_intend_paper($corr)) {
         return false;
     }
     if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
@@ -1299,6 +1299,9 @@ function outgoing_prep_return(int $id, array $user, string $note): void
  */
 function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note): int
 {
+    if (function_exists('ensure_corr_electronic_schema')) {
+        ensure_corr_electronic_schema();
+    }
     $pdo = db();
     $ownTx = !$pdo->inTransaction();
     if ($ownTx) {
@@ -1327,7 +1330,7 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
                 external_ref, external_date, corr_date, reply_due,
                 status, priority, confidentiality, category_id, notes, letter_body, letter_body_en,
                 qr_token, linked_id, department_id, issuing_department_id, created_by,
-                rsvp_required, intend_electronic, courier_name, courier_phone, courier_id,
+                rsvp_required, intend_electronic, intend_paper, courier_name, courier_phone, courier_id,
                 outgoing_prep_status, outgoing_prep_note, outgoing_prep_decided_by, outgoing_prep_decided_at,
                 outgoing_prep_root_id
             ) VALUES (
@@ -1337,7 +1340,7 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
                 'draft', ?, ?, NOW(),
                 ?
             )"
@@ -1374,6 +1377,7 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
             $src['created_by'],
             $src['rsvp_required'],
             $src['intend_electronic'],
+            (int) ($src['intend_paper'] ?? 0),
             $src['courier_name'],
             $src['courier_phone'],
             $src['courier_id'],

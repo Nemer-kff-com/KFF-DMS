@@ -201,6 +201,11 @@ function dms_notify_incoming_assigned(int $corrId, array $corr, int $deptId, arr
         $bodyParts[] = $actorName;
     }
     $body = implode(' — ', $bodyParts);
+    if (function_exists('dms_conf_safe_notify_bits')) {
+        $safeBits = dms_conf_safe_notify_bits($corr, $subjectLine, $body, $body);
+        $body = $safeBits['body'];
+        $subjectLine = $safeBits['subject'];
+    }
     $link = 'incoming/view.php?id=' . $corrId;
     $dedupe = ($reason === 'dept_change' ? 'incoming_dept:' : 'incoming:') . $corrId . ':' . $deptId;
 
@@ -212,15 +217,22 @@ function dms_notify_incoming_assigned(int $corrId, array $corr, int $deptId, arr
         'body' => $body,
         'link' => $link,
         'correspondence_id' => $corrId,
+        'corr' => $corr,
         'department_id' => $deptId,
         'dedupe_key' => $dedupe,
     ]);
 
+    $allowedIds = function_exists('dms_filter_notify_user_ids_for_corr')
+        ? array_fill_keys(dms_filter_notify_user_ids_for_corr($recipientIds, $corr), true)
+        : null;
     $recipients = array_values(array_filter(
         dms_department_users($deptId),
-        static function (array $row) use ($exclude): bool {
+        static function (array $row) use ($exclude, $allowedIds): bool {
             $uid = (int) ($row['id'] ?? 0);
-            return $uid > 0 && !in_array($uid, $exclude, true);
+            if ($uid <= 0 || in_array($uid, $exclude, true)) {
+                return false;
+            }
+            return $allowedIds === null || isset($allowedIds[$uid]);
         }
     ));
     if ($recipients === []) {
@@ -238,11 +250,15 @@ function dms_notify_incoming_assigned(int $corrId, array $corr, int $deptId, arr
     if ($deptName !== '') {
         $intro .= ' (' . $deptName . ')';
     }
-    $details = trim($ref . ' — ' . $subjectLine . ($party !== '' ? ' — ' . $party : ''));
-    $emailRows = dms_notification_rows_with_parties([
-        ['label' => __('corr.number'), 'value' => $ref, 'ltr' => true],
-        ['label' => __('corr.subject'), 'value' => $subjectLine],
-    ], $details, $corrId);
+    $details = $body;
+    $isConf = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+        && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted();
+    $emailRows = $isConf
+        ? [['label' => __('corr.number'), 'value' => $ref, 'ltr' => true]]
+        : dms_notification_rows_with_parties([
+            ['label' => __('corr.number'), 'value' => $ref, 'ltr' => true],
+            ['label' => __('corr.subject'), 'value' => $subjectLine],
+        ], $details, $corrId);
     require_once __DIR__ . '/user_invite.php';
     $viewUrl = dms_mail_public_url($link);
     foreach ($recipients as $recipient) {
@@ -484,6 +500,28 @@ function dms_notify_users(array $userIds, array $payload): void
     $deptId = (int) ($payload['department_id'] ?? 0) ?: null;
     $dedupe = trim((string) ($payload['dedupe_key'] ?? '')) ?: null;
 
+    $corr = null;
+    if ($corrId && function_exists('get_correspondence')) {
+        $corr = get_correspondence($corrId);
+    }
+    if (is_array($payload['corr'] ?? null)) {
+        $corr = $payload['corr'];
+    }
+    if ($corr && function_exists('dms_filter_notify_user_ids_for_corr')) {
+        $userIds = dms_filter_notify_user_ids_for_corr($userIds, $corr);
+    }
+    if ($userIds === []) {
+        return;
+    }
+    if ($corr && function_exists('dms_conf_safe_notify_bits')) {
+        $safe = dms_conf_safe_notify_bits($corr, $title, (string) ($body ?? ''), '');
+        if (function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+            && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted()
+        ) {
+            $body = $safe['body'] !== '' ? $safe['body'] : $body;
+        }
+    }
+
     try {
         $stmt = db()->prepare(
             "INSERT IGNORE INTO `tblnotifications`
@@ -505,9 +543,23 @@ function dms_notify_users(array $userIds, array $payload): void
     if (!empty($payload['email']) && $link) {
         $intro = trim((string) ($payload['email_intro'] ?? $title));
         $details = trim((string) ($payload['email_details'] ?? ($body ?? '')));
+        if ($corr && function_exists('dms_conf_safe_notify_bits')) {
+            $safe = dms_conf_safe_notify_bits($corr, $intro, $details, $details);
+            if (function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+                && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted()
+            ) {
+                $details = $safe['details'];
+            }
+        }
         $cta = trim((string) ($payload['email_cta'] ?? ''));
         $rows = is_array($payload['email_rows'] ?? null) ? $payload['email_rows'] : [];
-        $rows = dms_notification_rows_with_parties($rows, $details, (int) $corrId);
+        if ($corr && function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+            && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted()
+        ) {
+            $rows = [];
+        } else {
+            $rows = dms_notification_rows_with_parties($rows, $details, (int) $corrId);
+        }
         if ($intro !== '' && ($details !== '' || $rows !== [])) {
             dms_notify_user_emails($userIds, $intro, $details, $link, $cta, $deptId, $rows);
         }
@@ -525,6 +577,11 @@ function dms_notify_referral(int $referralId, array $corr, int $toDept, string $
     $who = trim($fromName);
     $link = $folder . '/view.php?id=' . $corrId;
     $body = trim($ref . ' — ' . $subject . ($who !== '' ? ' — ' . $who : ''));
+    if (function_exists('dms_conf_safe_notify_bits')) {
+        $safeBits = dms_conf_safe_notify_bits($corr, $subject, $body, $body);
+        $body = $safeBits['body'];
+        $subject = $safeBits['subject'];
+    }
 
     $exclude = $actor ? [(int) ($actor['id'] ?? 0)] : [];
     $recipientIds = dms_notification_recipient_ids($toDept, $exclude);
@@ -534,15 +591,22 @@ function dms_notify_referral(int $referralId, array $corr, int $toDept, string $
         'body' => $body,
         'link' => $link,
         'correspondence_id' => $corrId,
+        'corr' => $corr,
         'department_id' => $toDept,
         'dedupe_key' => 'referral:' . $referralId,
     ]);
 
+    $allowedIds = function_exists('dms_filter_notify_user_ids_for_corr')
+        ? array_fill_keys(dms_filter_notify_user_ids_for_corr($recipientIds, $corr), true)
+        : null;
     $recipients = array_values(array_filter(
         dms_department_users($toDept),
-        static function (array $row) use ($exclude): bool {
+        static function (array $row) use ($exclude, $allowedIds): bool {
             $uid = (int) ($row['id'] ?? 0);
-            return $uid > 0 && !in_array($uid, $exclude, true);
+            if ($uid <= 0 || in_array($uid, $exclude, true)) {
+                return false;
+            }
+            return $allowedIds === null || isset($allowedIds[$uid]);
         }
     ));
     if ($recipients === []) {
@@ -556,14 +620,18 @@ function dms_notify_referral(int $referralId, array $corr, int $toDept, string $
 
     $intro = __('notify.referral_email_intro');
     $details = $body;
+    $isConf = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+        && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted();
     $emailRows = [
         ['label' => __('corr.number'), 'value' => $ref, 'ltr' => true],
-        ['label' => __('corr.subject'), 'value' => $subject],
     ];
-    if ($who !== '') {
-        $emailRows[] = ['label' => __('notify.referral_by'), 'value' => $who];
+    if (!$isConf) {
+        $emailRows[] = ['label' => __('corr.subject'), 'value' => $subject];
+        if ($who !== '') {
+            $emailRows[] = ['label' => __('notify.referral_by'), 'value' => $who];
+        }
+        $emailRows = dms_notification_rows_with_parties($emailRows, $details, $corrId);
     }
-    $emailRows = dms_notification_rows_with_parties($emailRows, $details, $corrId);
     require_once __DIR__ . '/user_invite.php';
     $viewUrl = dms_mail_public_url($link);
     $sent = 0;

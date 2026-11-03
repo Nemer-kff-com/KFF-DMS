@@ -11,13 +11,37 @@ ensure_entity_groups_schema();
 $id = (int) ($_GET['id'] ?? 0);
 $batch = $id ? get_outgoing_batch($id) : null;
 $items = $id ? outgoing_batch_items($id, $user) : [];
-$items = array_values(array_filter($items, static function (array $row): bool {
+
+$idFilter = [];
+$rawIds = $_GET['ids'] ?? null;
+if (is_array($rawIds)) {
+    foreach ($rawIds as $rawId) {
+        $vid = (int) $rawId;
+        if ($vid > 0) {
+            $idFilter[$vid] = true;
+        }
+    }
+} elseif (is_string($rawIds) && trim($rawIds) !== '') {
+    foreach (explode(',', $rawIds) as $rawId) {
+        $vid = (int) trim($rawId);
+        if ($vid > 0) {
+            $idFilter[$vid] = true;
+        }
+    }
+}
+
+$items = array_values(array_filter($items, static function (array $row) use ($idFilter): bool {
     if (correspondence_is_cancelled($row)) {
         return false;
     }
-    if (function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($row)) {
+    $rowId = (int) ($row['id'] ?? 0);
+    if ($idFilter !== [] && !isset($idFilter[$rowId])) {
         return false;
     }
+    if (!function_exists('correspondence_intend_paper') || !correspondence_intend_paper($row)) {
+        return false;
+    }
+
     return !function_exists('outgoing_can_print_thermal') || outgoing_can_print_thermal($row);
 }));
 if (!$batch) {
@@ -33,10 +57,10 @@ if (function_exists('outgoing_require_print_perm')) {
 }
 
 $thermalSizes = [
-    '44x22' => ['w' => 44, 'h' => 22, 'name_key' => 'thermal.size_44x22'],
     '50x25' => ['w' => 50, 'h' => 25, 'name_key' => 'thermal.size_50x25'],
+    '44x22' => ['w' => 44, 'h' => 22, 'name_key' => 'thermal.size_44x22'],
 ];
-$thermalDefaultSize = '44x22';
+$thermalDefaultSize = '50x25';
 $copiesMax = 5;
 require __DIR__ . '/../includes/thermal_print_setup.php';
 $hMark = __('corr.cal_h_mark');
@@ -239,7 +263,7 @@ $qrJobs = [];
   function savePrefs() {
     try {
       localStorage.setItem(KEY, JSON.stringify({
-        tpl: tpl ? tpl.value : '44x22'
+        tpl: tpl ? tpl.value : '50x25'
       }));
     } catch (e) {}
   }

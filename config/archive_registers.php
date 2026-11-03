@@ -2032,6 +2032,8 @@ function archive_register_compact_sql(string $col): string
  */
 function archive_register_where(array $def, array $filters): array
 {
+    // يُكمَّل بشرط السرية بعد بناء where الأساسي إن وُجد العمود
+
     $where = '1=1';
     $params = [];
     $q = trim((string) ($filters['q'] ?? ''));
@@ -2164,6 +2166,29 @@ function archive_register_where(array $def, array $filters): array
                 $params[] = $p;
             }
             foreach ($parts[1]['params'] as $p) {
+                $params[] = $p;
+            }
+        }
+    }
+    $table = (string) ($def['table'] ?? '');
+    $kind = (string) ($def['key'] ?? '');
+    if ($kind === '' && function_exists('archive_register_defs')) {
+        foreach (archive_register_defs() as $k => $d) {
+            if (($d['table'] ?? '') === $table) {
+                $kind = $k;
+                break;
+            }
+        }
+    }
+    if ($table !== ''
+        && function_exists('dms_db_column_exists')
+        && dms_db_column_exists($table, 'confidentiality')
+        && function_exists('sql_register_confidential_visibility_clause')
+    ) {
+        [$confSql, $confParams] = sql_register_confidential_visibility_clause($kind !== '' ? $kind : 'general');
+        if ($confSql !== '' && $confSql !== '1=1') {
+            $where .= ' AND ' . $confSql;
+            foreach ($confParams as $p) {
                 $params[] = $p;
             }
         }
@@ -2354,6 +2379,24 @@ function archive_register_save(string $kind, int $id, array $post): int
     if ($data === []) {
         throw new InvalidArgumentException(__('common.name_required'));
     }
+    if (function_exists('ensure_register_confidentiality_schema')) {
+        ensure_register_confidentiality_schema();
+    }
+    $confLevel = 'normal';
+    if (function_exists('dms_db_column_exists') && dms_db_column_exists($table, 'confidentiality')) {
+        $confLevel = trim((string) ($post['confidentiality'] ?? 'normal'));
+        if ($confLevel === '') {
+            $confLevel = 'normal';
+        }
+        if (function_exists('confidentiality_levels_list')) {
+            $allowedConf = array_column(confidentiality_levels_list(false), 'code');
+            if ($allowedConf && !in_array($confLevel, $allowedConf, true)) {
+                $confLevel = 'normal';
+            }
+        }
+        $data['confidentiality'] = $confLevel;
+    }
+
     if ($id > 0) {
         $existing = archive_register_get($kind, $id);
         if ($existing && trim((string) ($existing['archive_no'] ?? '')) === '') {
@@ -2367,14 +2410,29 @@ function archive_register_save(string $kind, int $id, array $post): int
         }
         $params[] = $id;
         db()->prepare('UPDATE `' . $table . '` SET ' . implode(',', $set) . ' WHERE id = ?')->execute($params);
-        return $id;
+        $savedId = $id;
+    } else {
+        $data['archive_no'] = next_archive_register_no($kind);
+        $cols = array_keys($data);
+        $ph = implode(',', array_fill(0, count($cols), '?'));
+        $quoted = implode(',', array_map(static fn(string $c): string => '`' . $c . '`', $cols));
+        db()->prepare('INSERT INTO `' . $table . '` (' . $quoted . ') VALUES (' . $ph . ')')->execute(array_values($data));
+        $savedId = (int) db()->lastInsertId();
     }
-    $data['archive_no'] = next_archive_register_no($kind);
-    $cols = array_keys($data);
-    $ph = implode(',', array_fill(0, count($cols), '?'));
-    $quoted = implode(',', array_map(static fn(string $c): string => '`' . $c . '`', $cols));
-    db()->prepare('INSERT INTO `' . $table . '` (' . $quoted . ') VALUES (' . $ph . ')')->execute(array_values($data));
-    return (int) db()->lastInsertId();
+
+    if (function_exists('dms_normalize_conf_attach_overrides_input')
+        && function_exists('dms_db_column_exists')
+        && function_exists('confidentiality_is_restricted')
+        && dms_db_column_exists($table, 'confidential_attach_overrides')
+    ) {
+        $ovJson = confidentiality_is_restricted($confLevel)
+            ? dms_normalize_conf_attach_overrides_input($post['conf_attach_override'] ?? null)
+            : null;
+        db()->prepare('UPDATE `' . $table . '` SET `confidential_attach_overrides` = ? WHERE id = ?')
+            ->execute([$ovJson, $savedId]);
+    }
+
+    return $savedId;
 }
 
 function archive_register_delete(string $kind, int $id): void

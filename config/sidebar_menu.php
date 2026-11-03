@@ -143,6 +143,17 @@ function dms_sidebar_menu_sync_system_items(): void
             'scopes' => 'admin',
         ],
         [
+            'menu_key' => 'help_docs',
+            'parent_key' => '',
+            'sort_order' => 98,
+            'label_ar' => 'المساعدة',
+            'label_en' => 'Help',
+            'icon' => 'bi-question-circle',
+            'href' => 'admin/help.php',
+            'active_rule' => 'file:help.php,help_asset.php',
+            'scopes' => 'admin',
+        ],
+        [
             'menu_key' => 'corr_lookups',
             'parent_key' => 'group_settings',
             'sort_order' => 90,

@@ -151,21 +151,20 @@ require __DIR__ . '/../includes/header.php';
             <?php foreach ($rows as $r): ?>
                 <?php
                 $hasReceipt = correspondence_has_receipt($r);
-                $isElectronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($r);
+                $deliveryMode = function_exists('correspondence_delivery_mode')
+                    ? correspondence_delivery_mode($r)
+                    : 'paper';
+                $isElectronic = $deliveryMode === 'electronic' || $deliveryMode === 'both';
+                $isPaper = $deliveryMode === 'paper' || $deliveryMode === 'both';
                 $rowEmail = $isElectronic && function_exists('dms_corr_email_address')
                     ? dms_corr_email_address($r)
                     : '';
-                $warnMissingReceipt = !$isElectronic && !$hasReceipt && !correspondence_is_settled($r)
+                $warnMissingReceipt = $isPaper && !$hasReceipt && !correspondence_is_settled($r)
                     && ($r['corr_date'] ?? '') <= date('Y-m-d', strtotime('-' . $alertDays . ' days'));
                 ?>
                 <tr class="<?= $warnMissingReceipt ? 'table-warning' : '' ?>">
                     <td class="fw-semibold">
                         <div><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($r) : $r['ref_number']) ?></div>
-                        <?php if ($isElectronic): ?>
-                            <span class="badge text-bg-info mt-1" title="<?= e(__('corr.intend_electronic')) ?>">
-                                <i class="bi bi-envelope-at me-1"></i><?= e(__('corr.electronic_badge')) ?>
-                            </span>
-                        <?php endif; ?>
                     </td>
                     <td><?= e($r['subject']) ?></td>
                     <td>
@@ -196,6 +195,13 @@ require __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                     <td class="list-col-after-appr">
                         <div class="list-badge-group">
+                        <?php if ($isPaper): ?>
+                            <?php if ($hasReceipt): ?>
+                            <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
+                            <?php else: ?>
+                            <span class="badge text-bg-secondary text-nowrap"><?= e(__('receipt.pending')) ?></span>
+                            <?php endif; ?>
+                        <?php endif; ?>
                         <?php if ($isElectronic): ?>
                             <?php if (($r['status'] ?? '') === 'delivered'): ?>
                                 <span class="badge text-bg-success"><?= e(__('status.delivered')) ?></span>
@@ -206,10 +212,6 @@ require __DIR__ . '/../includes/header.php';
                                     <i class="bi bi-envelope-at me-1"></i><?= e(__('corr.channel_electronic')) ?>
                                 </span>
                             <?php endif; ?>
-                        <?php elseif ($hasReceipt): ?>
-                            <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
-                        <?php else: ?>
-                            <span class="badge text-bg-secondary text-nowrap"><?= e(__('receipt.pending')) ?></span>
                         <?php endif; ?>
                         <?php if ((int) ($r['documents_count'] ?? 0) > 0): ?>
                             <span class="badge text-bg-success" title="<?= e(__('corr.attach')) ?>"><i class="bi bi-paperclip"></i></span>

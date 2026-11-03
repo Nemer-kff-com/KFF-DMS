@@ -29,6 +29,21 @@ function ensure_letter_templates_schema(): void
         $cols = dms_db_column_map('tblletter_templates');
         if (empty($cols['body_en'])) {
             $pdo->exec('ALTER TABLE `tblletter_templates` ADD COLUMN `body_en` TEXT NULL DEFAULT NULL AFTER `body`');
+            $cols['body_en'] = true;
+        }
+        foreach ([
+            'show_addressee_title' => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'show_addressee_job' => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'show_addressee_org' => 'TINYINT(1) NOT NULL DEFAULT 1',
+            'show_signature' => 'TINYINT(1) NOT NULL DEFAULT 1',
+        ] as $col => $def) {
+            if (empty($cols[$col])) {
+                $pdo->exec('ALTER TABLE `tblletter_templates` ADD COLUMN `' . $col . '` ' . $def);
+            }
+        }
+        $batchCols = dms_db_column_map('tbloutgoing_batches');
+        if ($batchCols && empty($batchCols['letter_template_id'])) {
+            $pdo->exec('ALTER TABLE `tbloutgoing_batches` ADD COLUMN `letter_template_id` INT UNSIGNED NULL DEFAULT NULL');
         }
         dms_seed_letter_templates();
     } catch (Throwable $e) {
@@ -208,6 +223,33 @@ function letter_template_label(array $tpl): string
 }
 
 /**
+ * ما يُطبع ويُرسل من بيانات المستلم والتوقيع، حسب قالب الخطاب المرتبط.
+ *
+ * @return array{title:bool,job:bool,org:bool,signature:bool}
+ */
+function letter_display_flags(array $corr): array
+{
+    return ['title' => true, 'job' => true, 'org' => true, 'signature' => true];
+}
+
+/** يخفي اللقب أو الوظيفة أو جهة العمل من طرف الموجّه إليه. */
+function letter_apply_addressee_flags(array $part, array $flags): array
+{
+    if (empty($flags['title'])) {
+        $part['prefix'] = '';
+    }
+    if (empty($flags['job'])) {
+        $part['job'] = '';
+        $part['titles'] = [];
+    }
+    if (empty($flags['org'])) {
+        $part['org'] = '';
+    }
+
+    return $part;
+}
+
+/**
  * حقول الإدراج في نص القالب — تُستبدل لكل مستلم عند الإرسال/التحقق/الطباعة
  * @return list<array{token:string,label:string,tip:string,icon:string}>
  */
@@ -237,10 +279,11 @@ function letter_template_placeholder_tokens(): array
     ];
 }
 
-/** اسما صاحب الشأن ووظيفته، منفصلان عن صورة التوقيع. */
+/** لقب صاحب الشأن واسمه ووظيفته، كل حقل في زر. */
 function letter_signer_insert_tokens(): array
 {
     return [
+        ['token' => '{from_title}', 'label' => __('tpl.token_from_title'), 'tip' => __('tpl.token_from_title_tip'), 'icon' => 'bi-award'],
         ['token' => '{from_name}', 'label' => __('tpl.token_from_name'), 'tip' => __('tpl.token_from_name_tip'), 'icon' => 'bi-person'],
         ['token' => '{from_job}', 'label' => __('tpl.token_from_job'), 'tip' => __('tpl.token_from_job_tip'), 'icon' => 'bi-briefcase'],
     ];
@@ -549,7 +592,48 @@ function render_letter_token_button(array $item): void
     <?php
 }
 
-function render_letter_placeholder_toolbar(string $textareaId, string $previewLang = 'ar', string $initialText = '', array $tokenTips = [], array $hideTokens = [], array $extraTokens = []): void
+function render_letter_channel_preview_buttons(array $channelPreviews): void
+{
+    $templateId = (int) ($channelPreviews['template_id'] ?? 0);
+    $arId = trim((string) ($channelPreviews['ar'] ?? 'body'));
+    $enId = trim((string) ($channelPreviews['en'] ?? 'body_en'));
+    if ($arId === '' || !function_exists('base_url')) {
+        return;
+    }
+    $buttons = [
+        [
+            'url' => base_url('admin/letter_print_preview.php'),
+            'icon' => 'bi-file-earmark-text',
+            'label' => __('tpl.preview_letter'),
+        ],
+        [
+            'url' => base_url('admin/letter_email_preview.php'),
+            'icon' => 'bi-envelope-open',
+            'label' => __('tpl.preview_email'),
+        ],
+    ];
+    ?>
+    <span class="letter-token-preview">
+        <?php foreach ($buttons as $button): ?>
+            <button type="button" class="letter-token-btn is-format is-icon"
+                    data-letter-preview="<?= e($arId) ?>"
+                    data-letter-preview-active="1"
+                    data-letter-preview-en="<?= e($enId) ?>"
+                    data-letter-preview-print="1"
+                    data-letter-preview-print-url="<?= e($button['url']) ?>"
+                    data-template-id="<?= $templateId ?>"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    title="<?= e($button['label']) ?>"
+                    aria-label="<?= e($button['label']) ?>">
+                <i class="bi <?= e($button['icon']) ?>" aria-hidden="true"></i>
+            </button>
+        <?php endforeach; ?>
+    </span>
+    <?php
+}
+
+function render_letter_placeholder_toolbar(string $textareaId, string $previewLang = 'ar', string $initialText = '', array $tokenTips = [], array $hideTokens = [], array $extraTokens = [], array $channelPreviews = []): void
 {
     $hidden = [];
     foreach ($hideTokens as $token) {
@@ -620,6 +704,9 @@ function render_letter_placeholder_toolbar(string $textareaId, string $previewLa
                 <i class="bi bi-eraser" aria-hidden="true"></i>
                 <span><?= e(__('tpl.token_clear_format')) ?></span>
             </button>
+            <?php if ($channelPreviews !== []): ?>
+                <?php render_letter_channel_preview_buttons($channelPreviews); ?>
+            <?php endif; ?>
         </div>
         <div class="letter-token-row is-fields">
             <?php foreach ($fields as $item): ?>
@@ -631,7 +718,7 @@ function render_letter_placeholder_toolbar(string $textareaId, string $previewLa
     render_letter_preview_modal();
 }
 
-function render_letter_lang_editor(string $arId, string $enId, string $arValue, string $enValue, int $rows = 10, bool $arRequired = false, array $tokenTips = [], array $hideTokens = [], string $hint = '', array $extraTokens = []): void
+function render_letter_lang_editor(string $arId, string $enId, string $arValue, string $enValue, int $rows = 10, bool $arRequired = false, array $tokenTips = [], array $hideTokens = [], string $hint = '', array $extraTokens = [], array $channelPreviews = []): void
 {
     $paneAr = $arId . '-pane';
     $paneEn = $enId . '-pane';
@@ -650,11 +737,11 @@ function render_letter_lang_editor(string $arId, string $enId, string $arValue, 
     </ul>
     <div class="tab-content letter-lang-panes">
         <div class="tab-pane fade show active" id="<?= e($paneAr) ?>" role="tabpanel">
-            <?php render_letter_placeholder_toolbar($arId, 'ar', $arValue, $tokenTips, $hideTokens, $extraTokens); ?>
+            <?php render_letter_placeholder_toolbar($arId, 'ar', $arValue, $tokenTips, $hideTokens, $extraTokens, $channelPreviews); ?>
             <textarea name="<?= e($arId) ?>" id="<?= e($arId) ?>" class="form-control" rows="<?= (int) $rows ?>"<?= $arRequired ? ' required' : '' ?>><?= e($arValue) ?></textarea>
         </div>
         <div class="tab-pane fade" id="<?= e($paneEn) ?>" role="tabpanel">
-            <?php render_letter_placeholder_toolbar($enId, 'en', $enValue, $tokenTips, $hideTokens, $extraTokens); ?>
+            <?php render_letter_placeholder_toolbar($enId, 'en', $enValue, $tokenTips, $hideTokens, $extraTokens, $channelPreviews); ?>
             <textarea name="<?= e($enId) ?>" id="<?= e($enId) ?>" class="form-control" rows="<?= (int) $rows ?>" dir="ltr"><?= e($enValue) ?></textarea>
         </div>
     </div>
@@ -699,6 +786,92 @@ function letter_preview_sample_row(string $lang = 'ar', int $deptId = 0): array
     }
 
     return $row;
+}
+
+/**
+ * خطاب واحد لمعاينة القالب: نص المحرر غير المحفوظ، وصاحب الشأن من «موجهة من».
+ *
+ * @return list<array<string,mixed>>
+ */
+function letter_template_preview_items(int $templateId, string $lang, string $body, int $postedDeptId, ?array $user = null): array
+{
+    $lang = $lang === 'en' ? 'en' : 'ar';
+    $items = [];
+    if ($templateId > 0 && function_exists('outgoing_batch_items')) {
+        ensure_letter_templates_schema();
+        if (function_exists('ensure_corr_electronic_schema')) {
+            ensure_corr_electronic_schema();
+        }
+        $st = db()->prepare(
+            'SELECT id FROM `tbloutgoing_batches` WHERE letter_template_id = ? ORDER BY id DESC LIMIT 1'
+        );
+        $st->execute([$templateId]);
+        $batchId = (int) $st->fetchColumn();
+        if ($batchId > 0) {
+            $items = array_values(array_filter(
+                outgoing_batch_items($batchId, $user),
+                static function (array $row): bool {
+                    if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($row)) {
+                        return false;
+                    }
+
+                    return function_exists('correspondence_intend_paper') && correspondence_intend_paper($row);
+                }
+            ));
+            if ($items !== []) {
+                $items = [$items[0]];
+            }
+        }
+    }
+    if ($items === []) {
+        $sample = letter_preview_sample_row($lang, $postedDeptId);
+        $sample['rsvp_required'] = 1;
+        $sample['intend_paper'] = 1;
+        $sample['intend_electronic'] = 0;
+        $items = [$sample];
+    }
+    $fromDeptId = $postedDeptId;
+    if ($fromDeptId <= 0 && $templateId > 0) {
+        $tplRow = get_letter_template($templateId);
+        $fromDeptId = (int) ($tplRow['department_id'] ?? 0);
+    }
+    $fromOfficer = null;
+    if ($fromDeptId > 0 && function_exists('admin_row')) {
+        $fromDept = admin_row('tbldepartments', $fromDeptId);
+        if (is_array($fromDept) && function_exists('department_officer_fields')) {
+            $fromOfficer = department_officer_fields($fromDept);
+            $fromOfficer['signature'] = function_exists('department_principal_signature_path')
+                ? department_principal_signature_path($fromDept)
+                : '';
+        }
+    }
+    foreach ($items as &$row) {
+        $row['batch_letter_template_id'] = 0;
+        $row['letter_template_id'] = 0;
+        if (is_array($fromOfficer)) {
+            $row['department_id'] = $fromDeptId;
+            $row['issuing_department_id'] = $fromDeptId;
+            $row['snap_from_prefix'] = $fromOfficer['title_prefix'];
+            $row['snap_from_person'] = $fromOfficer['directed_from'];
+            $row['snap_from_job'] = $fromOfficer['job_title'];
+            $row['snap_from_org'] = '';
+            $row['snap_from_signature'] = $fromOfficer['signature'];
+        }
+        if ($lang === 'en') {
+            $row['letter_body_en'] = $body;
+            $row['batch_letter_body_en'] = '';
+            $row['letter_body'] = '';
+            $row['batch_letter_body'] = '';
+        } else {
+            $row['letter_body'] = $body;
+            $row['batch_letter_body'] = '';
+            $row['letter_body_en'] = '';
+            $row['batch_letter_body_en'] = '';
+        }
+    }
+    unset($row);
+
+    return $items;
 }
 
 function letter_preview_html(string $body, string $lang = 'ar', int $deptId = 0, ?array $row = null): string
@@ -762,14 +935,14 @@ function letter_preview_html(string $body, string $lang = 'ar', int $deptId = 0,
         $inner .= '<div class="letter-preview-head-row"><strong>' . e($t('corr.date')) . ': ' . e($date) . '</strong></div>';
     }
     $inner .= '</div>';
-    if ($subject !== '') {
-        $inner .= '<h2 class="letter-preview-subject">' . e($subject) . '</h2>';
-    }
     if ($filled !== '') {
         $inner .= render_letter_body_html($filled, false, $row);
     }
     if ($needsRsvp) {
-        $ask = e($t(!empty($row['intend_electronic']) ? 'rsvp.email_ask' : 'rsvp.print_ask'));
+        $askKey = function_exists('correspondence_rsvp_ask_key')
+            ? correspondence_rsvp_ask_key($row, 'print')
+            : (!empty($row['intend_electronic']) ? 'rsvp.email_ask' : 'rsvp.print_ask');
+        $ask = e($t($askKey));
         $qrUri = function_exists('dms_corr_qr_data_uri') ? dms_corr_qr_data_uri($row, 160, true) : '';
         $inner .= '<div class="letter-rsvp-block letter-preview-rsvp">';
         $inner .= '<div class="letter-rsvp-note">' . $ask . '</div>';
@@ -837,11 +1010,29 @@ function letter_body_plain(string $text, array $row = []): string
     }, $text) ?? $text;
     $text = preg_replace('#\{font:[a-z0-9_]+\}#', '', $text) ?? $text;
     $text = preg_replace('#\{ls:[0-9]+\}#', '', $text) ?? $text;
-    $ctx = letter_signature_context($row);
-    $signaturePlain = in_array((string) ($row['type'] ?? ''), ['outgoing', 'circular'], true) ? '' : $ctx['name'];
-    $text = str_replace('{signature}', $signaturePlain, $text);
+    $text = str_replace('{signature}', '', $text);
     $text = str_replace(['{center}', '{/center}', '{right}', '{/right}', '{left}', '{/left}', '{justify}', '{/justify}', '{ul}', '{/ul}', '{/font}', '{/ls}', '{logo}'], '', $text);
-    return $text;
+    return letter_strip_from_marks($text);
+}
+
+function letter_from_field_mark(): string
+{
+    return "\u{E000}";
+}
+
+function letter_mark_from_field(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    return letter_from_field_mark() . $value . letter_from_field_mark();
+}
+
+function letter_strip_from_marks(string $text): string
+{
+    return str_replace(letter_from_field_mark(), '', $text);
 }
 
 function render_letter_body_html(string $text, bool $email = false, array $row = []): string
@@ -851,7 +1042,7 @@ function render_letter_body_html(string $text, bool $email = false, array $row =
         $row['_email_mso'] = 'Arial';
     }
 
-    return letter_format_segment($text, $email, $row);
+    return letter_strip_from_marks(letter_format_segment($text, $email, $row));
 }
 
 function letter_relative_disk_path(string $rel): string
@@ -1037,21 +1228,45 @@ function letter_signature_context(array $row = []): array
         'disk' => $path !== '' ? letter_relative_disk_path($path) : '',
         'url' => $url,
         'cid' => trim((string) ($row['signature_cid'] ?? '')),
+        'prefix' => $prefix,
+        'person' => $person,
+        'job' => $job,
         'name' => trim($prefix . ' ' . $person),
         'titles' => $job !== '' ? [$job] : [],
     ];
 }
 
+/** اللقب، ثم الاسم، ثم الوظيفة — كلٌ في سطر. */
+function letter_signer_lines(array $row): array
+{
+    $ctx = letter_signature_context($row);
+    $lines = [];
+    foreach (['prefix', 'person', 'job'] as $key) {
+        $line = trim((string) ($ctx[$key] ?? ''));
+        if ($line !== '') {
+            $lines[] = $line;
+        }
+    }
+
+    return $lines;
+}
+
+function letter_body_has_signature(string $text): bool
+{
+    return stripos($text, '{signature}') !== false;
+}
+
 function letter_signature_markup(bool $email = false, array $row = []): string
 {
     $ctx = letter_signature_context($row);
-    $imageOnly = in_array((string) ($row['type'] ?? ''), ['outgoing', 'circular'], true);
-    $name = $imageOnly ? '' : $ctx['name'];
-    $titles = $imageOnly ? [] : $ctx['titles'];
+    $showSignature = letter_display_flags($row)['signature'];
+    $prefix = '';
+    $person = '';
+    $job = '';
     $src = '';
-    if ($email && $ctx['cid'] !== '') {
+    if ($showSignature && $email && $ctx['cid'] !== '') {
         $src = 'cid:' . $ctx['cid'];
-    } elseif ($ctx['url'] !== '') {
+    } elseif ($showSignature && $ctx['url'] !== '') {
         $src = $ctx['url'];
     }
     $img = '';
@@ -1073,19 +1288,20 @@ function letter_signature_markup(bool $email = false, array $row = []): string
     }
     $ff = $email ? letter_email_style($row) : '';
     $lines = '';
-    if ($name !== '') {
+    if ($prefix !== '') {
         $lines .= $email
-            ? '<div style="' . $ff . 'font-weight:700;margin:0 0 2px">' . e($name) . '</div>'
-            : '<div class="letter-signature-name">' . e($name) . '</div>';
+            ? '<div style="' . $ff . 'margin:0;color:#000">' . e($prefix) . '</div>'
+            : '<div class="letter-signature-title">' . e($prefix) . '</div>';
     }
-    foreach ($titles as $title) {
-        $title = trim((string) $title);
-        if ($title === '') {
-            continue;
-        }
+    if ($person !== '') {
         $lines .= $email
-            ? '<div style="' . $ff . 'font-size:11pt;color:#445;margin:8px 0 0">' . e($title) . '</div>'
-            : '<div class="letter-signature-title">' . e($title) . '</div>';
+            ? '<div style="' . $ff . 'font-weight:700;margin:0;color:#000">' . e($person) . '</div>'
+            : '<div class="letter-signature-name">' . e($person) . '</div>';
+    }
+    if ($job !== '') {
+        $lines .= $email
+            ? '<div style="' . $ff . 'margin:0;color:#000">' . e($job) . '</div>'
+            : '<div class="letter-signature-title">' . e($job) . '</div>';
     }
     if ($img === '' && $lines === '') {
         return '';
@@ -1237,10 +1453,7 @@ function letter_format_wrap(string $tag, string $innerHtml, bool $email, array $
 
     if ($email) {
         return match ($tag) {
-            'center' => '<div style="' . letter_email_style($row, 'text-align:center;margin:0 0 8px') . '">' . $innerHtml . '</div>',
-            'right' => '<div style="' . letter_email_style($row, 'text-align:right;margin:0 0 8px') . '">' . $innerHtml . '</div>',
-            'left' => '<div style="' . letter_email_style($row, 'text-align:left;margin:0 0 8px') . '">' . $innerHtml . '</div>',
-            'justify' => '<div style="' . letter_email_style($row, 'text-align:justify;text-align-last:start;margin:0 0 8px') . '">' . $innerHtml . '</div>',
+            'center', 'right', 'left', 'justify' => '<div style="' . letter_email_style($row, 'margin:0 0 8px') . '">' . $innerHtml . '</div>',
             'b' => '<strong style="' . letter_email_style($row, 'font-weight:700') . '">' . $innerHtml . '</strong>',
             'u' => '<span style="' . letter_email_style($row, 'text-decoration:underline') . '">' . $innerHtml . '</span>',
             'big' => '<span style="' . letter_email_style($row, 'font-size:14.5pt;font-weight:600') . '">' . $innerHtml . '</span>',

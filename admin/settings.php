@@ -444,6 +444,9 @@ $activeTab = trim((string) ($_GET['tab'] ?? 'org'));
 if ($activeTab === 'approval') {
     redirect(base_url('admin/settings.php?tab=approval_outgoing'));
 }
+if ($activeTab === 'confidential') {
+    redirect(base_url('admin/confidential_settings.php'));
+}
 if (in_array($activeTab, ['security', 'display'], true)) {
     $activeTab = 'org';
 }
@@ -844,6 +847,14 @@ require __DIR__ . '/../includes/header.php';
                     $chain = ['prefix' => 'outgoing', 'first' => 'user'];
                     require __DIR__ . '/../includes/settings_approval_chain.php';
                     ?>
+                    <div class="alert alert-light border mt-4 mb-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="small mb-0">
+                            <i class="bi bi-eye-slash me-1"></i><?= e(__('settings.conf_path_hint')) ?>
+                        </div>
+                        <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('admin/confidential_settings.php')) ?>">
+                            <i class="bi bi-sliders me-1"></i><?= e(__('settings.tab_confidential')) ?>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

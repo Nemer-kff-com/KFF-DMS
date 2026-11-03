@@ -23,11 +23,13 @@ $canEdit = $canEdit && $receiptUi === 'allow';
 
 $isElectronicDelivery = function_exists('correspondence_intend_electronic')
     && correspondence_intend_electronic($corr);
+$isPaperDelivery = function_exists('correspondence_intend_paper')
+    && correspondence_intend_paper($corr);
 $deliveryTab = ($_GET['delivery_tab'] ?? '') === 'status'
     ? 'status'
     : (($_GET['delivery_tab'] ?? '') === 'delivery'
         ? 'delivery'
-        : ($isElectronicDelivery ? 'status' : 'delivery'));
+        : ($isElectronicDelivery && !$isPaperDelivery ? 'status' : 'delivery'));
 
 ?>
 
@@ -35,17 +37,19 @@ $deliveryTab = ($_GET['delivery_tab'] ?? '') === 'status'
 
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-        <span><i class="bi bi-<?= $isElectronicDelivery ? 'envelope-at' : 'truck' ?> me-1"></i><?= e($isElectronicDelivery ? __('delivery.section_electronic') : __('receipt.section')) ?></span>
+        <span><i class="bi bi-<?= $isPaperDelivery ? 'truck' : 'envelope-at' ?> me-1"></i><?= e($isPaperDelivery ? __('receipt.section') : __('delivery.section_electronic')) ?></span>
 
         <?php if ($isElectronicDelivery): ?>
 
             <span class="badge text-bg-info"><?= e(__('corr.electronic_badge')) ?></span>
 
-        <?php elseif ($hasReceipt): ?>
+        <?php endif; ?>
+
+        <?php if ($isPaperDelivery && $hasReceipt): ?>
 
             <span class="badge text-bg-success"><?= e(__('receipt.recorded')) ?></span>
 
-        <?php else: ?>
+        <?php elseif ($isPaperDelivery): ?>
 
             <span class="badge text-bg-secondary"><?= e(__('receipt.pending')) ?></span>
 

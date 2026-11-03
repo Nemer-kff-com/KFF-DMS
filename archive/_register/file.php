@@ -10,6 +10,10 @@ if (!$def || !$row) {
     http_response_code(404);
     exit;
 }
+if (function_exists('user_can_access_register_row') && !user_can_access_register_row($kind, $row, $user)) {
+    http_response_code(403);
+    exit(__('auth.forbidden'));
+}
 $folder = archive_register_guess_folder($def, $row);
 $files = archive_register_folder_files($folder);
 $path = $files[$n] ?? '';

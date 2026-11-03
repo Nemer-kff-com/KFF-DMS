@@ -8,7 +8,7 @@
 | `name_ar` | الاسم العربي — للعرض حسب لغة الواجهة |
 | `name_en` | الاسم الإنجليزي — للعرض حسب لغة الواجهة |
 | `password` | كلمة المرور |
-| `role` | الدور: `admin`, `archive`, `department`, `viewer` |
+| `role` | الدور الأساسي: `admin`, `communications`, `archive`, `department`, `viewer` (والصلاحيات الدقيقة تُضبط لكل دور) |
 | `department_id` | القسم (اختياري حسب الدور) |
 
 ### ترحيل الأعمدة القديمة

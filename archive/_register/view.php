@@ -9,6 +9,10 @@ if (!$def || !$row) {
     flash('danger', __('archive.not_found'));
     redirect(base_url('archive/index.php'));
 }
+if (function_exists('user_can_access_register_row') && !user_can_access_register_row($kind, $row, $user)) {
+    flash('danger', __('auth.forbidden'));
+    redirect(base_url('archive/index.php'));
+}
 $folder = archive_register_guess_folder($def, $row);
 $files = archive_register_folder_files($folder);
 $showFiles = ($def['folder_kinds'] ?? []) !== [] || $files !== [];

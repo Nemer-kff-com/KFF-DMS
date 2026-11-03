@@ -51,6 +51,8 @@ $quickComments = [
 $thermalPrintUrl = base_url('correspondence/thermal_label.php?id=' . (int) $corr['id']);
 $isElectronic = $isOutgoing && function_exists('correspondence_intend_electronic')
     && correspondence_intend_electronic($corr);
+$isPaper = $isOutgoing && function_exists('correspondence_intend_paper')
+    && correspondence_intend_paper($corr);
 $printFormLabel = $isIncoming
     ? __('corr.print_receipt_form')
     : __('bulk.print_corr');

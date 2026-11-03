@@ -846,6 +846,7 @@ function dms_permission_for_href(string $href): ?string
         'admin/permissions.php' => 'admin.users',
         'admin/departments.php' => 'admin.departments',
         'admin/settings.php' => 'admin.settings',
+        'admin/confidential_settings.php' => 'admin.settings',
         'admin/email_settings.php' => 'admin.settings',
         'admin/whatsapp_settings.php' => 'admin.settings',
         'admin/load_check.php' => 'admin.settings',
@@ -856,6 +857,8 @@ function dms_permission_for_href(string $href): ?string
         'admin/activity_log.php' => 'admin.logs',
         'admin/security_log.php' => 'admin.logs',
         'admin/active_sessions.php' => 'admin.logs',
+        'admin/help.php' => 'admin.settings',
+        'admin/help_asset.php' => 'admin.settings',
         'admin/backup.php' => 'admin.backup',
         'admin/reset_all.php' => 'admin.reset',
     ];

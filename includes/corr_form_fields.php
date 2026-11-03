@@ -268,11 +268,14 @@ if (
                     </div>
                     <div class="col-6">
                         <label class="form-label" for="confidentiality"><?= e(__('corr.confidentiality')) ?></label>
-                        <select name="confidentiality" id="confidentiality" class="form-select">
-                            <?php foreach ($confidentialityRows as $c): ?>
-                                <option value="<?= e($c['code']) ?>" <?= ((string)$v('confidentiality', 'normal') === (string)$c['code']) ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="input-group conf-with-override">
+                            <select name="confidentiality" id="confidentiality" class="form-select" data-conf-level-select>
+                                <?php foreach ($confidentialityRows as $c): ?>
+                                    <option value="<?= e($c['code']) ?>" <?= ((string)$v('confidentiality', 'normal') === (string)$c['code']) ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php require __DIR__ . '/conf_attach_overrides_fields.php'; ?>
+                        </div>
                     </div>
                 </div>
             </div>

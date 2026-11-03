@@ -17,6 +17,10 @@ if ($id < 1 && !user_can_archive_section($kind, 'create', $user)) {
     redirect(archive_register_url($kind, 'list'));
 }
 $row = $id > 0 ? (archive_register_get($kind, $id) ?: []) : [];
+if ($id > 0 && $row && function_exists('user_can_access_register_row') && !user_can_access_register_row($kind, $row, $user)) {
+    flash('danger', __('auth.forbidden'));
+    redirect(archive_register_url($kind, 'list'));
+}
 $existingFiles = ($id > 0 && $row)
     ? archive_register_folder_files(archive_register_guess_folder($def, $row))
     : [];
@@ -179,6 +183,32 @@ require __DIR__ . '/../../includes/header.php';
                         </div>
                     </div>
                 <?php endforeach; ?>
+                <?php
+                if (function_exists('ensure_register_confidentiality_schema')) {
+                    ensure_register_confidentiality_schema();
+                }
+                $item = $row;
+                $corr = null;
+                ?>
+                <div class="corr-field-card mb-3">
+                    <div class="corr-field-card-title"><i class="bi bi-shield-lock me-1"></i><?= e(__('corr.group_priority')) ?></div>
+                    <div class="row g-2 corr-field-card-body">
+                        <div class="col-md-6 col-xl-4">
+                            <label class="form-label" for="register_confidentiality"><?= e(__('corr.confidentiality')) ?></label>
+                            <div class="input-group conf-with-override">
+                                <select name="confidentiality" id="register_confidentiality" class="form-select" data-conf-level-select>
+                                    <?php
+                                    $regConf = (string) $v('confidentiality', 'normal');
+                                    foreach (function_exists('confidentiality_levels_list') ? confidentiality_levels_list() : [] as $c):
+                                        ?>
+                                        <option value="<?= e($c['code']) ?>" <?= $regConf === (string) $c['code'] ? 'selected' : '' ?>><?= e(bilingual_label($c)) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php require __DIR__ . '/../../includes/conf_attach_overrides_fields.php'; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="admin-form-section admin-form-section-last">
                     <div class="row g-3">
                         <div class="col-lg-6">

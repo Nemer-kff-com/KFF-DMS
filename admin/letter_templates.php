@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'delet
     try {
         $savedId = save_letter_template($_POST, $user, $editing ? (int) $editing['id'] : null);
         flash('success', $editing ? __('tpl.updated') : __('tpl.created'));
-        redirect(base_url('admin/letter_templates.php'));
+        redirect(base_url('admin/letter_templates.php?id=' . $savedId));
     } catch (Throwable $e) {
         $error = $e->getMessage();
     }
@@ -105,11 +105,18 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                     <?php if (can_choose_correspondence_department($user)): ?>
                     <div class="col-md-6">
-                        <label class="form-label" for="department_id"><?= e(__('corr.department')) ?></label>
-                        <select name="department_id" id="department_id" class="form-select">
+                        <label class="form-label" for="department_id"><?= e(__('corr.issuing_department')) ?></label>
+                        <select name="department_id" id="department_id" class="form-select corr-officer-pick">
                             <option value=""><?= e(__('tpl.public')) ?></option>
-                            <?php foreach ($departments as $d): ?>
-                                <option value="<?= (int) $d['id'] ?>" <?= (string) $values['department_id'] === (string) $d['id'] ? 'selected' : '' ?>><?= e(department_display_name($d)) ?></option>
+                            <?php foreach ($departments as $d):
+                                $tplOffice = department_officer_subtitle($d);
+                                ?>
+                                <option value="<?= (int) $d['id'] ?>"
+                                        data-office="<?= e($tplOffice) ?>"
+                                        title="<?= e(department_display_name($d)) ?>"
+                                        <?= (string) $values['department_id'] === (string) $d['id'] ? 'selected' : '' ?>>
+                                    <?= e(department_person_option_label($d)) ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -119,7 +126,11 @@ require __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="mb-3">
                     <label class="form-label"><?= e(__('tpl.body')) ?> *</label>
-                    <?php render_letter_lang_editor('body', 'body_en', (string) $values['body'], (string) $values['body_en'], 10, true, [], [], '', letter_signer_insert_tokens()); ?>
+                    <?php render_letter_lang_editor('body', 'body_en', (string) $values['body'], (string) $values['body_en'], 10, true, [], [], '', letter_signer_insert_tokens(), [
+                        'template_id' => (int) $editId,
+                        'ar' => 'body',
+                        'en' => 'body_en',
+                    ]); ?>
                 </div>
                 <div class="admin-form-actions">
                     <button class="btn btn-kff" type="submit"><?= e(__('action.save')) ?></button>
@@ -144,7 +155,7 @@ require __DIR__ . '/../includes/header.php';
             <thead>
                 <tr>
                     <th><?= e(__('lookups.name_ar')) ?></th>
-                    <th><?= e(__('corr.department')) ?></th>
+                    <th><?= e(__('corr.issuing_department')) ?></th>
                     <th class="text-end"><?= e(__('common.actions')) ?></th>
                 </tr>
             </thead>
@@ -155,7 +166,26 @@ require __DIR__ . '/../includes/header.php';
                         <div class="admin-entity-name"><?= e(letter_template_label($r)) ?></div>
                         <div class="small text-muted"><?= e(mb_substr(preg_replace('/\s+/', ' ', (string) $r['body']), 0, 80)) ?>…</div>
                     </td>
-                    <td><?= e((int) ($r['department_id'] ?? 0) ? department_display_name($r, 'department_name', 'department_name_en') : __('tpl.public')) ?></td>
+                    <td><?php
+                        $tplDeptId = (int) ($r['department_id'] ?? 0);
+                        $tplDept = null;
+                        if ($tplDeptId > 0) {
+                            foreach ($departments as $d) {
+                                if ((int) ($d['id'] ?? 0) === $tplDeptId) {
+                                    $tplDept = $d;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!$tplDept) {
+                            echo e(__('tpl.public'));
+                        } else {
+                            render_officer_with_office(
+                                department_person_option_label($tplDept),
+                                department_officer_subtitle($tplDept)
+                            );
+                        }
+                    ?></td>
                     <td class="text-end text-nowrap">
                         <?php if (user_can_edit_letter_template($r, $user)): ?>
                             <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('admin/letter_templates.php?id=' . (int) $r['id'])) ?>"><i class="bi bi-pencil"></i></a>

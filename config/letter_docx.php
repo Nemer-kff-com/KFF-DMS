@@ -29,8 +29,6 @@ function letter_docx_one_letter(array $corr, string $font, ?array $logo): string
     $lang = correspondence_letter_channel_lang($corr);
     $isEn = $lang === 'en';
     $align = $isEn ? 'left' : 'right';
-    $parts = print_direction_parts($corr);
-    $to = $parts['to'] ?? [];
     $names = function_exists('org_visible_names') ? org_visible_names('print') : [];
     $xml = '';
 
@@ -63,41 +61,6 @@ function letter_docx_one_letter(array $corr, string $font, ?array $logo): string
             . briefing_docx_run($dateValue, $font, ['size' => 11]),
             ['align' => $align, 'after' => 160]
         );
-    }
-
-    if (print_direction_part_has_content($to)) {
-        $xml .= briefing_docx_p(
-            briefing_docx_run(__lang('print.directed_to', $lang), $font, ['bold' => true, 'size' => 11, 'color' => '3B4F6E']),
-            ['align' => $align, 'after' => 60]
-        );
-        $prefix = trim((string) ($to['prefix'] ?? ''));
-        $person = trim((string) ($to['person'] ?? ''));
-        $honorific = trim((string) ($to['honorific'] ?? ''));
-        $job = trim((string) ($to['job'] ?? ''));
-        $org = trim((string) ($to['org'] ?? ''));
-        if ($prefix !== '') {
-            $xml .= briefing_docx_p(briefing_docx_run($prefix, $font, ['size' => 10]), ['align' => $align, 'after' => 20]);
-        }
-        if ($person !== '') {
-            $xml .= briefing_docx_p(briefing_docx_run($person, $font, ['bold' => true, 'size' => 13]), ['align' => $align, 'after' => 20]);
-        }
-        if ($honorific !== '') {
-            $xml .= briefing_docx_p(briefing_docx_run($honorific, $font, ['size' => 10]), ['align' => $align, 'after' => 40]);
-        }
-        if ($job !== '') {
-            $xml .= briefing_docx_p(briefing_docx_run($job, $font, ['size' => 10.5]), ['align' => $align, 'after' => 20]);
-        }
-        if ($org !== '') {
-            $xml .= briefing_docx_p(briefing_docx_run($org, $font, ['bold' => true, 'size' => 12.5]), ['align' => $align, 'after' => 160]);
-        }
-    }
-
-    $subject = trim((string) ($corr['subject'] ?? ''));
-    if ($subject !== '') {
-        $xml .= briefing_docx_p(briefing_docx_run($subject, $font, ['bold' => true, 'size' => 14, 'color' => '3B4F6E']), [
-            'align' => $align,
-            'after' => 200,
-        ]);
     }
 
     $bodyText = letter_body_plain(correspondence_letter_text($corr, $lang), $corr);

@@ -16,7 +16,7 @@ if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
     flash('warning', $msg !== '' ? $msg : __('issue_appr.blocked_pending'));
     redirect(base_url('outgoing/view.php?id=' . $id));
 }
-if (function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr)) {
+if (function_exists('correspondence_intend_paper') && !correspondence_intend_paper($corr)) {
     flash('warning', __('out_prep.print_not_electronic'));
     redirect(base_url('outgoing/view.php?id=' . $id));
 }
