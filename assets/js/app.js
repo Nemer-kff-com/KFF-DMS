@@ -438,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   if (window.bootstrap && bootstrap.Tooltip) {
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    document.querySelectorAll('[data-bs-toggle="tooltip"], [data-tip]').forEach(function (el) {
       var isBtn = el.matches('button, a.btn, .btn, label.btn');
       var place = el.getAttribute('data-bs-placement') || '';
       var opts = {};
@@ -831,7 +831,8 @@ function bindLetterPreview(root) {
         }
         addField('body', ta.value || '');
         addField('lang', lang);
-        addField('template_id', btn.getAttribute('data-template-id') || '');
+        var tplSel = form.querySelector('[name="letter_template_id"]');
+        addField('template_id', (tplSel && tplSel.value) || btn.getAttribute('data-template-id') || '');
         addField('department_id', (form.querySelector('[name="department_id"]') || {}).value || '');
         addField('issuing_department_id', (form.querySelector('[name="issuing_department_id"]') || {}).value || '');
         document.body.appendChild(printForm);
@@ -911,16 +912,19 @@ function bindLetterPreview(root) {
 }
 
 function renderQr(elId, text, size, correctLevel) {
-  size = size || 160;
+  // احتياطي فقط عند غياب صورة السيرفر — يطابق معيار النظام: ECC منخفض + دقة أعلى
+  size = Math.max(320, Math.round(Number(size) || 640));
   var el = document.getElementById(elId);
   if (!el || typeof QRCode === 'undefined') return;
+  // صورة السيرفر (المعيار الموحّد) لها الأولوية — لا تُستبدل بـ JS
+  if (el.querySelector('img[src^="data:image"]')) return;
   var src = String(text || '').trim();
   if (!src) return;
   var level = correctLevel;
   if (level == null) {
-    level = (QRCode.CorrectLevel && QRCode.CorrectLevel.M != null)
-      ? QRCode.CorrectLevel.M
-      : 0;
+    level = (QRCode.CorrectLevel && QRCode.CorrectLevel.L != null)
+      ? QRCode.CorrectLevel.L
+      : 1;
   }
   el.innerHTML = '';
   try {
@@ -949,7 +953,9 @@ function renderQr(elId, text, size, correctLevel) {
 
 /** QR حاد للطابعة الحرارية: أبيض/أسود صلب بدون تمويه عند التصغير */
 function renderThermalQr(elId, text, size) {
-  size = Math.max(96, Math.round(Number(size) || 160));
+  size = Math.max(320, Math.round(Number(size) || 640));
+  var el0 = document.getElementById(elId);
+  if (el0 && el0.querySelector('img[src^="data:image"]')) return;
   var level = (typeof QRCode !== 'undefined' && QRCode.CorrectLevel)
     ? QRCode.CorrectLevel.L
     : 1;

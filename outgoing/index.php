@@ -3,6 +3,19 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/correspondence.php';
 $user = require_login();
 $pageTitle = __('nav.outgoing');
+// مسودات/مراحل عالقة بعد تغيير إعدادات مسار الصادر → نفس سلوك المفرد
+if (function_exists('outgoing_prep_enabled')
+    && !outgoing_prep_enabled()
+    && function_exists('outgoing_prep_release_all_open_if_disabled')
+) {
+    outgoing_prep_release_all_open_if_disabled($user);
+}
+if (function_exists('outgoing_issue_flow_active')
+    && !outgoing_issue_flow_active()
+    && function_exists('outgoing_issue_flow_release_all_if_inactive')
+) {
+    outgoing_issue_flow_release_all_if_inactive($user);
+}
 
 $filters = [
     'q' => trim($_GET['q'] ?? ''),
@@ -28,10 +41,11 @@ if (($filters['issuing_department_id'] === '' || $filters['issuing_department_id
     $filters['issuing_department_id'] = $filters['department_id'];
 }
 $filters['department_id'] = '';
-$list = correspondence_list_page('outgoing', $filters, $user, dms_request_page());
-$rows = $list['rows'];
-$pagination = $list['pagination'];
-$listTotal = $list['total'];
+// الدفعة الجماعية صف واحد في كل التبويبات؛ العدّ والترقيم بعد الدمج
+$collapsed = outgoing_queue_collapse_batches(correspondence_list('outgoing', $filters, $user));
+$listTotal = count($collapsed);
+$pagination = dms_pagination_meta($listTotal, dms_request_page(), dms_list_per_page());
+$rows = array_slice($collapsed, (int) $pagination['offset'], (int) $pagination['per_page']);
 $departments = departments_list();
 $missingReceiptCount = outgoing_missing_receipt_count($user);
 $alertDays = outgoing_receipt_alert_days();
@@ -40,8 +54,11 @@ $pageScripts = dms_list_page_scripts();
 $prepFilter = trim((string) ($filters['prep'] ?? ''));
 $prepEnabled = function_exists('outgoing_prep_enabled') && outgoing_prep_enabled();
 $prepMineCount = correspondence_list_count('outgoing', ['prep' => 'mine'], $user);
-$prepSignerCount = function_exists('outgoing_user_may_see_prep_signer_queue') && outgoing_user_may_see_prep_signer_queue($user)
-    ? correspondence_list_count('outgoing', ['prep' => 'signer'], $user)
+$showSignerTab = (function_exists('outgoing_user_may_see_prep_signer_queue') && outgoing_user_may_see_prep_signer_queue($user))
+    || (function_exists('outgoing_user_may_see_review_queue') && outgoing_user_may_see_review_queue($user))
+    || (function_exists('outgoing_user_may_see_approval_queue') && outgoing_user_may_see_approval_queue($user));
+$prepSignerCount = $showSignerTab
+    ? count(outgoing_queue_collapse_batches(correspondence_list('outgoing', ['prep' => 'signer'], $user)))
     : 0;
 $showPrepTabs = $prepEnabled || $prepMineCount > 0 || $prepSignerCount > 0;
 
@@ -91,7 +108,7 @@ require __DIR__ . '/../includes/header.php';
     <a class="btn btn-sm <?= $prepFilter === 'mine' ? 'btn-kff' : 'btn-outline-secondary' ?>" href="<?= e(base_url('outgoing/index.php?prep=mine')) ?>">
         <?= e(__('out_prep.filter_mine')) ?><?php if ($prepMineCount > 0): ?> <span class="badge text-bg-light text-dark"><?= (int) $prepMineCount ?></span><?php endif; ?>
     </a>
-    <?php if (function_exists('outgoing_user_may_see_prep_signer_queue') && outgoing_user_may_see_prep_signer_queue($user)): ?>
+    <?php if ($showSignerTab): ?>
     <a class="btn btn-sm <?= $prepFilter === 'signer' ? 'btn-kff' : 'btn-outline-secondary' ?>" href="<?= e(base_url('outgoing/index.php?prep=signer')) ?>">
         <?= e(__('out_prep.filter_signer')) ?> <span class="badge text-bg-light text-dark"><?= (int) $prepSignerCount ?></span>
     </a>
@@ -162,9 +179,22 @@ require __DIR__ . '/../includes/header.php';
                 $warnMissingReceipt = $isPaper && !$hasReceipt && !correspondence_is_settled($r)
                     && ($r['corr_date'] ?? '') <= date('Y-m-d', strtotime('-' . $alertDays . ' days'));
                 ?>
-                <tr class="<?= $warnMissingReceipt ? 'table-warning' : '' ?>">
+                <?php $isBatchGroup = (int) ($r['is_batch_group'] ?? 0) === 1; ?>
+                <tr class="<?= $warnMissingReceipt && !$isBatchGroup ? 'table-warning' : '' ?>">
                     <td class="fw-semibold">
-                        <div><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($r) : $r['ref_number']) ?></div>
+                        <?php if ($isBatchGroup): ?>
+                            <div><?= e(__('corr.outgoing_bulk')) ?></div>
+                            <div class="small text-muted"><?= (int) ($r['batch_item_count'] ?? 0) ?> <?= e(__('bulk.recipients')) ?></div>
+                        <?php else: ?>
+                            <div class="d-inline-flex align-items-center gap-1 flex-wrap">
+                                <span><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($r) : $r['ref_number']) ?></span>
+                                <?php if ((int) ($r['batch_id'] ?? 0) > 0): ?>
+                                    <a class="badge corr-batch-chip text-decoration-none"
+                                       href="<?= e(base_url('outgoing/batch.php?id=' . (int) $r['batch_id'])) ?>"
+                                       title="<?= e(__('corr.batch_view')) ?>"><?= e(__('corr.batch_mark')) ?></a>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                     </td>
                     <td><?= e($r['subject']) ?></td>
                     <td>
@@ -173,6 +203,9 @@ require __DIR__ . '/../includes/header.php';
                         ?>
                     </td>
                     <td>
+                        <?php if ($isBatchGroup): ?>
+                            <span class="badge text-bg-light text-dark"><?= (int) ($r['batch_item_count'] ?? 0) ?> <?= e(__('bulk.recipients')) ?></span>
+                        <?php else: ?>
                         <?php
                         $partyParts = correspondence_archived_party($r);
                         if (trim((string) ($partyParts['person'] ?? '')) === '') {
@@ -187,6 +220,7 @@ require __DIR__ . '/../includes/header.php';
                                 <div class="small text-danger mt-1"><?= e(__('send.missing_email')) ?></div>
                             <?php endif; ?>
                         <?php endif; ?>
+                        <?php endif; ?>
                     </td>
                     <td class="list-col-date"><?php render_corr_date_cell($r['corr_date'] ?? null); ?></td>
                     <td class="list-col-status"><?= status_badge($r['status'], $r['cancel_kind'] ?? null) ?></td>
@@ -194,6 +228,8 @@ require __DIR__ . '/../includes/header.php';
                     <td class="list-col-appr"><?= function_exists('outgoing_approval_badge') ? outgoing_approval_badge($r) : '' ?></td>
                     <?php endif; ?>
                     <td class="list-col-after-appr">
+                        <?php if ($isBatchGroup): ?>
+                        <?php else: ?>
                         <div class="list-badge-group">
                         <?php if ($isPaper): ?>
                             <?php if ($hasReceipt): ?>
@@ -217,13 +253,20 @@ require __DIR__ . '/../includes/header.php';
                             <span class="badge text-bg-success" title="<?= e(__('corr.attach')) ?>"><i class="bi bi-paperclip"></i></span>
                         <?php endif; ?>
                         </div>
+                        <?php endif; ?>
                     </td>
                     <td>
-                        <?php if (!empty($r['linked_ref']) && in_array((string) ($r['linked_type'] ?? ''), ['incoming', 'outgoing', 'internal'], true)): ?>
+                        <?php if (!$isBatchGroup && !empty($r['linked_ref']) && in_array((string) ($r['linked_type'] ?? ''), ['incoming', 'outgoing', 'internal'], true)): ?>
                             <a class="badge text-bg-success text-decoration-none" href="<?= e(base_url('correspondence/related.php?id=' . (int) $r['id'])) ?>" title="<?= e(__('corr.related_open')) ?>"><?= e($r['linked_ref']) ?></a>
                         <?php endif; ?>
                     </td>
-                    <td><a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/view.php?id='.(int)$r['id'])) ?>"><?= e(__('action.view')) ?></a></td>
+                    <td>
+                        <?php if ($isBatchGroup): ?>
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/batch.php?id=' . (int) ($r['batch_id'] ?? 0))) ?>"><?= e(__('corr.batch_view')) ?></a>
+                        <?php else: ?>
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/view.php?id='.(int)$r['id'])) ?>"><?= e(__('action.view')) ?></a>
+                        <?php endif; ?>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

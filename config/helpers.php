@@ -48,6 +48,43 @@ function btn_icon_add(string $href, string $label, string $icon = 'bi-plus-lg'):
     ]);
 }
 
+/** زر طباعة الصفحة: مستطيل منحني وأيقونة مع تلميح */
+function dms_print_icon(string $attrs = 'onclick="window.print()"'): string
+{
+    return btn_icon(__('action.print'), [
+        'icon' => 'bi-printer',
+        'class' => 'btn-outline-secondary batch-print-toggle',
+        'attrs' => $attrs,
+    ]);
+}
+
+/** نسخة مخفية من زر الطباعة لموازنة شريط العنوان */
+function dms_print_icon_ghost(): string
+{
+    return '<button type="button" class="btn btn-icon btn-outline-secondary batch-print-toggle" tabindex="-1" disabled aria-hidden="true">'
+        . '<i class="bi bi-printer" aria-hidden="true"></i></button>';
+}
+
+/** زر الرجوع: أيقونة في طرف الشريط مع تلميح */
+function dms_back_icon(string $href = '', ?string $label = null, string $attrs = '', string $class = ''): string
+{
+    $label = $label ?? __('action.back');
+    $icon = (function_exists('dms_is_rtl') && dms_is_rtl()) ? 'bi-arrow-left' : 'bi-arrow-right';
+    $class = trim('btn-outline-secondary page-header-back ' . $class);
+    if ($href === '') {
+        return '<a class="btn btn-icon ' . e($class) . '" tabindex="-1"'
+            . ($attrs !== '' ? ' ' . $attrs : '')
+            . '><i class="bi ' . $icon . '" aria-hidden="true"></i></a>';
+    }
+
+    return btn_icon($label, [
+        'href' => $href,
+        'icon' => $icon,
+        'class' => $class,
+        'attrs' => $attrs,
+    ]);
+}
+
 function redirect(string $url): void
 {
     header('Location: ' . $url);
@@ -3073,27 +3110,55 @@ function dms_corr_qr_fields(array $corr): array
     ];
 }
 
+/**
+ * رابط QR مختصر لصفحة التحقق — يقلّل عدد وحدات الرمز فيتوحّد الشكل مع روابط قصيرة مثل الخرائط.
+ * المسار: /q/{token} و /q/{token}/r للحضور (مع إبقاء verify.php؟token= يعمل للرموز القديمة).
+ */
+function dms_corr_qr_short_url(string $token, bool $rsvpFocus = false): string
+{
+    $token = strtolower(trim($token));
+    if ($token === '' || !preg_match('/^[a-f0-9]{32}$/', $token)) {
+        return '';
+    }
+
+    return dms_corr_qr_base_url() . '/q/' . $token . ($rsvpFocus ? '/r' : '');
+}
+
 /** محتوى رمز QR: رابط صفحة التحقق فقط. */
-function dms_corr_qr_content(array $corr, bool $compact = false): string
+function dms_corr_qr_content(array $corr, bool $compact = false, bool $allowPrep = false): string
 {
     unset($compact);
-    if (function_exists('outgoing_show_official_ref') && !outgoing_show_official_ref($corr)) {
+    if (!$allowPrep && function_exists('outgoing_show_official_ref') && !outgoing_show_official_ref($corr)) {
         return '';
     }
     $token = trim((string) ($corr['qr_token'] ?? ''));
     if ($token === '') {
         return '';
     }
-    return dms_corr_qr_base_url() . '/verify.php?token=' . rawurlencode($token);
+    $short = dms_corr_qr_short_url($token, false);
+
+    return $short !== '' ? $short : (dms_corr_qr_base_url() . '/verify.php?token=' . rawurlencode($token));
 }
 
 /** رابط التحقق مع التركيز على تأكيد الحضور. */
-function dms_corr_rsvp_url(array $corr): string
+function dms_corr_rsvp_url(array $corr, bool $allowPrep = false): string
 {
-    $url = dms_corr_qr_content($corr);
+    $token = trim((string) ($corr['qr_token'] ?? ''));
+    if ($token === '') {
+        return '';
+    }
+    if (!$allowPrep && function_exists('outgoing_show_official_ref') && !outgoing_show_official_ref($corr)) {
+        return '';
+    }
+    $short = dms_corr_qr_short_url($token, true);
+    if ($short !== '') {
+        return $short;
+    }
+    $url = dms_corr_qr_content($corr, false, true);
     if ($url === '') {
         return '';
     }
+
     return $url . (str_contains($url, '?') ? '&' : '?') . 'rsvp=1';
 }
 
@@ -3114,20 +3179,41 @@ function dms_load_php_qrcode(): bool
     return $ok = class_exists('DmsQrCode', false);
 }
 
-/** PNG ثنائي لرمز QR (فارغ عند التعذر). */
-function dms_qr_png_bytes(string $text, int $size = 160): string
+/** الحجم المعياري الموحّد لكل رموز QR في النظام (يُصغَّر بالـ CSS عند العرض). */
+function dms_qr_standard_px(): int
+{
+    return 640;
+}
+
+/**
+ * PNG ثنائي لرمز QR (فارغ عند التعذر).
+ * المعيار الافتراضي للنظام: 640px + ECC منخفض + هامش 4 — أوضح بعد التصغير في الورق/PDF/الحراري.
+ *
+ * @param 'qrl'|'qrm'|'qrq'|'qrh'|null $ecc null = المعيار (qrl)
+ */
+function dms_qr_png_bytes(string $text, int $size = 0, ?string $ecc = null, ?int $padding = null): string
 {
     $text = trim($text);
     if ($text === '' || !dms_load_php_qrcode()) {
         return '';
     }
-    $size = max(80, min(400, $size));
+    if ($size <= 0) {
+        $size = dms_qr_standard_px();
+    }
+    $size = max(80, min(720, $size));
+    if ($ecc === null || !in_array($ecc, ['qrl', 'qrm', 'qrq', 'qrh'], true)) {
+        $ecc = 'qrl';
+    }
+    if ($padding === null) {
+        $padding = 4;
+    }
+    $padding = max(0, min(24, $padding));
     try {
         $generator = new DmsQrCode($text, [
-            's' => 'qrm',
+            's' => $ecc,
             'w' => $size,
             'h' => $size,
-            'p' => 8,
+            'p' => $padding,
             'bc' => '#FFFFFF',
             'fc' => '#000000',
         ]);
@@ -3144,22 +3230,55 @@ function dms_qr_png_bytes(string $text, int $size = 160): string
     }
 }
 
-/** data-URI لطباعة/عرض رمز التحقق بدون JavaScript. */
-function dms_corr_qr_data_uri(array $corr, int $size = 160, bool $rsvpFocus = false): string
+/** PNG بالمعيار الموحّد (خطاب / RSVP / حراري / بطاقة / بريد). */
+function dms_letter_qr_png_bytes(string $text): string
 {
-    $text = $rsvpFocus ? dms_corr_rsvp_url($corr) : dms_corr_qr_content($corr);
-    $bytes = dms_qr_png_bytes($text, $size);
+    return dms_qr_png_bytes($text, dms_qr_standard_px(), 'qrl', 4);
+}
+
+/** data-URI لأي نص يُرمَّز — المعيار الموحّد. */
+function dms_qr_data_uri(string $text, int $size = 0): string
+{
+    $bytes = ($size > 0 && $size < 160)
+        ? dms_qr_png_bytes($text, $size, 'qrl', 4)
+        : dms_letter_qr_png_bytes($text);
     if ($bytes === '') {
         return '';
     }
+
     return 'data:image/png;base64,' . base64_encode($bytes);
 }
 
-/** ملف PNG مؤقت لتضمين QR في البريد (CID). احذفه بعد الإرسال. */
-function dms_corr_qr_temp_png(array $corr, int $size = 160, bool $rsvpFocus = false): string
+/** وسم <img> لرمز QR من data-URI. */
+function dms_qr_img_tag(string $dataUri, string $alt = '', int $attrPx = 0): string
 {
-    $text = $rsvpFocus ? dms_corr_rsvp_url($corr) : dms_corr_qr_content($corr);
-    $bytes = dms_qr_png_bytes($text, $size);
+    $dataUri = trim($dataUri);
+    if ($dataUri === '') {
+        return '';
+    }
+    if ($attrPx <= 0) {
+        $attrPx = dms_qr_standard_px();
+    }
+
+    return '<img src="' . e($dataUri) . '" alt="' . e($alt) . '" width="' . (int) $attrPx
+        . '" height="' . (int) $attrPx . '" decoding="sync">';
+}
+
+/** data-URI لطباعة/عرض رمز التحقق بدون JavaScript. */
+function dms_corr_qr_data_uri(array $corr, int $size = 0, bool $rsvpFocus = false, bool $allowPrep = false): string
+{
+    $text = $rsvpFocus ? dms_corr_rsvp_url($corr, true) : dms_corr_qr_content($corr, false, $allowPrep);
+
+    return dms_qr_data_uri($text, $size);
+}
+
+/** ملف PNG مؤقت لتضمين QR في البريد (CID). احذفه بعد الإرسال. */
+function dms_corr_qr_temp_png(array $corr, int $size = 0, bool $rsvpFocus = false, bool $allowPrep = false): string
+{
+    $text = $rsvpFocus ? dms_corr_rsvp_url($corr, $allowPrep) : dms_corr_qr_content($corr, false, $allowPrep);
+    $bytes = ($size > 0 && $size < 160)
+        ? dms_qr_png_bytes($text, $size, 'qrl', 4)
+        : dms_letter_qr_png_bytes($text);
     if ($bytes === '') {
         return '';
     }
@@ -3171,18 +3290,17 @@ function dms_corr_qr_temp_png(array $corr, int $size = 160, bool $rsvpFocus = fa
     return $path;
 }
 
-/** صندوق QR للطباعة — صورة من السيرفر أولاً. */
+/** صندوق QR للطباعة — صورة من السيرفر بالمعيار الموحّد. */
 function render_print_qr_box(string $domId, array $corr, string $extraClass = ''): void
 {
-    $uri = dms_corr_qr_data_uri($corr, 160);
+    $uri = dms_corr_qr_data_uri($corr);
     $cls = trim('print-qr ' . $extraClass);
     echo '<div id="' . e($domId) . '" class="' . e($cls) . '">';
     if ($uri !== '') {
-        echo '<img src="' . e($uri) . '" alt="" width="160" height="160" decoding="sync">';
+        echo dms_qr_img_tag($uri);
     }
     echo '</div>';
 }
-
 function corr_sanitize_prefix(string $prefix): string
 {
     $prefix = trim(str_replace(['/', '\\'], '', $prefix));
@@ -3371,12 +3489,12 @@ function render_thermal_ref_caption(?string $type, string|int|null $ref): void
  * ملصق حراري واحد كما في صفحة الطباعة (50×25 عند المعاينة).
  * $copyIndex يميّز نسخ الطباعة. $rootId و $qrElementId لزر النسخ في صفحة العرض.
  */
-function render_thermal_sticker(array $corr, int $copyIndex = 0, string $rootId = '', string $qrElementId = ''): void
+function render_thermal_sticker(array $corr, int $copyIndex = 0, string $rootId = '', string $qrElementId = '', bool $allowPrep = false): void
 {
     $qrId = $qrElementId !== '' ? $qrElementId : ('qrcode-' . $copyIndex);
     $logoUrl = function_exists('org_logo_url') ? org_logo_url() : '';
     $hasLogo = $logoUrl !== '';
-    $qrContent = function_exists('dms_corr_qr_content') ? dms_corr_qr_content($corr) : '';
+    $qrContent = function_exists('dms_corr_qr_content') ? dms_corr_qr_content($corr, false, $allowPrep) : '';
     $hasQr = $qrContent !== '';
     $corrDate = $corr['corr_date'] ?? null;
     $hijriStr = '';
@@ -3442,7 +3560,16 @@ function render_thermal_sticker(array $corr, int $copyIndex = 0, string $rootId 
     }
     echo '</div>';
     if ($hasQr) {
-        echo '<div class="print-thermal-qr" id="' . e($qrId) . '" aria-hidden="true"></div>';
+        echo '<div class="print-thermal-qr" id="' . e($qrId) . '" aria-hidden="true">';
+        $thermalQrUri = function_exists('dms_corr_qr_data_uri')
+            ? dms_corr_qr_data_uri($corr, 0, false, $allowPrep)
+            : '';
+        if ($thermalQrUri !== '' && function_exists('dms_qr_img_tag')) {
+            echo dms_qr_img_tag($thermalQrUri);
+        } elseif ($thermalQrUri !== '') {
+            echo '<img src="' . e($thermalQrUri) . '" alt="" width="640" height="640" decoding="sync">';
+        }
+        echo '</div>';
     }
     echo '</div></div>';
 }
@@ -4537,13 +4664,17 @@ function render_entity_party_columns(array $party): void
     if ($prefix !== '') {
         echo '<div class="admin-entity-sub">' . e($prefix) . '</div>';
     }
-    if ($person !== '') {
-        echo '<div class="entities-letter-line">' . e($person) . '</div>';
-    } elseif ($prefix === '' && $honorific === '') {
+    if ($person !== '' || $honorific !== '') {
+        echo '<div class="entities-letter-line">';
+        if ($person !== '') {
+            echo e($person);
+        }
+        if ($honorific !== '') {
+            echo ($person !== '' ? ' ' : '') . '<span class="entities-honorific">' . e($honorific) . '</span>';
+        }
+        echo '</div>';
+    } elseif ($prefix === '') {
         echo '<span class="text-muted">' . e(__('common.none')) . '</span>';
-    }
-    if ($honorific !== '') {
-        echo '<div class="admin-entity-sub entities-honorific">' . e($honorific) . '</div>';
     }
     echo '</td>';
 
@@ -6603,10 +6734,41 @@ function dms_is_safe_upload_path(string $relative): bool
 function dms_favicon_href(): string
 {
     $rel = 'assets/img/favicon.ico';
+    if (function_exists('dms_asset_url')) {
+        return dms_asset_url($rel, true);
+    }
     if (function_exists('dms_web_path')) {
         return dms_web_path($rel);
     }
     return function_exists('base_url') ? base_url($rel) : '/' . $rel;
+}
+
+/** وسوم أيقونة النظام لعنوان المتصفح (كل الصفحات/معاينة المرفقات). */
+function dms_favicon_link_html(): string
+{
+    $href = e(dms_favicon_href());
+
+    return '<link rel="icon" href="' . $href . '">' . "\n"
+        . '<link rel="shortcut icon" href="' . $href . '">' . "\n"
+        . '<link rel="apple-touch-icon" href="' . $href . '">';
+}
+
+function dms_render_favicon_links(): void
+{
+    echo dms_favicon_link_html() . "\n";
+}
+
+/** ترويسة HTTP للأيقونة عند بث الملفات مباشرة. */
+function dms_send_favicon_http_headers(): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    $icon = dms_favicon_href();
+    if ($icon === '') {
+        return;
+    }
+    header('Link: <' . $icon . '>; rel="icon"', false);
 }
 
 function dms_wants_raw_file(): bool
@@ -6632,19 +6794,18 @@ function dms_file_raw_url(): string
 function dms_render_file_preview(string $downloadName, string $mime): void
 {
     $title = str_replace(["\r", "\n"], '', $downloadName);
-    $icon = dms_favicon_href();
     $src = dms_file_raw_url();
     $isImg = str_starts_with(strtolower($mime), 'image/');
     $lang = function_exists('dms_lang_code') ? dms_lang_code() : 'ar';
     $dir = function_exists('dms_page_dir') ? dms_page_dir() : 'rtl';
     header('Content-Type: text/html; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
+    dms_send_favicon_http_headers();
     echo '<!DOCTYPE html><html lang="' . e($lang) . '" dir="' . e($dir) . '"><head>';
     echo '<meta charset="UTF-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title) . '</title>';
-    echo '<link rel="icon" href="' . e($icon) . '">';
-    echo '<link rel="shortcut icon" href="' . e($icon) . '">';
+    echo dms_favicon_link_html();
     echo '<style>html,body{margin:0;height:100%;background:#1f2937}';
     echo '.dms-file-frame{border:0;width:100%;height:100%;display:block}';
     echo '.dms-file-img{max-width:100%;max-height:100%;object-fit:contain;display:block;margin:0 auto}';
@@ -6662,13 +6823,12 @@ function dms_render_file_preview(string $downloadName, string $mime): void
 function dms_send_file_bytes(string $fullPath, string $downloadName, string $mime): void
 {
     $safeName = str_replace(['"', "\r", "\n"], '', $downloadName);
-    $icon = dms_favicon_href();
     header('X-Content-Type-Options: nosniff');
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($fullPath));
     header('Content-Disposition: inline; filename="' . $safeName . '"');
     header('X-Frame-Options: SAMEORIGIN');
-    header('Link: <' . $icon . '>; rel="icon"');
+    dms_send_favicon_http_headers();
     readfile($fullPath);
     exit;
 }
@@ -7306,6 +7466,9 @@ function get_correspondence(int $id): ?array
     if (function_exists('ensure_letter_templates_schema')) {
         ensure_letter_templates_schema();
     }
+    if (function_exists('ensure_email_letter_attach_schema')) {
+        ensure_email_letter_attach_schema();
+    }
     $stmt = db()->prepare(
         "SELECT c.*, d.name AS department_name, d.name_en AS department_name_en,
                 d.directed_from AS department_directed_from,
@@ -7504,6 +7667,19 @@ function correspondence_delivery_mode(array $corr): string
     return $electronic ? 'electronic' : 'paper';
 }
 
+/** الإلكتروني و«الاثنان» يتطلبان بريداً. بلا بريد تبقى الطريقة ورقية. */
+function outgoing_recipient_delivery_mode(string $mode, string $email): string
+{
+    if (!in_array($mode, ['electronic', 'paper', 'both'], true)) {
+        $mode = 'paper';
+    }
+    if (trim($email) === '' && ($mode === 'electronic' || $mode === 'both')) {
+        return 'paper';
+    }
+
+    return $mode;
+}
+
 function correspondence_paper_sql(string $alias = 'c'): string
 {
     $alias = preg_replace('/[^A-Za-z0-9_]/', '', $alias) ?: 'c';
@@ -7577,6 +7753,7 @@ function correspondence_outgoing_draft_row(array $data, ?array $user = null, boo
     $letterBody = trim((string) ($data['letter_body'] ?? ''));
     $letterBodyEn = trim((string) ($data['letter_body_en'] ?? ''));
     $rsvp = (!empty($data['rsvp_required']) || !empty($data['requires_rsvp'])) ? 1 : 0;
+    $rsvpAllowRemote = ($rsvp === 1 && (string) ($data['rsvp_allow_remote'] ?? '1') === '0') ? 0 : 1;
 
     $row = [
         'id' => (int) ($data['id'] ?? 0),
@@ -7587,6 +7764,7 @@ function correspondence_outgoing_draft_row(array $data, ?array $user = null, boo
         'letter_body' => $letterBody !== '' ? $letterBody : null,
         'letter_body_en' => $letterBodyEn !== '' ? $letterBodyEn : null,
         'rsvp_required' => $rsvp,
+        'rsvp_allow_remote' => $rsvpAllowRemote,
         'intend_electronic' => !empty($data['intend_electronic']) ? 1 : 0,
         'intend_paper' => !empty($data['intend_paper']) ? 1 : 0,
         'department_id' => $deptId > 0 ? $deptId : null,
@@ -7783,6 +7961,7 @@ function ensure_corr_rsvp_schema(): void
         if (function_exists('ensure_entity_groups_schema')) {
             ensure_entity_groups_schema();
         }
+        $migrated = false;
         $batchCols = dms_db_column_map('tbloutgoing_batches');
         if ($batchCols && empty($batchCols['requires_rsvp'])) {
             $pdo->exec(
@@ -7794,6 +7973,15 @@ function ensure_corr_rsvp_schema(): void
                  SET requires_rsvp = 1
                  WHERE letter_body IS NOT NULL AND TRIM(letter_body) <> ''"
             );
+            $batchCols = dms_db_column_map('tbloutgoing_batches');
+            $migrated = true;
+        }
+        if ($batchCols && empty($batchCols['rsvp_allow_remote'])) {
+            $pdo->exec(
+                "ALTER TABLE `tbloutgoing_batches`
+                 ADD COLUMN `rsvp_allow_remote` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 وجاهي أو عن بعد، 0 وجاهي فقط'"
+            );
+            $migrated = true;
         }
 
         $cols = dms_db_column_map('tblcorrespondence');
@@ -7804,6 +7992,9 @@ function ensure_corr_rsvp_schema(): void
         if (empty($cols['rsvp_response'])) {
             $alters[] = "ADD COLUMN `rsvp_response` ENUM('attending','declined') NULL DEFAULT NULL COMMENT 'رد الحضور' AFTER `rsvp_required`";
         }
+        if (empty($cols['rsvp_mode'])) {
+            $alters[] = "ADD COLUMN `rsvp_mode` VARCHAR(20) NULL DEFAULT NULL COMMENT 'in_person|remote' AFTER `rsvp_response`";
+        }
         if (empty($cols['rsvp_note'])) {
             $alters[] = "ADD COLUMN `rsvp_note` VARCHAR(400) NULL DEFAULT NULL AFTER `rsvp_response`";
         }
@@ -7813,28 +8004,40 @@ function ensure_corr_rsvp_schema(): void
         if (empty($cols['rsvp_ip'])) {
             $alters[] = "ADD COLUMN `rsvp_ip` VARCHAR(45) NULL DEFAULT NULL AFTER `rsvp_at`";
         }
+        if (empty($cols['rsvp_allow_remote'])) {
+            $alters[] = "ADD COLUMN `rsvp_allow_remote` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 وجاهي أو عن بعد، 0 وجاهي فقط' AFTER `rsvp_required`";
+        }
         if ($alters) {
             $pdo->exec('ALTER TABLE `tblcorrespondence` ' . implode(', ', $alters));
+            $migrated = true;
         }
-        $pdo->exec(
-            "UPDATE `tblcorrespondence` c
-             INNER JOIN `tbloutgoing_batches` b ON b.id = c.batch_id
-             SET c.rsvp_required = 1
-             WHERE b.requires_rsvp = 1 AND c.type = 'outgoing' AND c.rsvp_required = 0"
-        );
-        $pdo->exec(
-            "CREATE TABLE IF NOT EXISTS `tblcorr_rsvp_log` (
-                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                correspondence_id INT UNSIGNED NOT NULL,
-                response ENUM('attending','declined') NOT NULL,
-                note VARCHAR(400) DEFAULT NULL,
-                source VARCHAR(20) NOT NULL DEFAULT 'public',
-                ip_address VARCHAR(45) DEFAULT NULL,
-                user_id INT UNSIGNED DEFAULT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_rsvp_corr (correspondence_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
+        // مزامنة قديمة مرة واحدة عند الترحيل فقط — لا تُعاد في كل طلب
+        if ($migrated) {
+            $pdo->exec(
+                "UPDATE `tblcorrespondence` c
+                 INNER JOIN `tbloutgoing_batches` b ON b.id = c.batch_id
+                 SET c.rsvp_required = 1
+                 WHERE b.requires_rsvp = 1 AND c.type = 'outgoing' AND c.rsvp_required = 0"
+            );
+        }
+        if (!dms_db_table_exists('tblcorr_rsvp_log')) {
+            $pdo->exec(
+                "CREATE TABLE `tblcorr_rsvp_log` (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    correspondence_id INT UNSIGNED NOT NULL,
+                    response ENUM('attending','declined') NOT NULL,
+                    mode VARCHAR(20) DEFAULT NULL,
+                    note VARCHAR(400) DEFAULT NULL,
+                    source VARCHAR(20) NOT NULL DEFAULT 'public',
+                    ip_address VARCHAR(45) DEFAULT NULL,
+                    user_id INT UNSIGNED DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_rsvp_corr (correspondence_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        } elseif (!dms_db_column_exists('tblcorr_rsvp_log', 'mode')) {
+            $pdo->exec('ALTER TABLE `tblcorr_rsvp_log` ADD COLUMN `mode` VARCHAR(20) NULL DEFAULT NULL AFTER `response`');
+        }
     } catch (Throwable $e) {
         error_log('DMS RSVP schema: ' . $e->getMessage());
     }
@@ -7846,17 +8049,51 @@ function correspondence_rsvp_required(array $corr): bool
         || (int) ($corr['batch_requires_rsvp'] ?? 0) === 1;
 }
 
-/** جملة تأكيد الحضور: الورقي بالمسح، والإلكتروني بالمسح أو النقر. المشترك يفرّق بين الطباعة والبريد. */
+/** الاجتماع يقبل الحضور عن بعد مع الوجاهي. الغياب يعني الحضور وجاهياً فقط. */
+function correspondence_rsvp_allow_remote(array $corr): bool
+{
+    if (array_key_exists('rsvp_allow_remote', $corr)) {
+        return (int) $corr['rsvp_allow_remote'] === 1;
+    }
+    if (array_key_exists('batch_rsvp_allow_remote', $corr)) {
+        return (int) $corr['batch_rsvp_allow_remote'] === 1;
+    }
+
+    return true;
+}
+
+/** جملة تأكيد الحضور: البريد/واتساب الإلكتروني بالنقر؛ الورقي/المرفق/المعاينة بالمسح. */
 function correspondence_rsvp_ask_key(array $corr, string $surface = 'print'): string
 {
     $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
-    $paper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
     $message = $surface === 'email' || $surface === 'whatsapp';
     if ($message) {
         return $electronic ? 'rsvp.email_ask' : 'rsvp.print_ask';
     }
 
-    return ($paper || !$electronic) ? 'rsvp.print_ask' : 'rsvp.email_ask';
+    // طباعة / PDF / معاينة الخطاب: دائماً صياغة الورق
+    return 'rsvp.print_ask';
+}
+
+/**
+ * أسفل نص الخطاب: مكان الاجتماع ثم تأكيد الحضور — نفس الصف المنسّق في الورقي والمرفق.
+ * يُستدعى بعد نص الخطاب؛ ويُزال {link_qr} من النص لتجنّب التكرار.
+ */
+function render_letter_end_actions(array $corr, string $lang = 'ar'): void
+{
+    $linkHtml = function_exists('letter_link_qr_markup') ? letter_link_qr_markup(false, $corr) : '';
+    $needsRsvp = function_exists('correspondence_rsvp_required') && correspondence_rsvp_required($corr);
+    if ($linkHtml === '' && !$needsRsvp) {
+        return;
+    }
+    echo '<div class="letter-end-actions">';
+    if ($linkHtml !== '') {
+        echo $linkHtml;
+    }
+    if ($needsRsvp) {
+        render_letter_rsvp_notice($corr, $lang);
+    }
+    echo '</div>';
 }
 
 /** تنبيه طلب الرد على الحضور في الخطاب (خارج نص القالب الرسمي) */
@@ -7868,27 +8105,61 @@ function render_letter_rsvp_notice(array $corr, string $lang = 'ar'): void
     $lang = $lang === 'en' ? 'en' : 'ar';
     $askKey = correspondence_rsvp_ask_key($corr, 'print');
     $text = function_exists('__lang') ? __lang($askKey, $lang) : __($askKey);
-    $qrUri = dms_corr_qr_data_uri($corr, 160, true);
-    echo '<div class="letter-rsvp-block">';
-    echo '<div class="letter-rsvp-note">' . e($text) . '</div>';
-    if ($qrUri !== '') {
-        echo '<div class="letter-rsvp-qr" aria-hidden="true">'
-            . '<img src="' . e($qrUri) . '" alt="" width="160" height="160" decoding="sync">'
-            . '</div>';
+    if (function_exists('letter_end_note_text')) {
+        $text = letter_end_note_text($text);
+    } elseif ($text !== '' && !str_starts_with($text, '*')) {
+        $text = '* ' . $text;
+    }
+    // الورقي/المرفق دائماً «امسح رمز QR» حتى لو قصد الإرسال إلكتروني
+    if (function_exists('letter_end_with_action_cta')) {
+        $text = letter_end_with_action_cta($text, 'print');
+    }
+    $qrUri = dms_corr_qr_data_uri($corr, 0, true);
+    $rsvpUrl = function_exists('dms_corr_rsvp_url') ? dms_corr_rsvp_url($corr, true) : '';
+    $qrImg = $qrUri !== '' && function_exists('dms_qr_img_tag')
+        ? dms_qr_img_tag($qrUri, $text)
+        : ($qrUri !== '' ? '<img src="' . e($qrUri) . '" alt="' . e($text) . '" width="640" height="640" decoding="sync">' : '');
+    echo '<div class="letter-qr-row letter-rsvp-block">';
+    echo '<div class="letter-qr-text letter-rsvp-note">' . e($text) . '</div>';
+    if ($qrImg !== '') {
+        echo '<div class="letter-qr-code letter-rsvp-qr">';
+        if ($rsvpUrl !== '') {
+            echo '<a class="letter-rsvp-qr-link" href="' . e($rsvpUrl) . '" target="_blank" rel="noopener noreferrer">';
+            echo $qrImg;
+            echo '</a>';
+        } else {
+            echo $qrImg;
+        }
+        echo '</div>';
     }
     echo '</div>';
 }
 
-function rsvp_response_label(?string $response): string
+function rsvp_mode_label(?string $mode, bool $short = false): string
 {
+    return match ((string) $mode) {
+        'in_person' => __($short ? 'rsvp.mode_in_person_short' : 'rsvp.mode_in_person'),
+        'remote' => __('rsvp.mode_remote'),
+        default => '',
+    };
+}
+
+function rsvp_response_label(?string $response, ?string $mode = null): string
+{
+    if ((string) $response === 'attending') {
+        $label = __('rsvp.attending');
+        $modeLabel = rsvp_mode_label($mode, true);
+
+        return $modeLabel !== '' ? $label . ' · ' . $modeLabel : $label;
+    }
+
     return match ((string) $response) {
-        'attending' => __('rsvp.attending'),
         'declined' => __('rsvp.declined'),
         default => __('rsvp.pending'),
     };
 }
 
-function rsvp_response_badge(?string $response): string
+function rsvp_response_badge(?string $response, ?string $mode = null): string
 {
     $map = [
         'attending' => 'success',
@@ -7896,10 +8167,10 @@ function rsvp_response_badge(?string $response): string
     ];
     $code = (string) $response;
     $color = $map[$code] ?? 'secondary';
-    return '<span class="badge text-bg-' . $color . '">' . e(rsvp_response_label($code !== '' ? $code : null)) . '</span>';
+    return '<span class="badge text-bg-' . $color . '">' . e(rsvp_response_label($code !== '' ? $code : null, $mode)) . '</span>';
 }
 
-function save_correspondence_rsvp(array $corr, string $response, string $note = '', string $source = 'public', ?array $user = null): void
+function save_correspondence_rsvp(array $corr, string $response, string $note = '', string $source = 'public', ?array $user = null, ?string $mode = null): void
 {
     ensure_corr_rsvp_schema();
     if (($corr['type'] ?? '') !== 'outgoing') {
@@ -7910,6 +8181,17 @@ function save_correspondence_rsvp(array $corr, string $response, string $note = 
     }
     if (!in_array($response, ['attending', 'declined'], true)) {
         throw new InvalidArgumentException(__('rsvp.invalid'));
+    }
+    $mode = trim((string) $mode);
+    if ($response === 'attending') {
+        if (!in_array($mode, ['in_person', 'remote'], true)) {
+            throw new InvalidArgumentException(__('rsvp.mode_required'));
+        }
+        if ($mode === 'remote' && !correspondence_rsvp_allow_remote($corr)) {
+            throw new InvalidArgumentException(__('rsvp.remote_closed'));
+        }
+    } else {
+        $mode = '';
     }
     if ($source === 'public' && !correspondence_rsvp_required($corr)) {
         throw new RuntimeException(__('rsvp.not_required'));
@@ -7927,20 +8209,21 @@ function save_correspondence_rsvp(array $corr, string $response, string $note = 
     $note = mb_substr(trim($note), 0, 400);
     $ip = function_exists('client_ip') ? (client_ip() ?: null) : null;
     $userId = isset($user['id']) ? (int) $user['id'] : null;
+    $modeDb = $mode !== '' ? $mode : null;
     db()->prepare(
         "UPDATE `tblcorrespondence`
-         SET rsvp_required = 1, rsvp_response = ?, rsvp_note = ?, rsvp_at = NOW(), rsvp_ip = ?
+         SET rsvp_required = 1, rsvp_response = ?, rsvp_mode = ?, rsvp_note = ?, rsvp_at = NOW(), rsvp_ip = ?
          WHERE id = ? AND type = 'outgoing'"
-    )->execute([$response, $note !== '' ? $note : null, $ip, $id]);
+    )->execute([$response, $modeDb, $note !== '' ? $note : null, $ip, $id]);
     try {
         db()->prepare(
-            "INSERT INTO `tblcorr_rsvp_log` (correspondence_id, response, note, source, ip_address, user_id)
-             VALUES (?, ?, ?, ?, ?, ?)"
-        )->execute([$id, $response, $note !== '' ? $note : null, $source, $ip, $userId]);
+            "INSERT INTO `tblcorr_rsvp_log` (correspondence_id, response, mode, note, source, ip_address, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([$id, $response, $modeDb, $note !== '' ? $note : null, $source, $ip, $userId]);
     } catch (Throwable $e) {
         error_log('DMS RSVP log: ' . $e->getMessage());
     }
-    log_activity($userId, $id, 'rsvp', rsvp_response_label($response) . ($note !== '' ? ' — ' . $note : ''));
+    log_activity($userId, $id, 'rsvp', rsvp_response_label($response, $modeDb) . ($note !== '' ? ' — ' . $note : ''));
 }
 
 function set_batch_rsvp_required(int $batchId, bool $required = true): void
@@ -7955,11 +8238,17 @@ function set_batch_rsvp_required(int $batchId, bool $required = true): void
 
 function batch_rsvp_summary(array $items): array
 {
-    $out = ['attending' => 0, 'declined' => 0, 'pending' => 0, 'total' => count($items)];
+    $out = ['attending' => 0, 'in_person' => 0, 'remote' => 0, 'declined' => 0, 'pending' => 0, 'total' => count($items)];
     foreach ($items as $row) {
         $resp = (string) ($row['rsvp_response'] ?? '');
         if ($resp === 'attending') {
             $out['attending']++;
+            $mode = (string) ($row['rsvp_mode'] ?? '');
+            if ($mode === 'in_person') {
+                $out['in_person']++;
+            } elseif ($mode === 'remote') {
+                $out['remote']++;
+            }
         } elseif ($resp === 'declined') {
             $out['declined']++;
         } else {
@@ -8375,6 +8664,52 @@ function get_correspondence_activity(int $corrId, int $limit = 40): array
     } catch (Throwable $e) {
         return [];
     }
+}
+
+/** سجل الدفعة مرة واحدة: الحدث المكرر على كل خطاب في اللحظة نفسها يُعرض سطراً واحداً. */
+function get_outgoing_batch_activity(array $corrIds, int $limit = 40): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $corrIds))));
+    if ($ids === []) {
+        return [];
+    }
+    $limit = max(1, min(100, $limit));
+    if (function_exists('ensure_security_schema')) {
+        ensure_security_schema();
+    }
+    try {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = db()->prepare(
+            "SELECT a.*, " . user_name_sql('u', 'user_name') . "
+             FROM `tblactivity_log` a
+             LEFT JOIN `tblusers` u ON u.id = a.user_id
+             WHERE a.correspondence_id IN ({$placeholders})
+             ORDER BY a.id DESC
+             LIMIT 400"
+        );
+        $stmt->execute($ids);
+        $rows = $stmt->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+    $seen = [];
+    $out = [];
+    foreach ($rows as $row) {
+        $details = preg_replace('/OD-\d+/u', 'OD', (string) ($row['details'] ?? '')) ?? '';
+        $details = preg_replace('/\d{2}\/\d+/u', '', $details) ?? '';
+        $minute = substr((string) ($row['created_at'] ?? ''), 0, 16);
+        $key = (string) ($row['action'] ?? '') . '|' . (int) ($row['user_id'] ?? 0) . '|' . $minute . '|' . $details;
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $out[] = $row;
+        if (count($out) >= $limit) {
+            break;
+        }
+    }
+
+    return $out;
 }
 
 function get_documents(int $corrId): array

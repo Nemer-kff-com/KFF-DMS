@@ -62,7 +62,7 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(__('circular.report_title')) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= (int) $cssVer ?>" rel="stylesheet">
@@ -75,10 +75,8 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
 <div class="print-toolbar no-print">
     <div class="print-toolbar-title"><?= e(__('circular.report_title')) ?></div>
     <div class="d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-        </button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('circulars/index.php' . ($backQuery !== '' ? '?' . $backQuery : ''))) ?>"><?= e(__('action.back')) ?></a>
+        <?= dms_print_icon() ?>
+        <?= dms_back_icon(base_url('circulars/index.php' . ($backQuery !== '' ? '?' . $backQuery : ''))) ?>
     </div>
 </div>
 

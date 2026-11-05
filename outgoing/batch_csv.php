@@ -54,7 +54,7 @@ foreach ($items as $r) {
         $r['ref_number'],
         $r['subject'],
         format_date($r['corr_date']),
-        rsvp_response_label($r['rsvp_response'] ?? null),
+        rsvp_response_label($r['rsvp_response'] ?? null, $r['rsvp_mode'] ?? null),
         $r['rsvp_note'] ?? '',
         $verifyUrl,
     ]);

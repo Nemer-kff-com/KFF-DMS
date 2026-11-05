@@ -276,6 +276,7 @@ function letter_template_placeholder_tokens(): array
         ['token' => '{subject}', 'label' => __('tpl.token_subject'), 'tip' => __('tpl.token_subject_tip'), 'icon' => 'bi-chat-text'],
         ['token' => '{logo}', 'label' => __('tpl.token_logo'), 'tip' => __('tpl.token_logo_tip'), 'icon' => 'bi-image'],
         ['token' => '{signature}', 'label' => __('tpl.token_signature'), 'tip' => __('tpl.token_signature_tip'), 'icon' => 'bi-pen'],
+        ['token' => '{link_qr}', 'label' => __('tpl.token_link_qr'), 'tip' => __('tpl.token_link_qr_tip'), 'icon' => 'bi-qr-code'],
     ];
 }
 
@@ -514,9 +515,9 @@ function letter_email_style(array $row, string $extra = ''): string
     $style .= letter_email_mso_style('Arial');
     $extra = trim($extra, ';');
     if (!preg_match('/font-size\s*:/i', $extra)) {
-        $style .= 'font-size:12pt;';
+        $style .= 'font-size:14pt;';
     }
-    $style .= 'line-height:1.5;';
+    $style .= 'line-height:1.65;';
     if ($extra !== '') {
         $style .= $extra . ';';
     }
@@ -606,12 +607,14 @@ function render_letter_channel_preview_buttons(array $channelPreviews): void
             'icon' => 'bi-file-earmark-text',
             'label' => __('tpl.preview_letter'),
         ],
-        [
+    ];
+    if (!array_key_exists('email', $channelPreviews) || !empty($channelPreviews['email'])) {
+        $buttons[] = [
             'url' => base_url('admin/letter_email_preview.php'),
             'icon' => 'bi-envelope-open',
             'label' => __('tpl.preview_email'),
-        ],
-    ];
+        ];
+    }
     ?>
     <span class="letter-token-preview">
         <?php foreach ($buttons as $button): ?>
@@ -935,21 +938,34 @@ function letter_preview_html(string $body, string $lang = 'ar', int $deptId = 0,
         $inner .= '<div class="letter-preview-head-row"><strong>' . e($t('corr.date')) . ': ' . e($date) . '</strong></div>';
     }
     $inner .= '</div>';
-    if ($filled !== '') {
-        $inner .= render_letter_body_html($filled, false, $row);
+    $filledPrint = function_exists('letter_strip_link_qr_token') ? letter_strip_link_qr_token($filled) : $filled;
+    if ($filledPrint !== '') {
+        $inner .= render_letter_body_html($filledPrint, false, $row);
     }
-    if ($needsRsvp) {
-        $askKey = function_exists('correspondence_rsvp_ask_key')
-            ? correspondence_rsvp_ask_key($row, 'print')
-            : (!empty($row['intend_electronic']) ? 'rsvp.email_ask' : 'rsvp.print_ask');
-        $ask = e($t($askKey));
-        $qrUri = function_exists('dms_corr_qr_data_uri') ? dms_corr_qr_data_uri($row, 160, true) : '';
-        $inner .= '<div class="letter-rsvp-block letter-preview-rsvp">';
-        $inner .= '<div class="letter-rsvp-note">' . $ask . '</div>';
-        if ($qrUri !== '') {
-            $inner .= '<div class="letter-rsvp-qr" aria-hidden="true">'
-                . '<img src="' . e($qrUri) . '" alt="" width="160" height="160">'
-                . '</div>';
+    $linkBlock = letter_link_qr_markup(false, $row);
+    if ($linkBlock !== '' || $needsRsvp) {
+        $inner .= '<div class="letter-end-actions">';
+        if ($linkBlock !== '') {
+            $inner .= $linkBlock;
+        }
+        if ($needsRsvp) {
+            $askKey = function_exists('correspondence_rsvp_ask_key')
+                ? correspondence_rsvp_ask_key($row, 'print')
+                : (!empty($row['intend_electronic']) ? 'rsvp.email_ask' : 'rsvp.print_ask');
+            $ask = $t($askKey);
+            $ask = function_exists('letter_end_note_text') ? letter_end_note_text($ask) : (($ask !== '' && !str_starts_with($ask, '*')) ? ('* ' . $ask) : $ask);
+            if (function_exists('letter_end_with_action_cta')) {
+                $ask = letter_end_with_action_cta($ask, 'print');
+            }
+            $ask = e($ask);
+            $qrUri = function_exists('dms_corr_qr_data_uri') ? dms_corr_qr_data_uri($row, 0, true) : '';
+            $inner .= '<div class="letter-qr-row letter-rsvp-block letter-preview-rsvp">';
+            $inner .= '<div class="letter-qr-text letter-rsvp-note">' . $ask . '</div>';
+            if ($qrUri !== '') {
+                $img = function_exists('dms_qr_img_tag') ? dms_qr_img_tag($qrUri) : ('<img src="' . e($qrUri) . '" alt="" width="640" height="640" decoding="sync">');
+                $inner .= '<div class="letter-qr-code letter-rsvp-qr" aria-hidden="true">' . $img . '</div>';
+            }
+            $inner .= '</div>';
         }
         $inner .= '</div>';
     }
@@ -1011,8 +1027,179 @@ function letter_body_plain(string $text, array $row = []): string
     $text = preg_replace('#\{font:[a-z0-9_]+\}#', '', $text) ?? $text;
     $text = preg_replace('#\{ls:[0-9]+\}#', '', $text) ?? $text;
     $text = str_replace('{signature}', '', $text);
+    if (str_contains($text, '{link_qr}')) {
+        $url = function_exists('correspondence_letter_link_url') ? correspondence_letter_link_url($row) : '';
+        $label = function_exists('correspondence_letter_link_label') ? correspondence_letter_link_label($row) : '';
+        $plainLink = '';
+        if ($url !== '') {
+            if ($label !== '' && $label !== $url) {
+                $label = function_exists('letter_end_note_text') ? letter_end_note_text($label) : ('* ' . ltrim($label, "* \t"));
+                $plainLink = $label . "\n" . $url;
+            } else {
+                $plainLink = $url;
+            }
+        }
+        $text = str_replace('{link_qr}', $plainLink, $text);
+    }
     $text = str_replace(['{center}', '{/center}', '{right}', '{/right}', '{left}', '{/left}', '{justify}', '{/justify}', '{ul}', '{/ul}', '{/font}', '{/ls}', '{logo}'], '', $text);
     return letter_strip_from_marks($text);
+}
+
+/** إزالة رمز {link_qr} من نص الخطاب (يُعرض أسفل النص تلقائياً في الورقي/المرفق). */
+function letter_strip_link_qr_token(string $text): string
+{
+    if ($text === '' || !str_contains($text, '{link_qr}')) {
+        return $text;
+    }
+    $text = str_replace('{link_qr}', '', $text);
+    $text = preg_replace("/[ \t]+\r?\n/", "\n", $text) ?? $text;
+    $text = preg_replace("/(\r?\n){3,}/", "\n\n", $text) ?? $text;
+
+    return $text;
+}
+
+/** بادئة ملاحظة أسفل الخطاب (* مكان الاجتماع / * تأكيد الحضور). */
+function letter_end_note_text(string $text): string
+{
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+    if (str_starts_with($text, '*')) {
+        return $text;
+    }
+
+    return '* ' . $text;
+}
+
+/**
+ * عبارة الإجراء الموحّدة أسفل الخطاب:
+ * بريد/واتساب إلكتروني → «انقر هنا» | ورق/مرفق → «امسح رمز QR».
+ */
+function letter_end_action_cta(string $surface = 'email'): string
+{
+    $surface = $surface === 'print' || $surface === 'pdf' ? 'print' : 'email';
+    $key = $surface === 'print' ? 'print.scan_here' : 'email.click_here';
+    $fallback = $surface === 'print' ? 'امسح رمز QR' : 'انقر هنا';
+    if (function_exists('__')) {
+        $s = trim((string) __($key));
+        if ($s !== '' && $s !== $key) {
+            return $s;
+        }
+    }
+
+    return $fallback;
+}
+
+/** يلحق « (انقر هنا) / (امسح رمز QR)» حسب السطح — أقواس بدل المطّة لتفادي كسر ربط العربية في PDF. */
+function letter_end_with_action_cta(string $text, string $surface = 'email'): string
+{
+    $text = trim($text);
+    $cta = letter_end_action_cta($surface);
+    if ($cta === '') {
+        return $text;
+    }
+    if ($text === '') {
+        return '(' . $cta . ')';
+    }
+    $wrapped = '(' . $cta . ')';
+    if (str_ends_with($text, $wrapped) || str_ends_with($text, $cta)
+        || str_contains($text, ' — ' . $cta) || str_contains($text, ' - ' . $cta)
+        || str_contains($text, $wrapped)
+    ) {
+        return $text;
+    }
+    // تجنّب خلط عبارتي البريد والورق إن وُجدت الأخرى مسبقاً
+    foreach ([letter_end_action_cta('email'), letter_end_action_cta('print')] as $other) {
+        if ($other === '' || $other === $cta) {
+            continue;
+        }
+        if (str_ends_with($text, $other) || str_contains($text, '(' . $other . ')')
+            || str_contains($text, ' — ' . $other) || str_contains($text, ' - ' . $other)
+        ) {
+            return $text;
+        }
+    }
+
+    return $text . ' ' . $wrapped;
+}
+
+/** @deprecated استخدم letter_end_action_cta('email') */
+function letter_email_click_here(): string
+{
+    return letter_end_action_cta('email');
+}
+
+/** @deprecated استخدم letter_end_with_action_cta($text, 'email') */
+function letter_email_with_click_here(string $text): string
+{
+    return letter_end_with_action_cta($text, 'email');
+}
+
+/**
+ * رابط يُرمَّز في QR الخطاب: مختصر /l/{token} إن أمكن ليطابق كثافة رمز الحضور.
+ */
+function letter_link_qr_encode_url(array $row): string
+{
+    $target = function_exists('correspondence_letter_link_url') ? correspondence_letter_link_url($row) : '';
+    if ($target === '' || !preg_match('#^https?://#i', $target)) {
+        return '';
+    }
+    $token = strtolower(trim((string) ($row['qr_token'] ?? '')));
+    if ($token !== '' && preg_match('/^[a-f0-9]{32}$/', $token) && function_exists('dms_corr_qr_base_url')) {
+        return dms_corr_qr_base_url() . '/l/' . $token;
+    }
+
+    return $target;
+}
+
+/** HTML كتلة رابط الخطاب: في البريد نص قابل للنقر؛ في الورق/PDF مع QR. */
+function letter_link_qr_markup(bool $email, array $row): string
+{
+    $targetUrl = function_exists('correspondence_letter_link_url') ? correspondence_letter_link_url($row) : '';
+    if ($targetUrl === '' || !preg_match('#^https?://#i', $targetUrl)) {
+        return '';
+    }
+    $qrPayload = letter_link_qr_encode_url($row);
+    $clickUrl = $email ? $targetUrl : $qrPayload;
+    $label = function_exists('correspondence_letter_link_label') ? correspondence_letter_link_label($row) : $targetUrl;
+    $label = letter_end_note_text($label);
+    $label = letter_end_with_action_cta($label, $email ? 'email' : 'print');
+    $href = e($clickUrl);
+    $labelHtml = e($label);
+    if ($email) {
+        // بريد: النص نفسه الرابط (بدون QR) — نفس خط/لون نص الخطاب
+        $font = trim((string) ($row['_email_font'] ?? ''));
+        if ($font === '' && function_exists('letter_email_forced_family')) {
+            $font = letter_email_forced_family();
+        }
+        if ($font === '') {
+            $font = 'Tahoma, Arial, sans-serif';
+        }
+        $mso = trim((string) ($row['_email_mso'] ?? 'Arial'));
+        $msoStyle = function_exists('letter_email_mso_style') ? letter_email_mso_style($mso) : '';
+        $textStyle = 'font-family:' . $font . ';' . $msoStyle
+            . 'font-size:14pt;font-weight:normal;line-height:1.5;color:#000 !important;'
+            . 'text-decoration:underline;border:0;outline:0;';
+
+        return '<div style="margin:12px 0;font-family:' . $font . ';' . $msoStyle
+            . 'font-size:14pt;color:#000;line-height:1.5">'
+            . '<a href="' . $href . '" target="_blank" rel="noopener noreferrer" style="' . $textStyle . '">'
+            . $labelHtml . '</a></div>';
+    }
+    $qrUri = function_exists('dms_qr_data_uri') ? dms_qr_data_uri($qrPayload) : '';
+
+    $html = '<div class="letter-qr-row letter-link-qr">';
+    $html .= '<span class="letter-qr-text letter-link-qr-label">' . $labelHtml . '</span>';
+    if ($qrUri !== '') {
+        $img = function_exists('dms_qr_img_tag') ? dms_qr_img_tag($qrUri, $label) : ('<img src="' . e($qrUri) . '" alt="' . $labelHtml . '" width="640" height="640" decoding="sync">');
+        $html .= '<a class="letter-qr-code letter-link-qr-code" href="' . $href . '" target="_blank" rel="noopener noreferrer">'
+            . $img
+            . '</a>';
+    }
+    $html .= '</div>';
+
+    return $html;
 }
 
 function letter_from_field_mark(): string
@@ -1331,7 +1518,7 @@ function letter_text_html(string $text, bool $email = false, array $row = []): s
         $text
     ) ?? $text;
 
-    $parts = preg_split('/(\{logo\}|\{signature\})/', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+    $parts = preg_split('/(\{logo\}|\{signature\}|\{link_qr\})/', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
     if ($parts === false) {
         return nl2br(e($text));
     }
@@ -1343,6 +1530,10 @@ function letter_text_html(string $text, bool $email = false, array $row = []): s
         }
         if ($part === '{signature}') {
             $html[] = letter_signature_markup($email, $row);
+            continue;
+        }
+        if ($part === '{link_qr}') {
+            $html[] = letter_link_qr_markup($email, $row);
             continue;
         }
         if ($email) {
@@ -1456,7 +1647,7 @@ function letter_format_wrap(string $tag, string $innerHtml, bool $email, array $
             'center', 'right', 'left', 'justify' => '<div style="' . letter_email_style($row, 'margin:0 0 8px') . '">' . $innerHtml . '</div>',
             'b' => '<strong style="' . letter_email_style($row, 'font-weight:700') . '">' . $innerHtml . '</strong>',
             'u' => '<span style="' . letter_email_style($row, 'text-decoration:underline') . '">' . $innerHtml . '</span>',
-            'big' => '<span style="' . letter_email_style($row, 'font-size:14.5pt;font-weight:600') . '">' . $innerHtml . '</span>',
+            'big' => '<span style="' . letter_email_style($row, 'font-size:16pt;font-weight:600') . '">' . $innerHtml . '</span>',
             default => $innerHtml,
         };
     }

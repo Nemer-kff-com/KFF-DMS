@@ -35,8 +35,14 @@ $mime = match ($ext) {
     'svg' => 'image/svg+xml',
     default => 'application/octet-stream',
 };
+if (function_exists('dms_stream_file')) {
+    dms_stream_file($realFile, basename($realFile), $mime);
+}
 header('Content-Type: ' . $mime);
 header('Cache-Control: private, max-age=86400');
 header('X-Content-Type-Options: nosniff');
+if (function_exists('dms_send_favicon_http_headers')) {
+    dms_send_favicon_http_headers();
+}
 readfile($realFile);
 exit;

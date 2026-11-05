@@ -246,9 +246,7 @@ require __DIR__ . '/../includes/header.php';
                 <span class="btn-with-count-badge" title="<?= e(str_replace(':n', (string) $ovCount, __('perm.user_ov_count'))) ?>"><?= (int) $ovCount ?></span>
             <?php endif; ?>
         </a>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/users.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('admin/users.php')) ?>
     </div>
 </div>
 

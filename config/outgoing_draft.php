@@ -371,6 +371,19 @@ function outgoing_prep_designated_signer_id(array $corr): int
     return outgoing_prep_office_designated_user_id(outgoing_issuing_department_id($corr));
 }
 
+/** من بيده المسودة الآن: صاحب الشأن عند الانتظار، والمنشئ في المسودة وبعد الإعادة. */
+function outgoing_prep_holder_id(array $corr): int
+{
+    if (!outgoing_prep_is_open($corr)) {
+        return 0;
+    }
+    if (outgoing_prep_is_pending_signer($corr)) {
+        $ids = outgoing_prep_signer_ids($corr);
+        return (int) ($ids[0] ?? 0);
+    }
+    return (int) ($corr['created_by'] ?? 0);
+}
+
 /** مكاتب يُوجَّه إليها هذا المستخدم كمستلم وحيد للمسودة. @return list<int> */
 function outgoing_prep_user_signer_office_ids(?array $user): array
 {
@@ -889,10 +902,13 @@ function outgoing_has_any_attachment(int $corrId): bool
     return (bool) $st->fetchColumn();
 }
 
-/** الصادر الورقي لا يُرسل للمراجعة قبل رفع مرفق. */
+/** الصادر الورقي لا يُرسل للمراجعة قبل رفع مرفق. الدفعة مرحلة واحدة بغض النظر عن طريقة التسليم. */
 function outgoing_request_missing_attachment(array $corr): bool
 {
     if (($corr['type'] ?? '') !== 'outgoing') {
+        return false;
+    }
+    if ((int) ($corr['batch_id'] ?? 0) > 0) {
         return false;
     }
     if (function_exists('correspondence_intend_paper') && !correspondence_intend_paper($corr)) {
@@ -1009,6 +1025,9 @@ function outgoing_prep_list_label(array $corr): string
 {
     $st = outgoing_prep_status_of($corr);
     if ($st === 'draft') {
+        if (outgoing_prep_was_returned($corr)) {
+            return __('out_prep.list_returned');
+        }
         return __('out_prep.list_draft');
     }
     if ($st === 'pending_signer') {
@@ -1105,7 +1124,11 @@ function outgoing_prep_notify(array $userIds, array $corr, string $titleKey, str
 function outgoing_prep_assign_official_ref(int $id, array $corr): string
 {
     $deptId = (int) ($corr['department_id'] ?? 0) ?: null;
-    $ref = next_ref_number('outgoing', $deptId);
+    $current = trim((string) ($corr['ref_number'] ?? ''));
+    $placeholder = $current === ''
+        || str_starts_with($current, 'OD-')
+        || str_starts_with($current, 'ODTMP-');
+    $ref = $placeholder ? next_ref_number('outgoing', $deptId) : $current;
     $token = trim((string) ($corr['qr_token'] ?? ''));
     if ($token === '') {
         $token = generate_qr_token();
@@ -1127,7 +1150,7 @@ function outgoing_prep_assign_official_ref(int $id, array $corr): string
     return $ref;
 }
 
-function outgoing_prep_after_convert(int $id, array $user, array $corrBefore): void
+function outgoing_prep_after_convert(int $id, array $user, array $corrBefore, bool $notify = true): void
 {
     $linkedId = (int) ($corrBefore['linked_id'] ?? 0);
     if ($linkedId > 0) {
@@ -1149,10 +1172,9 @@ function outgoing_prep_after_convert(int $id, array $user, array $corrBefore): v
             && outgoing_issue_flow_active()
             && function_exists('outgoing_approval_request')
         ) {
-            outgoing_approval_request($id, $user);
-        } elseif (function_exists('outgoing_release_to_communications')) {
-            outgoing_release_to_communications($id);
+            outgoing_approval_request($id, $user, $notify);
         }
+        // بلا مسار مراجعة/اعتماد: يبقى جاهزاً للإرسال لمن لديه صلاحية الإرسال، دون حصر الاتصالات
     } catch (Throwable $e) {
         error_log('DMS outgoing prep convert approval: ' . $e->getMessage());
     }
@@ -1172,6 +1194,13 @@ function outgoing_prep_converted_message(int $id): string
     return __('out_prep.converted_ok');
 }
 
+function outgoing_prep_refuse_batch_letter(array $corr): void
+{
+    if ((int) ($corr['batch_id'] ?? 0) > 0) {
+        throw new RuntimeException(__('bulk.decide_on_batch'));
+    }
+}
+
 /** @return 'pending'|'converted' */
 function outgoing_prep_submit(int $id, array $user): string
 {
@@ -1180,6 +1209,7 @@ function outgoing_prep_submit(int $id, array $user): string
     if (!$corr || !outgoing_user_can_prep_submit($user, $corr)) {
         throw new RuntimeException(__('out_prep.submit_denied'));
     }
+    outgoing_prep_refuse_batch_letter($corr);
     if (outgoing_issuing_department_id($corr) <= 0) {
         throw new RuntimeException(__('out_prep.need_issuing'));
     }
@@ -1242,6 +1272,7 @@ function outgoing_prep_approve(int $id, array $user, string $note = ''): string
     if (!$corr || !outgoing_user_can_prep_decide($user, $corr)) {
         throw new RuntimeException(__('out_prep.decide_denied'));
     }
+    outgoing_prep_refuse_batch_letter($corr);
     $result = outgoing_prep_convert($id, $user, $note);
     $creator = (int) ($corr['created_by'] ?? 0);
     $fresh = get_correspondence($id) ?: $corr;
@@ -1274,6 +1305,7 @@ function outgoing_prep_return(int $id, array $user, string $note): void
     if (!$corr || !outgoing_user_can_prep_decide($user, $corr)) {
         throw new RuntimeException(__('out_prep.decide_denied'));
     }
+    outgoing_prep_refuse_batch_letter($corr);
     $uid = (int) ($user['id'] ?? 0);
     $newId = outgoing_prep_lock_and_spawn($id, $uid, $note);
     log_activity($uid, $id, 'outgoing_prep', __('out_prep.log_return') . ' — ' . $note);
@@ -1301,6 +1333,15 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
 {
     if (function_exists('ensure_corr_electronic_schema')) {
         ensure_corr_electronic_schema();
+    }
+    if (function_exists('ensure_email_letter_attach_schema')) {
+        ensure_email_letter_attach_schema();
+    }
+    if (function_exists('ensure_letter_link_schema')) {
+        ensure_letter_link_schema();
+    }
+    if (function_exists('ensure_corr_rsvp_schema')) {
+        ensure_corr_rsvp_schema();
     }
     $pdo = db();
     $ownTx = !$pdo->inTransaction();
@@ -1330,7 +1371,7 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
                 external_ref, external_date, corr_date, reply_due,
                 status, priority, confidentiality, category_id, notes, letter_body, letter_body_en,
                 qr_token, linked_id, department_id, issuing_department_id, created_by,
-                rsvp_required, intend_electronic, intend_paper, courier_name, courier_phone, courier_id,
+                rsvp_required, rsvp_allow_remote, intend_electronic, intend_paper, email_letter_attach, courier_name, courier_phone, courier_id,
                 outgoing_prep_status, outgoing_prep_note, outgoing_prep_decided_by, outgoing_prep_decided_at,
                 outgoing_prep_root_id
             ) VALUES (
@@ -1340,7 +1381,7 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?,
                 'draft', ?, ?, NOW(),
                 ?
             )"
@@ -1376,8 +1417,10 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
             $src['issuing_department_id'],
             $src['created_by'],
             $src['rsvp_required'],
+            (int) ($src['rsvp_allow_remote'] ?? 1),
             $src['intend_electronic'],
             (int) ($src['intend_paper'] ?? 0),
+            (int) ($src['email_letter_attach'] ?? 0),
             $src['courier_name'],
             $src['courier_phone'],
             $src['courier_id'],
@@ -1390,6 +1433,13 @@ function outgoing_prep_lock_and_spawn(int $sourceId, int $actorId, string $note)
             throw new RuntimeException(__('out_prep.decide_denied'));
         }
         outgoing_prep_bind_id_ref($newId);
+        $pdo->prepare(
+            'UPDATE `tblcorrespondence` SET letter_link_label = ?, letter_link_url = ? WHERE id = ?'
+        )->execute([
+            $src['letter_link_label'] ?? null,
+            $src['letter_link_url'] ?? null,
+            $newId,
+        ]);
         $pdo->prepare(
             "INSERT INTO `tbldocuments`
                 (correspondence_id, file_name, file_path, file_type, file_size, doc_kind, uploaded_by, uploaded_at)
@@ -1496,4 +1546,388 @@ function outgoing_prep_bind_id_ref(int $id): void
     }
     db()->prepare("UPDATE `tblcorrespondence` SET ref_number = ? WHERE id = ? AND type = 'outgoing'")
         ->execute(['OD-' . $id, $id]);
+}
+
+/** ترقيم مؤقت داخل الدفعة: OD-1 ثم OD-2. لا يمس التسلسل الرسمي ولا خطاباً مُنح رقمه. */
+function outgoing_batch_assign_draft_refs(int $batchId): void
+{
+    if ($batchId <= 0) {
+        return;
+    }
+    $stmt = db()->prepare(
+        "SELECT id, ref_number, outgoing_prep_status
+         FROM `tblcorrespondence`
+         WHERE batch_id = ? AND type = 'outgoing' AND status <> 'cancelled'
+         ORDER BY id"
+    );
+    $stmt->execute([$batchId]);
+    $rows = $stmt->fetchAll() ?: [];
+    if ($rows === []) {
+        return;
+    }
+    $i = 0;
+    $needs = false;
+    foreach ($rows as $row) {
+        $prep = trim((string) ($row['outgoing_prep_status'] ?? ''));
+        if (!in_array($prep, ['draft', 'pending_signer'], true)) {
+            return;
+        }
+        $ref = trim((string) ($row['ref_number'] ?? ''));
+        if ($ref !== '' && !str_starts_with($ref, 'OD-') && !str_starts_with($ref, 'ODTMP-')) {
+            return;
+        }
+        $i++;
+        if ($ref !== 'OD-' . $i) {
+            $needs = true;
+        }
+    }
+    if (!$needs) {
+        return;
+    }
+    $upd = db()->prepare(
+        "UPDATE `tblcorrespondence` SET ref_number = ? WHERE id = ? AND type = 'outgoing'"
+    );
+    foreach ($rows as $row) {
+        $upd->execute(['ODTMP-' . (int) $row['id'], (int) $row['id']]);
+    }
+    $i = 0;
+    foreach ($rows as $row) {
+        $i++;
+        $upd->execute(['OD-' . $i, (int) $row['id']]);
+    }
+}
+
+/** @return 'draft'|'pending_signer'|'issued'|'mixed'|'' */
+function outgoing_batch_prep_phase(array $items): string
+{
+    if (!function_exists('outgoing_prep_is_open')) {
+        return '';
+    }
+    $phase = '';
+    foreach ($items as $corr) {
+        if (($corr['type'] ?? '') !== 'outgoing') {
+            continue;
+        }
+        if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        $one = outgoing_prep_is_open($corr) ? outgoing_prep_status_of($corr) : 'issued';
+        if ($phase === '') {
+            $phase = $one;
+        } elseif ($phase !== $one) {
+            return 'mixed';
+        }
+    }
+
+    return $phase;
+}
+
+/**
+ * صفوف بريد إعداد الدفعة: موضوع + عدد/مجموعة المستلمين + موجهة من فقط (بلا اسم مستلم واحد).
+ *
+ * @return list<array{label:string,value:string,party?:bool}>
+ */
+function outgoing_batch_prep_email_rows(int $batchId, array $sample): array
+{
+    $items = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : (function_exists('outgoing_batch_draft_rows') ? outgoing_batch_draft_rows($batchId) : []);
+    $count = max(1, count($items));
+    if (function_exists('outgoing_batch_email_rows')) {
+        return outgoing_batch_email_rows($batchId, $sample, null, $count);
+    }
+    $rows = [];
+    $subject = trim((string) ($sample['subject'] ?? ''));
+    if ($subject !== '') {
+        $rows[] = ['label' => __('corr.subject'), 'value' => $subject];
+    }
+    $rows[] = ['label' => __('bulk.recipients'), 'value' => (string) $count, 'party' => true];
+
+    return $rows;
+}
+
+function outgoing_batch_prep_notify(array $userIds, array $sample, int $batchId, string $titleKey, string $bodyKey, string $emailIntroKey, string $link, string $dedupe, int $excludeUserId = 0): void
+{
+    if (!function_exists('dms_notify_users') || $batchId <= 0) {
+        return;
+    }
+    $ids = [];
+    foreach ($userIds as $uid) {
+        $uid = (int) $uid;
+        if ($uid > 0 && $uid !== $excludeUserId) {
+            $ids[] = $uid;
+        }
+    }
+    $ids = array_values(array_unique($ids));
+    if ($ids === []) {
+        return;
+    }
+    $items = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : (function_exists('outgoing_batch_draft_rows') ? outgoing_batch_draft_rows($batchId) : [$sample]);
+    $count = max(1, count($items));
+    $subject = trim((string) ($sample['subject'] ?? ''));
+    $body = str_replace(
+        [':subject', ':count'],
+        [$subject !== '' ? $subject : '—', (string) $count],
+        __($bodyKey)
+    );
+    $rows = outgoing_batch_prep_email_rows($batchId, $sample);
+    dms_notify_users($ids, [
+        'type' => 'outgoing_prep',
+        'title' => __($titleKey),
+        'body' => $body,
+        'link' => $link,
+        // بلا correspondence_id حتى لا تُحقن «موجهة إلى» لمستلم واحد من عيّنة الدفعة
+        'correspondence_id' => null,
+        'department_id' => outgoing_issuing_department_id($sample) ?: null,
+        'dedupe_key' => $dedupe,
+        'email' => true,
+        'email_intro' => __($emailIntroKey),
+        'email_details' => $body,
+        'email_rows' => $rows,
+        'email_cta' => __('bulk.view_batch'),
+    ]);
+}
+
+/** @return 'pending'|'converted' */
+function outgoing_batch_prep_submit(int $batchId, array $user): string
+{
+    ensure_outgoing_prep_schema();
+    if (!function_exists('outgoing_batch_draft_rows')) {
+        throw new RuntimeException(__('auth.forbidden'));
+    }
+    $rows = outgoing_batch_draft_rows($batchId);
+    if ($rows === [] || !outgoing_user_can_prep_submit($user, $rows[0])) {
+        throw new RuntimeException(__('out_prep.submit_denied'));
+    }
+    foreach ($rows as $row) {
+        if (!outgoing_prep_is_draft($row)) {
+            throw new RuntimeException(__('bulk.edit_locked'));
+        }
+    }
+    if (outgoing_issuing_department_id($rows[0]) <= 0) {
+        throw new RuntimeException(__('out_prep.need_issuing'));
+    }
+    $signers = outgoing_prep_signer_ids($rows[0]);
+    if ($signers === []) {
+        throw new RuntimeException(__('out_prep.no_signer'));
+    }
+    if (outgoing_user_is_prep_signer($user, $rows[0])) {
+        outgoing_batch_prep_convert($batchId, $user, '');
+
+        return 'converted';
+    }
+    $uid = (int) ($user['id'] ?? 0);
+    db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET outgoing_prep_status = 'pending_signer',
+             outgoing_prep_note = NULL,
+             outgoing_prep_decided_by = NULL,
+             outgoing_prep_decided_at = NULL
+         WHERE batch_id = ? AND type = 'outgoing' AND status <> 'cancelled' AND outgoing_prep_status = 'draft'"
+    )->execute([$batchId]);
+    foreach ($rows as $row) {
+        log_activity($uid, (int) $row['id'], 'outgoing_prep', __('out_prep.log_submit'));
+    }
+    outgoing_batch_prep_notify(
+        $signers,
+        $rows[0],
+        $batchId,
+        'out_prep.notify_batch_submit_title',
+        'out_prep.notify_batch_submit_body',
+        'out_prep.email_batch_submit_intro',
+        'outgoing/batch.php?id=' . $batchId,
+        'out_prep_batch_s:' . $batchId . ':' . time(),
+        $uid
+    );
+
+    return 'pending';
+}
+
+function outgoing_batch_prep_convert(int $batchId, array $user, string $note = ''): void
+{
+    ensure_outgoing_prep_schema();
+    $rows = function_exists('outgoing_batch_draft_rows') ? outgoing_batch_draft_rows($batchId) : [];
+    if ($rows === []) {
+        throw new RuntimeException(__('bulk.batch_not_found'));
+    }
+    $uid = (int) ($user['id'] ?? 0);
+    $note = trim($note);
+    $enteredFlow = [];
+    foreach ($rows as $row) {
+        if (!outgoing_prep_is_open($row)) {
+            throw new RuntimeException(__('out_prep.convert_denied'));
+        }
+        $id = (int) $row['id'];
+        $ref = outgoing_prep_assign_official_ref($id, $row);
+        db()->prepare(
+            "UPDATE `tblcorrespondence`
+             SET outgoing_prep_decided_by = ?, outgoing_prep_decided_at = NOW(), outgoing_prep_note = ?
+             WHERE id = ?"
+        )->execute([$uid ?: null, $note !== '' ? $note : null, $id]);
+        log_activity($uid, $id, 'outgoing_prep', __('out_prep.log_convert') . ' ' . $ref);
+        // نفس مسار المفرد حرفياً (ربط وارد + مراجعة/اعتماد حسب الإعدادات)
+        outgoing_prep_after_convert($id, $user, $row, false);
+        $fresh = function_exists('get_correspondence') ? get_correspondence($id) : null;
+        if (is_array($fresh)
+            && function_exists('outgoing_approval_status_of')
+            && outgoing_approval_status_of($fresh) !== ''
+        ) {
+            $enteredFlow[] = $fresh;
+        }
+    }
+    if ($enteredFlow !== [] && function_exists('outgoing_batch_notify_cycle')) {
+        try {
+            outgoing_batch_notify_cycle($batchId, $enteredFlow, $user, 'request');
+        } catch (Throwable $e) {
+            error_log('DMS batch prep convert notify: ' . $e->getMessage());
+        }
+    }
+}
+
+/**
+ * أخرج معاملة عالقة في المسودة إذا أُغلقت مرحلة المسودة في الإعدادات.
+ * تُحوَّل إلى المسار الحالي: مراجعة/اعتماد إن وُجد، وإلا تبقى جاهزة للإرسال.
+ */
+function outgoing_prep_release_if_disabled(array $corr, ?array $actor = null): ?array
+{
+    ensure_outgoing_prep_schema();
+    if (($corr['type'] ?? '') !== 'outgoing' || outgoing_prep_enabled() || !outgoing_prep_is_open($corr)) {
+        return null;
+    }
+    if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+        return null;
+    }
+    $id = (int) ($corr['id'] ?? 0);
+    if ($id < 1) {
+        return null;
+    }
+    $actor = $actor ?? (function_exists('current_user') ? current_user() : null);
+    $uid = (int) ($actor['id'] ?? ($corr['created_by'] ?? 0));
+    $user = is_array($actor) && $uid > 0 ? $actor : ['id' => $uid];
+    $ref = outgoing_prep_assign_official_ref($id, $corr);
+    db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET outgoing_prep_decided_by = ?, outgoing_prep_decided_at = NOW()
+         WHERE id = ?"
+    )->execute([$uid > 0 ? $uid : null, $id]);
+    log_activity(
+        $uid > 0 ? $uid : null,
+        $id,
+        'outgoing_prep',
+        __('out_prep.log_convert') . ' ' . $ref . ' — ' . __('out_prep.released_stage_off')
+    );
+    try {
+        outgoing_prep_after_convert($id, $user, $corr);
+    } catch (Throwable $e) {
+        error_log('DMS prep release after convert #' . $id . ': ' . $e->getMessage());
+    }
+
+    return function_exists('get_correspondence') ? get_correspondence($id) : null;
+}
+
+/** يُخرج كل خطابات الدفعة العالقة في المسودة بعد إغلاق مرحلة المسودة. */
+function outgoing_batch_prep_release_if_disabled(int $batchId, ?array $user = null): int
+{
+    if (outgoing_prep_enabled() || $batchId <= 0) {
+        return 0;
+    }
+    $rows = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : (function_exists('outgoing_batch_draft_rows') ? outgoing_batch_draft_rows($batchId) : []);
+    $n = 0;
+    foreach ($rows as $row) {
+        if (outgoing_prep_release_if_disabled($row, $user)) {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
+/** يُخرج كل المسودات المفتوحة في النظام بعد إغلاق مرحلة المسودة من الإعدادات. */
+function outgoing_prep_release_all_open_if_disabled(?array $user = null): int
+{
+    if (outgoing_prep_enabled()) {
+        return 0;
+    }
+    ensure_outgoing_prep_schema();
+    $rows = db()->query(
+        "SELECT * FROM `tblcorrespondence`
+         WHERE type = 'outgoing' AND status <> 'cancelled'
+           AND outgoing_prep_status IN ('draft', 'pending_signer')
+         ORDER BY id"
+    )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $n = 0;
+    foreach ($rows as $row) {
+        if (outgoing_prep_release_if_disabled($row, $user)) {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
+function outgoing_batch_prep_decide(int $batchId, array $user, bool $approve, string $note = ''): void
+{
+    ensure_outgoing_prep_schema();
+    $rows = function_exists('outgoing_batch_draft_rows') ? outgoing_batch_draft_rows($batchId) : [];
+    if ($rows === [] || !outgoing_user_can_prep_decide($user, $rows[0])) {
+        throw new RuntimeException(__('out_prep.decide_denied'));
+    }
+    foreach ($rows as $row) {
+        if (!outgoing_prep_is_pending_signer($row)) {
+            throw new RuntimeException(__('out_prep.decide_denied'));
+        }
+    }
+    $note = trim($note);
+    if (!$approve && $note === '') {
+        throw new RuntimeException(__('out_prep.return_note_required'));
+    }
+    if ($approve) {
+        outgoing_batch_prep_convert($batchId, $user, $note);
+        $creator = (int) ($rows[0]['created_by'] ?? 0);
+        if ($creator > 0 && $creator !== (int) ($user['id'] ?? 0)) {
+            outgoing_batch_prep_notify(
+                [$creator],
+                get_correspondence((int) $rows[0]['id']) ?: $rows[0],
+                $batchId,
+                'out_prep.notify_batch_approved_title',
+                'out_prep.notify_batch_approved_body',
+                'out_prep.email_batch_approved_intro',
+                'outgoing/batch.php?id=' . $batchId,
+                'out_prep_batch_a:' . $batchId . ':' . time(),
+                (int) ($user['id'] ?? 0)
+            );
+        }
+
+        return;
+    }
+    $uid = (int) ($user['id'] ?? 0);
+    db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET outgoing_prep_status = 'draft',
+             outgoing_prep_note = ?,
+             outgoing_prep_decided_by = ?,
+             outgoing_prep_decided_at = NOW()
+         WHERE batch_id = ? AND type = 'outgoing' AND status <> 'cancelled' AND outgoing_prep_status = 'pending_signer'"
+    )->execute([$note, $uid ?: null, $batchId]);
+    foreach ($rows as $row) {
+        log_activity($uid, (int) $row['id'], 'outgoing_prep', __('out_prep.log_return') . ' — ' . $note);
+    }
+    $creator = (int) ($rows[0]['created_by'] ?? 0);
+    if ($creator > 0) {
+        outgoing_batch_prep_notify(
+            [$creator],
+            $rows[0],
+            $batchId,
+            'out_prep.notify_batch_return_title',
+            'out_prep.notify_batch_return_body',
+            'out_prep.email_batch_return_intro',
+            'outgoing/bulk.php?id=' . $batchId,
+            'out_prep_batch_r:' . $batchId . ':' . time(),
+            $uid
+        );
+    }
 }

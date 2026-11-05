@@ -19,8 +19,9 @@ $pickerTitle = (string) ($pickerTitle ?? __('bulk.picker_title'));
 $pickLabel = (string) ($pickLabel ?? __('bulk.add_recipients'));
 $editLabel = (string) ($editLabel ?? __('bulk.edit_recipients'));
 $emptyText = (string) ($emptyText ?? __('bulk.no_recipients'));
-$hintText = (string) ($hintText ?? __('bulk.or_pick'));
+$hintText = (string) ($hintText ?? '');
 $showDeliveryMode = !empty($showDeliveryMode);
+$compactSummary = !empty($compactSummary);
 $groupNames = [];
 foreach ($groups as $g) {
     $groupNames[(string) (int) $g['id']] = (string) $g['name'];
@@ -52,7 +53,7 @@ $modalId = $pickerId . '-modal';
                     <select id="<?= e($pickerId) ?>_group" class="form-select" data-bulk-group>
                         <option value=""><?= e(__('common.none')) ?></option>
                         <?php foreach ($groups as $g): ?>
-                            <option value="<?= (int) $g['id'] ?>" <?= $preGroup === (int) $g['id'] ? 'selected' : '' ?>>
+                            <option value="<?= (int) $g['id'] ?>" data-member-count="<?= (int) $g['member_count'] ?>" <?= $preGroup === (int) $g['id'] ? 'selected' : '' ?>>
                                 <?= e($g['name'] . ' (' . (int) $g['member_count'] . ')') ?>
                             </option>
                         <?php endforeach; ?>
@@ -80,12 +81,18 @@ $modalId = $pickerId . '-modal';
                 <p class="admin-form-hint entity-picker-hint">
                     <i class="bi bi-info-circle me-1"></i><?= e(__('bulk.picker_hint')) ?>
                 </p>
+                <?php if ($showDeliveryMode): ?>
+                <p class="admin-form-hint mb-2"><?= e(__('bulk.delivery_per_hint')) ?></p>
+                <?php endif; ?>
                 <div class="entity-picker-list">
                     <table class="table table-hover entity-picker-table">
                         <colgroup>
                             <col class="entity-picker-col-check">
                             <col class="entity-picker-col-name">
                             <col class="entity-picker-col-org">
+                            <?php if ($showDeliveryMode): ?>
+                            <col class="entity-picker-col-delivery">
+                            <?php endif; ?>
                             <col class="entity-picker-col-scope">
                             <col class="entity-picker-col-contact">
                         </colgroup>
@@ -94,6 +101,12 @@ $modalId = $pickerId . '-modal';
                                 <th class="entity-picker-check"></th>
                                 <th><?= e(__('entities.directed_to')) ?></th>
                                 <th><?= e(__('entities.section_basic')) ?></th>
+                                <?php if ($showDeliveryMode): ?>
+                                <th class="entity-picker-delivery-head">
+                                    <span><?= e(__('bulk.delivery_col_line1')) ?></span>
+                                    <span><?= e(__('bulk.delivery_col_line2')) ?></span>
+                                </th>
+                                <?php endif; ?>
                                 <th><?= e(__('entities.scope')) ?></th>
                                 <th><?= e(__('entities.contact')) ?></th>
                             </tr>
@@ -113,6 +126,12 @@ $modalId = $pickerId . '-modal';
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk-clear-draft>
                             <?= e(__('bulk.picker_clear_draft')) ?>
                         </button>
+                        <?php if ($showDeliveryMode): ?>
+                        <label class="bulk-delivery-apply mb-0">
+                            <input type="checkbox" class="form-check-input" data-bulk-apply-all>
+                            <span><?= e(__('bulk.delivery_apply_all')) ?></span>
+                        </label>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -144,15 +163,12 @@ $modalId = $pickerId . '-modal';
   var summaryGroupTpl = <?= json_encode(__('bulk.summary_group'), JSON_UNESCAPED_UNICODE) ?>;
   var summaryReview = <?= json_encode(__('bulk.summary_review'), JSON_UNESCAPED_UNICODE) ?>;
   var noEmailTpl = <?= json_encode(__('bulk.no_email_count'), JSON_UNESCAPED_UNICODE) ?>;
+  var noEmailTip = <?= json_encode(__('bulk.delivery_needs_email'), JSON_UNESCAPED_UNICODE) ?>;
+  var electronicLabel = <?= json_encode(__('bulk.delivery_electronic'), JSON_UNESCAPED_UNICODE) ?>;
   var showNames = <?= $showSelectedNames ? 'true' : 'false' ?>;
+  var compactSummary = <?= $compactSummary ? 'true' : 'false' ?>;
+  var membersCountLabel = <?= json_encode(__('groups.members_count'), JSON_UNESCAPED_UNICODE) ?>;
   var showDelivery = <?= $showDeliveryMode ? 'true' : 'false' ?>;
-  var deliveryLabels = <?= json_encode([
-      'electronic' => __('bulk.delivery_electronic'),
-      'paper' => __('bulk.delivery_paper'),
-      'both' => __('bulk.delivery_both'),
-  ], JSON_UNESCAPED_UNICODE) ?>;
-  var deliveryApplyAll = <?= json_encode(__('bulk.delivery_apply_all'), JSON_UNESCAPED_UNICODE) ?>;
-  var deliveryEdit = <?= json_encode($editLabel, JSON_UNESCAPED_UNICODE) ?>;
   var initial = <?= json_encode($selectedPayloads, JSON_UNESCAPED_UNICODE) ?>;
   var groupMap = <?= json_encode($groupMembers, JSON_UNESCAPED_UNICODE) ?>;
   var groupNames = <?= json_encode($groupNames, JSON_UNESCAPED_UNICODE) ?>;
@@ -181,6 +197,7 @@ $modalId = $pickerId . '-modal';
   var applyOnClose = false;
   var loadedQuery = null;
   var requestToken = 0;
+  var groupLoadToken = 0;
   var searchTimer = null;
   var viewMode = 'all';
 
@@ -231,7 +248,7 @@ $modalId = $pickerId . '-modal';
     draft = {};
     draftOrder = order.slice();
     order.forEach(function (key) {
-      if (selected[key]) draft[key] = selected[key];
+      if (selected[key]) draft[key] = Object.assign({}, selected[key]);
     });
     draftGroup = groupHidden ? String(groupHidden.value || '') : '';
     if (groupSel) groupSel.value = draftGroup;
@@ -247,9 +264,14 @@ $modalId = $pickerId . '-modal';
     renderSelected();
   }
 
+  function hasEmail(item) {
+    return !!((item && item.email) || '').trim();
+  }
   function deliveryOf(item) {
     var mode = item && item.delivery;
-    return mode === 'electronic' || mode === 'both' ? mode : 'paper';
+    if (mode !== 'electronic' && mode !== 'both') mode = 'paper';
+    if ((mode === 'electronic' || mode === 'both') && !hasEmail(item)) mode = 'paper';
+    return mode;
   }
   function withDelivery(item, previous) {
     var next = Object.assign({}, item);
@@ -265,6 +287,7 @@ $modalId = $pickerId . '-modal';
     draft[key] = item;
     if (!skipRender) {
       renderDraftUi();
+      applyDraft();
       if (viewMode === 'selected') renderSelectedView(search ? search.value.trim() : '');
       else markRows();
     }
@@ -275,6 +298,7 @@ $modalId = $pickerId . '-modal';
     delete draft[key];
     draftOrder = draftOrder.filter(function (k) { return k !== key; });
     renderDraftUi();
+    applyDraft();
     if (viewMode === 'selected') renderSelectedView(search ? search.value.trim() : '');
     else markRows();
   }
@@ -288,6 +312,7 @@ $modalId = $pickerId . '-modal';
     draftGroup = '';
     if (groupSel) groupSel.value = '';
     renderDraftUi();
+    applyDraft();
     if (viewMode === 'selected') renderSelectedView(search ? search.value.trim() : '');
     else markRows();
   }
@@ -312,15 +337,6 @@ $modalId = $pickerId . '-modal';
     return groupNames[String(id)] || '';
   }
 
-  function fillDeliverySelect(select, current) {
-    Object.keys(deliveryLabels).forEach(function (mode) {
-      var opt = document.createElement('option');
-      opt.value = mode;
-      opt.textContent = deliveryLabels[mode];
-      if (mode === current) opt.selected = true;
-      select.appendChild(opt);
-    });
-  }
   function renderSelected() {
     listEl.textContent = '';
     inputsEl.textContent = '';
@@ -337,11 +353,22 @@ $modalId = $pickerId . '-modal';
       hidden.name = inputName;
       hidden.value = String(item.id);
       inputsEl.appendChild(hidden);
+      if (showDelivery) {
+        var deliveryInput = document.createElement('input');
+        deliveryInput.type = 'hidden';
+        deliveryInput.name = 'recipient_delivery[' + String(item.id) + ']';
+        deliveryInput.value = mode;
+        inputsEl.appendChild(deliveryInput);
+      }
     });
     if (!order.length) {
-      var empty = el('p', 'bulk-selected-empty mb-0', emptyText);
-      empty.addEventListener('click', openPicker);
-      listEl.appendChild(empty);
+      if (compactSummary) {
+        listEl.appendChild(compactCountButton());
+      } else {
+        var empty = el('p', 'bulk-selected-empty mb-0', emptyText);
+        empty.addEventListener('click', openPicker);
+        listEl.appendChild(empty);
+      }
     } else if (showNames) {
       var wrap = el('div', 'bulk-selected-names');
       order.forEach(function (key) {
@@ -357,7 +384,9 @@ $modalId = $pickerId . '-modal';
         wrap.appendChild(chip);
       });
       listEl.appendChild(wrap);
-    } else if (!showDelivery) {
+    } else if (compactSummary) {
+      listEl.appendChild(compactCountButton());
+    } else {
       var card = el('button', 'bulk-selected-summary');
       card.type = 'button';
       var iconWrap = el('span', 'bulk-selected-summary-icon');
@@ -373,56 +402,15 @@ $modalId = $pickerId . '-modal';
       card.addEventListener('click', openPicker);
       listEl.appendChild(card);
     }
-    if (showDelivery && order.length) {
-      var panel = el('div', 'bulk-delivery-list');
-      var bar = el('div', 'bulk-delivery-bar');
-      var editBtn = el('button', 'btn btn-sm btn-outline-secondary', deliveryEdit);
-      editBtn.type = 'button';
-      editBtn.addEventListener('click', openPicker);
-      bar.appendChild(editBtn);
-      var applyLabel = el('label', 'bulk-delivery-apply');
-      applyLabel.appendChild(el('span', '', deliveryApplyAll));
-      var apply = document.createElement('select');
-      apply.className = 'form-select form-select-sm';
-      var applyBlank = document.createElement('option');
-      applyBlank.value = '';
-      applyBlank.textContent = '—';
-      apply.appendChild(applyBlank);
-      fillDeliverySelect(apply, '');
-      applyBlank.selected = true;
-      apply.addEventListener('change', function () {
-        if (!apply.value) return;
-        order.forEach(function (key) {
-          if (selected[key]) selected[key].delivery = apply.value;
-        });
-        renderSelected();
-      });
-      applyLabel.appendChild(apply);
-      bar.appendChild(applyLabel);
-      panel.appendChild(bar);
-      order.forEach(function (key) {
-        var item = selected[key];
-        if (!item) return;
-        var row = el('div', 'bulk-delivery-row');
-        var who = el('div', 'bulk-delivery-who');
-        who.appendChild(el('div', 'bulk-delivery-name', itemLabel(item)));
-        var sub = item.job || ((item.org && item.org !== itemLabel(item)) ? item.org : '');
-        if (sub) who.appendChild(el('div', 'bulk-delivery-sub', sub));
-        row.appendChild(who);
-        var select = document.createElement('select');
-        select.className = 'form-select form-select-sm';
-        select.name = 'recipient_delivery[' + String(item.id) + ']';
-        fillDeliverySelect(select, deliveryOf(item));
-        select.addEventListener('change', function () {
-          item.delivery = deliveryOf({ delivery: select.value });
-        });
-        row.appendChild(select);
-        panel.appendChild(row);
-      });
-      listEl.appendChild(panel);
-    }
   }
 
+  function compactCountButton() {
+    var card = el('button', 'group-count-btn');
+    card.type = 'button';
+    card.innerHTML = '<i class="bi bi-people" aria-hidden="true"></i><span>' + membersCountLabel + ': ' + order.length + '</span>';
+    card.addEventListener('click', openPicker);
+    return card;
+  }
   function renderDraftUi() {
     if (chosenLabel) chosenLabel.textContent = chosenTpl.replace(':count', String(draftOrder.length));
     if (chosenBox) chosenBox.hidden = draftOrder.length === 0;
@@ -438,9 +426,37 @@ $modalId = $pickerId . '-modal';
     Array.prototype.forEach.call(rowsBody.children, function (tr) {
       var on = hasDraft(tr.dataset.id);
       tr.classList.toggle('is-selected', on);
-      var cb = tr.querySelector('input[type="checkbox"]');
+      var cb = tr.querySelector('.entity-picker-select');
       if (cb) cb.checked = on;
     });
+  }
+
+  function deliveryCellFor(item) {
+    var cell = el('td', 'entity-picker-delivery');
+    var draftItem = draft[keyOf(item.id)];
+    var picked = draftItem || item;
+    var mode = deliveryOf(picked);
+    var mail = hasEmail(picked);
+    var label = el('label', 'bulk-delivery-check');
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'form-check-input';
+    box.checked = mail && (mode === 'electronic' || mode === 'both');
+    box.disabled = !mail;
+    if (!mail) box.title = noEmailTip;
+    box.setAttribute('aria-label', electronicLabel);
+    cell.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    box.addEventListener('keydown', function (ev) { ev.stopPropagation(); });
+    box.addEventListener('change', function () {
+      var next = box.checked && mail ? 'electronic' : 'paper';
+      item.delivery = next;
+      var key = keyOf(item.id);
+      if (draft[key]) draft[key].delivery = next;
+      else picked.delivery = next;
+    });
+    label.appendChild(box);
+    cell.appendChild(label);
+    return cell;
   }
 
   function buildRow(item) {
@@ -452,6 +468,7 @@ $modalId = $pickerId . '-modal';
     var checkCell = el('td', 'entity-picker-check');
     var cb = document.createElement('input');
     cb.type = 'checkbox';
+    cb.className = 'form-check-input entity-picker-select';
     cb.tabIndex = -1;
     cb.checked = hasDraft(item.id);
     cb.setAttribute('aria-hidden', 'true');
@@ -468,6 +485,10 @@ $modalId = $pickerId . '-modal';
     if (item.job) orgCell.appendChild(el('span', 'entity-picker-sub', item.job));
     if (item.org) orgCell.appendChild(el('span', 'entity-picker-name', item.org));
     tr.appendChild(orgCell);
+
+    if (showDelivery) {
+      tr.appendChild(deliveryCellFor(item));
+    }
 
     var scopeCell = el('td', 'entity-picker-scope');
     var badge = el('span', 'entity-picker-scope-badge ' + (item.scope_modifier || ''));
@@ -565,15 +586,75 @@ $modalId = $pickerId . '-modal';
       .catch(function () { done([]); });
   }
 
+  function groupMemberIds(groupId) {
+    var key = String(groupId || '');
+    if (!key || !groupMap) return [];
+    var ids = groupMap[key];
+    if (!ids) ids = groupMap[parseInt(key, 10)];
+    if (!Array.isArray(ids)) return [];
+    var out = [];
+    ids.forEach(function (id) {
+      id = parseInt(id, 10);
+      if (id > 0 && out.indexOf(id) === -1) out.push(id);
+    });
+    return out;
+  }
+
+  function showSelectedDraft() {
+    viewMode = 'selected';
+    Array.prototype.forEach.call(viewBtns, function (btn) {
+      btn.classList.toggle('is-active', btn.getAttribute('data-bulk-view') === 'selected');
+    });
+    if (search) search.value = '';
+    loadedQuery = null;
+    renderSelectedView('');
+  }
+
   function loadGroupIntoDraft(groupId) {
+    var token = ++groupLoadToken;
+    requestToken++;
+    var ids = groupMemberIds(groupId);
+    var previous = draft;
     draftGroup = String(groupId || '');
-    var ids = groupMap[draftGroup] || [];
+    draft = {};
+    draftOrder = [];
+    ids.forEach(function (id) {
+      var key = keyOf(id);
+      var prior = previous[key] || selected[key] || null;
+      var item = prior ? Object.assign({}, prior, { id: id }) : { id: id };
+      draft[key] = withDelivery(item, prior);
+      draftOrder.push(key);
+    });
+    renderDraftUi();
+    applyDraft();
+    if (rowsBody) rowsBody.textContent = '';
+    if (emptyBox) emptyBox.hidden = true;
+    if (loadingBox) loadingBox.hidden = ids.length === 0;
+    viewMode = 'selected';
+    Array.prototype.forEach.call(viewBtns, function (btn) {
+      btn.classList.toggle('is-active', btn.getAttribute('data-bulk-view') === 'selected');
+    });
+    if (!ids.length) {
+      showSelectedDraft();
+      return;
+    }
     fetchByIds(ids, function (items) {
-      draft = {};
-      draftOrder = [];
-      items.forEach(function (item) { addDraft(item, true); });
+      if (token !== groupLoadToken) return;
+      var byId = {};
+      (items || []).forEach(function (item) {
+        if (item && item.id) byId[keyOf(item.id)] = item;
+      });
+      ids.forEach(function (id) {
+        var key = keyOf(id);
+        if (!hasDraft(key)) return;
+        var full = byId[key];
+        if (!full) return;
+        draft[key] = withDelivery(full, draft[key] || previous[key] || selected[key] || null);
+      });
       renderDraftUi();
-      refreshList();
+      applyDraft();
+      if (viewMode === 'selected') showSelectedDraft();
+      else markRows();
     });
   }
 
@@ -588,17 +669,72 @@ $modalId = $pickerId . '-modal';
     }
   };
 
+  function includeGroupMembers(groupId) {
+    var ids = groupMemberIds(groupId);
+    var keep = {};
+    var missing = [];
+    var changed = false;
+    ids.forEach(function (id) { keep[keyOf(id)] = true; });
+    draftOrder = draftOrder.filter(function (key) {
+      if (keep[key]) return true;
+      delete draft[key];
+      changed = true;
+      return false;
+    });
+    ids.forEach(function (id) {
+      var key = keyOf(id);
+      if (hasDraft(key)) return;
+      draft[key] = { id: id };
+      draftOrder.push(key);
+      missing.push(id);
+      changed = true;
+    });
+    if (!changed) return;
+    renderDraftUi();
+    applyDraft();
+    var token = ++groupLoadToken;
+    fetchByIds(missing, function (items) {
+      if (token !== groupLoadToken) return;
+      (items || []).forEach(function (item) {
+        if (!item || !item.id) return;
+        var key = keyOf(item.id);
+        if (!hasDraft(key)) return;
+        draft[key] = withDelivery(item, draft[key]);
+      });
+      renderDraftUi();
+      applyDraft();
+      if (viewMode === 'selected') renderSelectedView(search ? search.value.trim() : '');
+      else markRows();
+    });
+  }
+
   (initial || []).forEach(function (item) { addCommitted(item, true); });
-  function boot() { renderSelected(); }
+  function boot() {
+    renderSelected();
+    snapshotDraft();
+    if (draftGroup) includeGroupMembers(draftGroup);
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
   }
 
+  var applyAll = modalEl.querySelector('[data-bulk-apply-all]');
+  if (applyAll && showDelivery) {
+    applyAll.addEventListener('change', function () {
+      var on = !!applyAll.checked;
+      draftOrder.forEach(function (key) {
+        if (!draft[key]) return;
+        draft[key].delivery = on && hasEmail(draft[key]) ? 'electronic' : 'paper';
+      });
+      refreshList();
+    });
+  }
   if (clearDraftBtn) clearDraftBtn.addEventListener('click', clearDraft);
   if (doneBtn) {
     doneBtn.addEventListener('click', function () {
+      groupLoadToken++;
       applyOnClose = true;
       applyDraft();
       var m = modal();
@@ -607,11 +743,15 @@ $modalId = $pickerId . '-modal';
   }
   if (groupSel) {
     groupSel.addEventListener('change', function () {
-      if (!groupSel.value) {
+      var next = String(groupSel.value || '');
+      if (next === String(draftGroup || '')) return;
+      if (!next) {
         draftGroup = '';
+        renderDraftUi();
+        applyDraft();
         return;
       }
-      loadGroupIntoDraft(groupSel.value);
+      loadGroupIntoDraft(next);
     });
   }
   if (search) {
@@ -629,12 +769,19 @@ $modalId = $pickerId . '-modal';
       setViewMode(btn.getAttribute('data-bulk-view') || 'all');
     });
   });
+  var pickerForm = root.closest('form');
+  if (pickerForm) {
+    pickerForm.addEventListener('submit', function () {
+      if (draftGroup) includeGroupMembers(draftGroup);
+      applyDraft();
+    }, true);
+  }
   modalEl.addEventListener('shown.bs.modal', function () {
     if (search) search.focus();
     refreshList();
   });
   modalEl.addEventListener('hidden.bs.modal', function () {
-    if (!applyOnClose) snapshotDraft();
+    applyDraft();
     applyOnClose = false;
   });
 })();

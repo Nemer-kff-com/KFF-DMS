@@ -152,9 +152,7 @@ require __DIR__ . '/../includes/header.php';
                     </h5>
                     <p class="entity-form-page-shell-sub mb-0"><?= e($entity['name_ar']) ?></p>
                 </div>
-                <a class="btn btn-sm btn-outline-secondary entity-form-page-shell-back" href="<?= e(base_url('admin/entities.php')) ?>" title="<?= e(__('action.back')) ?>">
-                    <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?>"></i>
-                </a>
+                <?= dms_back_icon(base_url('admin/entities.php'), null, '', 'entity-form-page-shell-back') ?>
             </div>
 
             <div class="entity-form-page-shell-body entity-create-modal-body entity-create-modal-body-compact">

@@ -3,7 +3,8 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/correspondence.php';
 
 $user = require_login();
-if (!can_edit_correspondence($user) && !user_can('templates.edit', $user)) {
+if (!can_edit_correspondence($user) && !user_can('templates.edit', $user)
+    && !user_can('outgoing.bulk', $user) && !user_can('outgoing.create', $user) && !user_can('outgoing.edit', $user)) {
     flash('danger', __('auth.forbidden'));
     redirect(base_url('admin/letter_templates.php'));
 }
@@ -15,8 +16,16 @@ verify_csrf();
 $lang = strtolower(trim((string) ($_POST['lang'] ?? 'ar'))) === 'en' ? 'en' : 'ar';
 $body = (string) ($_POST['body'] ?? '');
 $templateId = (int) ($_POST['template_id'] ?? 0);
-$deptId = (int) ($_POST['department_id'] ?? 0);
+$deptId = (int) ($_POST['issuing_department_id'] ?? 0);
+if ($deptId <= 0) {
+    $deptId = (int) ($_POST['department_id'] ?? 0);
+}
 $backUrl = base_url('admin/letter_templates.php' . ($templateId > 0 ? '?id=' . $templateId : ''));
+$referer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+$host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+if ($host !== '' && $referer !== '' && str_contains($referer, $host) && !str_contains($referer, 'letter_print_preview.php')) {
+    $backUrl = $referer;
+}
 
 $letterPrintItems = letter_template_preview_items($templateId, $lang, $body, $deptId, $user);
 $letterPrintTitle = __('tpl.preview_letter');

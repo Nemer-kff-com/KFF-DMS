@@ -60,9 +60,7 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(str_replace(':sample', corr_ref_sample(''), __('internal.numbering_hint'))) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('internal/index.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('internal/index.php')) ?>
     </div>
 </div>
 

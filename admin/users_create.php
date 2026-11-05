@@ -153,9 +153,7 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(__('users.subtitle')) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/users.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('admin/users.php')) ?>
     </div>
 </div>
 

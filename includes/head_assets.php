@@ -17,9 +17,8 @@ $amiriReg = $asset('assets/fonts/Amiri-Regular.ttf');
 $amiriBold = $asset('assets/fonts/Amiri-Bold.ttf');
 $appCss = $asset('assets/css/app.css');
 $swalCss = $asset('assets/css/swal-dms.css');
-$favicon = $web('assets/img/favicon.ico');
 ?>
-<link rel="icon" href="<?= e($favicon) ?>">
+<?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : ('<link rel="icon" href="' . e($web('assets/img/favicon.ico')) . '">') ?>
 <link href="<?= e(dms_brand_fonts_css()) ?>" rel="stylesheet">
 <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
 <link href="<?= e(dms_fontawesome_css()) ?>" rel="stylesheet">

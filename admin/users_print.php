@@ -226,7 +226,7 @@ $htmlDir = $isRtl ? 'rtl' : 'ltr';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(__('action.print')) ?> — <?= e($pageTitle) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= $cssVer ?>" rel="stylesheet">
@@ -329,12 +329,8 @@ $htmlDir = $isRtl ? 'rtl' : 'ltr';
 <div class="print-toolbar no-print">
     <div class="print-toolbar-title"><?= e($pageTitle) ?></div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
-        <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-        </button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= e($backUrl) ?>">
-            <i class="bi <?= $isRtl ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_print_icon() ?>
+        <?= dms_back_icon($backUrl) ?>
     </div>
 </div>
 

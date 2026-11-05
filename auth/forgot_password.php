@@ -80,7 +80,7 @@ $dir = dms_page_dir();
                        value="<?= e($_POST['email'] ?? '') ?>">
             </div>
             <button type="submit" class="btn btn-kff w-100"><?= e(__('auth.send_reset')) ?></button>
-            <a href="<?= e(base_url('auth/login.php')) ?>" class="btn btn-outline-secondary w-100 mt-2"><?= e(__('action.back')) ?></a>
+            <div class="d-flex mt-2"><?= dms_back_icon(base_url('auth/login.php')) ?></div>
         </form>
     <?php endif; ?>
 </div>

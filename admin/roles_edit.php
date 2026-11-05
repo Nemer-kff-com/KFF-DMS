@@ -66,9 +66,7 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(dms_role_display_name($role)) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/roles.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('admin/roles.php')) ?>
     </div>
 </div>
 

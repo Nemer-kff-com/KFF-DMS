@@ -42,6 +42,11 @@ RewriteRule ^install\.php$ - [F,L]
 # Block sensitive directories from direct web access
 RewriteRule ^(config|sql|Docs|doc|var|logs|includes|lang|sessions|Backup|backup|storage|tools|lib|\.cursor|\.git|\.vs)(/|$) - [F,L]
 
+# روابط QR المختصرة — أطوال متقاربة فتتقارب كثافة الرموز في الخطاب
+RewriteRule ^q/([a-f0-9]{32})/r/?$ verify.php?token=$1&rsvp=1 [L,QSA]
+RewriteRule ^q/([a-f0-9]{32})/?$ verify.php?token=$1 [L,QSA]
+RewriteRule ^l/([a-f0-9]{32})/?$ letter_link_go.php?token=$1 [L,QSA]
+
 # Block include-only PHP partials (_form.php, _form_fields.php, …)
 RewriteRule (^|/)_[^/]+\.php$ - [F,L]
 

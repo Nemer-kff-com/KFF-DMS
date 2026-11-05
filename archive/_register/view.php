@@ -57,9 +57,7 @@ require __DIR__ . '/../../includes/header.php';
         </p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(archive_register_url($kind, 'list')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(archive_register_url($kind, 'list')) ?>
         <a class="btn btn-outline-secondary" href="<?= e(archive_register_url($kind, 'print', ['id' => $id])) ?>" target="_blank" rel="noopener">
             <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
         </a>

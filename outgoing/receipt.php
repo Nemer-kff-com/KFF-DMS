@@ -19,12 +19,29 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 verify_csrf();
 $id = (int) ($_POST['correspondence_id'] ?? 0);
 $action = $_POST['action'] ?? 'save';
+$returnBatch = (int) ($_POST['return_batch'] ?? 0);
 $return = 'outgoing/view.php?id=' . $id;
 
 $corr = get_correspondence($id);
-if (!$corr || $corr['type'] !== 'outgoing' || !user_can_access_correspondence($corr, $user)) {
+$inBatch = $corr
+    && $returnBatch > 0
+    && (int) ($corr['batch_id'] ?? 0) === $returnBatch
+    && function_exists('outgoing_batch_items');
+$canBatchReceipt = false;
+if ($inBatch) {
+    foreach (outgoing_batch_items($returnBatch, $user) as $batchRow) {
+        if ((int) ($batchRow['id'] ?? 0) === $id) {
+            $canBatchReceipt = true;
+            break;
+        }
+    }
+}
+if (!$corr || $corr['type'] !== 'outgoing' || (!$canBatchReceipt && !user_can_access_correspondence($corr, $user))) {
     flash('danger', __('corr.not_found'));
     redirect(base_url('outgoing/index.php'));
+}
+if ($canBatchReceipt) {
+    $return = 'outgoing/batch.php?id=' . $returnBatch;
 }
 
 try {

@@ -33,6 +33,10 @@ if (!corr_user_can_edit_in_cycle($user, $corr)) {
     flash('danger', corr_edit_cycle_block_message($corr));
     redirect(base_url('outgoing/view.php?id=' . $id));
 }
+$editBatchId = (int) ($corr['batch_id'] ?? 0);
+if ($editBatchId > 0 && function_exists('outgoing_prep_is_draft') && outgoing_prep_is_draft($corr)) {
+    redirect(base_url('outgoing/bulk.php?id=' . $editBatchId));
+}
 $pageTitle = __('corr.outgoing_edit');
 $type = 'outgoing';
 $departments = departments_list();
@@ -71,9 +75,7 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-sub"><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($corr) : (string) $corr['ref_number']) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/view.php?id=' . $id)) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('outgoing/view.php?id=' . $id)) ?>
     </div>
 </div>
 
@@ -100,6 +102,12 @@ require __DIR__ . '/../includes/header.php';
                 $rsvpChecked = $_SERVER['REQUEST_METHOD'] === 'POST'
                     ? !empty($_POST['rsvp_required'])
                     : !empty($corr['rsvp_required']);
+                $rsvpAllowRemote = $_SERVER['REQUEST_METHOD'] === 'POST'
+                    ? (string) ($_POST['rsvp_allow_remote'] ?? '1') !== '0'
+                    : (int) ($corr['rsvp_allow_remote'] ?? 1) === 1;
+                $emailLetterAttachChecked = $_SERVER['REQUEST_METHOD'] === 'POST'
+                    ? !empty($_POST['email_letter_attach'])
+                    : !empty($corr['email_letter_attach']);
                 $notesValue = (string) ($_POST['notes'] ?? ($corr['notes'] ?? ''));
                 require __DIR__ . '/../includes/corr_outgoing_attach_options.php';
                 ?>

@@ -6,16 +6,15 @@ $corr = get_correspondence($id);
 if (!$corr || $corr['type'] !== 'outgoing' || !user_can_access_correspondence($corr, $user)) {
     exit(__('common.not_found'));
 }
-if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
-    $msg = function_exists('outgoing_approval_block_reason') ? outgoing_approval_block_reason($corr) : __('issue_appr.blocked_pending');
-    flash('warning', $msg !== '' ? $msg : __('issue_appr.blocked_pending'));
-    redirect(base_url('outgoing/view.php?id=' . $id));
-}
-
 $forceForm = trim((string) ($_GET['mode'] ?? '')) === 'form';
 $hasLetter = function_exists('correspondence_letter_text')
     && correspondence_letter_text($corr) !== '';
 $useLetterPrint = !$forceForm && $hasLetter;
+if (!$useLetterPrint && function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
+    $msg = function_exists('outgoing_approval_block_reason') ? outgoing_approval_block_reason($corr) : __('issue_appr.blocked_pending');
+    flash('warning', $msg !== '' ? $msg : __('issue_appr.blocked_pending'));
+    redirect(base_url('outgoing/view.php?id=' . $id));
+}
 
 if (function_exists('outgoing_require_print_perm')) {
     // الخطاب الرسمي أو نموذج التسليم: في with_comms يشترط صلاحية المرحلة + الإسناد

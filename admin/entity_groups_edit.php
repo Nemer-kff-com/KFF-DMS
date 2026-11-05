@@ -84,38 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-require __DIR__ . '/../includes/header.php';
-?>
-<div class="page-header">
-    <div>
-        <h1 class="page-title"><?= e(__('groups.edit')) ?></h1>
-        <p class="page-sub"><?= e($group['name']) ?></p>
-    </div>
-    <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/entity_groups.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
-    </div>
-</div>
-
-<div class="admin-editor">
-    <div class="card-panel">
-        <div class="card-header">
-            <div class="admin-editor-header">
-                <span class="admin-editor-icon"><i class="bi bi-people"></i></span>
-                <span><?= e(__('groups.edit')) ?></span>
-            </div>
-        </div>
-        <div class="card-body">
-            <?php if ($error !== ''): ?>
-                <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-1"></i><?= e($error) ?></div>
-            <?php endif; ?>
-            <form method="post" class="admin-form">
-                <?= csrf_field() ?>
-                <input type="hidden" name="id" value="<?= (int) $id ?>">
-                <?php require __DIR__ . '/_entity_group_form.php'; ?>
-            </form>
-        </div>
-    </div>
-</div>
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+$groupEditOpen = true;
+$groupEditError = $error;
+$groupEditId = $id;
+$groupEditValues = $values;
+$pageTitle = __('groups.edit');
+require __DIR__ . '/entity_groups.php';

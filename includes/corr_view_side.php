@@ -15,9 +15,15 @@
                     <div class="corr-sticker-host print-thermal-page is-50x25">
                         <?php render_thermal_sticker($corr, 0, 'corr-thermal-sticker', 'corr-sticker-qr'); ?>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary mt-3 no-print" data-keep-label="1" data-copy-sticker="corr-thermal-sticker" data-sticker-filename="<?= e($stickerFile) ?>" data-copy-ok="<?= e(__('corr.copied_sticker')) ?>" data-copy-fail="<?= e(__('corr.copy_failed')) ?>" data-download-ok="<?= e(__('corr.sticker_downloaded')) ?>">
-                        <i class="bi bi-clipboard me-1"></i><?= e(__('corr.copy_sticker')) ?>
-                    </button>
+                    <?= btn_icon(__('corr.copy_sticker'), [
+                        'icon' => 'bi-clipboard',
+                        'class' => 'btn-outline-secondary mt-3 no-print',
+                        'attrs' => 'data-copy-sticker="corr-thermal-sticker"'
+                            . ' data-sticker-filename="' . e($stickerFile) . '"'
+                            . ' data-copy-ok="' . e(__('corr.copied_sticker')) . '"'
+                            . ' data-copy-fail="' . e(__('corr.copy_failed')) . '"'
+                            . ' data-download-ok="' . e(__('corr.sticker_downloaded')) . '"',
+                    ]) ?>
                 </div>
             </div>
             <?php elseif ($isOutgoing && empty($showOfficialRef)): ?>

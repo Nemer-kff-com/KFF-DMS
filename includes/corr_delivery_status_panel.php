@@ -169,13 +169,45 @@ $deliveryTab = ($_GET['delivery_tab'] ?? '') === 'status'
 
                         <?php if (!empty($corr['receipt_file_path'])): ?>
 
-                            <a href="<?= e(file_download_url('receipt', (int) $corr['id'])) ?>" target="_blank" class="corr-file-link">
+                            <div class="corr-receipt-slip-line">
 
-                                <i class="bi bi-file-earmark-image"></i>
+                                <a href="<?= e(file_download_url('receipt', (int) $corr['id'])) ?>" target="_blank" class="corr-file-link">
 
-                                <span><?= e($corr['receipt_file_name'] ?: __('receipt.open_file')) ?></span>
+                                    <i class="bi bi-file-earmark-image"></i>
 
-                            </a>
+                                    <span><?= e($corr['receipt_file_name'] ?: __('receipt.open_file')) ?></span>
+
+                                </a>
+
+                                <?php if ($canEdit): ?>
+
+                                <form method="post" action="<?= e(base_url('outgoing/receipt.php')) ?>" class="no-print"
+
+                                      data-confirm="<?= e(__('receipt.confirm_remove_file')) ?>">
+
+                                    <?= csrf_field() ?>
+
+                                    <input type="hidden" name="correspondence_id" value="<?= (int) $corr['id'] ?>">
+
+                                    <input type="hidden" name="action" value="remove_file">
+
+                                    <button class="btn btn-icon btn-outline-danger" type="submit"
+
+                                            data-bs-toggle="tooltip" data-bs-placement="top"
+
+                                            title="<?= e(__('receipt.remove_file')) ?>"
+
+                                            aria-label="<?= e(__('receipt.remove_file')) ?>">
+
+                                        <i class="bi bi-trash" aria-hidden="true"></i>
+
+                                    </button>
+
+                                </form>
+
+                                <?php endif; ?>
+
+                            </div>
 
                             <?php
 
@@ -309,28 +341,6 @@ $deliveryTab = ($_GET['delivery_tab'] ?? '') === 'status'
                     </div>
 
                 </form>
-
-                <?php if (!empty($corr['receipt_file_path'])): ?>
-
-                <form method="post" action="<?= e(base_url('outgoing/receipt.php')) ?>" class="no-print mt-2"
-
-                      data-confirm="<?= e(__('receipt.confirm_remove_file')) ?>">
-
-                    <?= csrf_field() ?>
-
-                    <input type="hidden" name="correspondence_id" value="<?= (int) $corr['id'] ?>">
-
-                    <input type="hidden" name="action" value="remove_file">
-
-                    <button class="btn btn-outline-danger btn-sm" type="submit">
-
-                        <i class="bi bi-trash me-1"></i><?= e(__('receipt.remove_file')) ?>
-
-                    </button>
-
-                </form>
-
-                <?php endif; ?>
 
                 <?php elseif (!$hasReceipt): ?>
 

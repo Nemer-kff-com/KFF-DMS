@@ -28,7 +28,6 @@ $printField = static function (string $label, string $value, bool $ltr = false):
 };
 
 $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
-$jsVer = @filemtime(__DIR__ . '/../assets/js/app.js') ?: 9;
 ?>
 <!DOCTYPE html>
 <html lang="<?= e(dms_lang_code()) ?>" dir="<?= e(dms_page_dir()) ?>">
@@ -36,7 +35,7 @@ $jsVer = @filemtime(__DIR__ . '/../assets/js/app.js') ?: 9;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(__('entities.print_card')) ?> — <?= e((string) ($entity['name_ar'] ?? '')) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= (int) $cssVer ?>" rel="stylesheet">
@@ -47,24 +46,29 @@ $jsVer = @filemtime(__DIR__ . '/../assets/js/app.js') ?: 9;
 <div class="print-toolbar no-print">
     <div class="print-toolbar-title"><?= e(__('entities.print_card')) ?></div>
     <div class="d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-        </button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('admin/entities.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_print_icon() ?>
+        <?= dms_back_icon(base_url('admin/entities.php')) ?>
     </div>
 </div>
 
 <div class="print-sheet print-entity-card-sheet<?= $hasLocationQr ? ' print-entity-card-sheet--with-qr' : '' ?>">
     <div class="print-entity-card-header<?= $hasLocationQr ? ' print-entity-card-header--with-qr' : '' ?>">
         <?php if ($hasLocationQr): ?>
+            <?php
+            $entityQrUri = function_exists('dms_qr_data_uri') ? dms_qr_data_uri($googleMapsUrl) : '';
+            ?>
             <a class="print-entity-card-qr-link"
                href="<?= e($googleMapsUrl) ?>"
                target="_blank"
                rel="noopener noreferrer"
                title="<?= e(__('entities.location_qr_label')) ?>">
-                <span class="print-entity-card-qr-float" id="entityLocationQr" aria-label="<?= e(__('entities.location_qr_label')) ?>"></span>
+                <span class="print-entity-card-qr-float" id="entityLocationQr" aria-label="<?= e(__('entities.location_qr_label')) ?>">
+                    <?php if ($entityQrUri !== '' && function_exists('dms_qr_img_tag')): ?>
+                        <?= dms_qr_img_tag($entityQrUri, (string) __('entities.location_qr_label')) ?>
+                    <?php elseif ($entityQrUri !== ''): ?>
+                        <img src="<?= e($entityQrUri) ?>" alt="<?= e(__('entities.location_qr_label')) ?>" width="640" height="640" decoding="sync">
+                    <?php endif; ?>
+                </span>
             </a>
             <div class="print-entity-card-header-spacer" aria-hidden="true"></div>
         <?php endif; ?>
@@ -91,18 +95,5 @@ $jsVer = @filemtime(__DIR__ . '/../assets/js/app.js') ?: 9;
     <?php render_print_page_footer(); ?>
 </div>
 
-<?php if ($hasLocationQr): ?>
-<script src="<?= e(base_url('assets/js/qrcode.min.js')) ?>"></script>
-<script src="<?= e(base_url('assets/js/app.js')) ?>?v=<?= (int) $jsVer ?>"></script>
-<script>
-(function () {
-    var url = <?= json_encode($googleMapsUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
-    var qrPx = Math.round(2.5 / 2.54 * 96);
-    renderQr('entityLocationQr', url, qrPx);
-})();
-</script>
-<?php else: ?>
-
-<?php endif; ?>
 </body>
 </html>

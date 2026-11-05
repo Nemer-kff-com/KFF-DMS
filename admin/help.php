@@ -61,9 +61,7 @@ require __DIR__ . '/../includes/header.php';
             </div>
         </article>
         <div class="help-doc-footer no-print">
-            <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/help.php')) ?>">
-                <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('help.back_index')) ?>
-            </a>
+            <?= dms_back_icon(base_url('admin/help.php'), __('help.back_index')) ?>
             <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i><?= e(__('help.print')) ?>
             </button>

@@ -27,7 +27,8 @@ try {
         (string) ($_POST['rsvp_response'] ?? ''),
         (string) ($_POST['rsvp_note'] ?? ''),
         'staff',
-        $user
+        $user,
+        (string) ($_POST['rsvp_mode'] ?? '')
     );
     flash('success', __('rsvp.saved'));
 } catch (Throwable $e) {

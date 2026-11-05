@@ -32,21 +32,24 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(__('bulk.results_sheet')) ?> — <?= e((string) $batch['subject']) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= (int) $cssVer ?>" rel="stylesheet">
     <link href="<?= e(dms_print_fast_css()) ?>" rel="stylesheet">
-    <style>@page { size: A4 landscape; margin: 0; }</style>
+    <style>
+    @page recipients { size: A4 landscape; margin: 10mm; }
+    @media print {
+      @page recipients { size: A4 landscape; margin: 10mm; }
+    }
+    </style>
 </head>
 <body class="print-page print-recipients-page">
 <div class="print-toolbar no-print">
     <div class="print-toolbar-title"><?= e(__('bulk.results_sheet')) ?></div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
-        <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-        </button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('outgoing/batch.php?id=' . $id)) ?>"><?= e(__('action.back')) ?></a>
+        <?= dms_print_icon() ?>
+        <?= dms_back_icon(base_url('outgoing/batch.php?id=' . $id)) ?>
     </div>
 </div>
 
@@ -55,9 +58,11 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
 
     <h1 class="print-recipients-title"><?= e(__('bulk.results_sheet')) ?></h1>
     <div class="print-recipients-meta">
-        <div><strong><?= e(__('corr.subject')) ?>:</strong> <?= e((string) $batch['subject']) ?></div>
-        <div><strong><?= e(__('corr.date')) ?>:</strong> <?= e($sheetDate) ?></div>
-        <div><strong><?= e(__('bulk.recipients')) ?>:</strong> <?= count($items) ?></div>
+        <div class="print-recipients-meta-subject"><strong><?= e(__('corr.subject')) ?>:</strong> <?= e((string) $batch['subject']) ?></div>
+        <div class="print-recipients-meta-date">
+            <strong><?= e(__('corr.date')) ?>:</strong> <span dir="ltr"><?= e($sheetDate) ?></span>
+        </div>
+        <div class="print-recipients-meta-count"><strong><?= e(__('bulk.recipients')) ?>:</strong> <?= count($items) ?></div>
     </div>
 
     <table class="table table-bordered print-recipients-table print-batch-results-table">
@@ -66,6 +71,7 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
                 <th><?= e(__('corr.number')) ?></th>
                 <th><?= e(__('corr.party_to')) ?></th>
                 <th><?= e(__('entities.section_basic')) ?></th>
+                <th><?= e(__('bulk.delivery_mode')) ?></th>
                 <th><?= e(__('send.email')) ?></th>
                 <th><?= e(__('send.whatsapp')) ?></th>
                 <th><?= e(__('corr.status')) ?></th>
@@ -92,8 +98,12 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
                 <td dir="ltr"><?= e((string) $r['ref_number']) ?></td>
                 <td>
                     <?php if ($prefix !== ''): ?><div class="small text-muted"><?= e($prefix) ?></div><?php endif; ?>
-                    <?php if ($person !== ''): ?><div><?= e($person) ?></div><?php endif; ?>
-                    <?php if ($honorific !== ''): ?><div class="small text-muted"><?= e($honorific) ?></div><?php endif; ?>
+                    <?php if ($person !== '' || $honorific !== ''): ?>
+                        <div>
+                            <?php if ($person !== ''): ?><?= e($person) ?><?php endif; ?>
+                            <?php if ($honorific !== ''): ?><span class="small text-muted"><?= $person !== '' ? ' ' : '' ?><?= e($honorific) ?></span><?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                     <?php if ($prefix === '' && $person === '' && $honorific === ''): ?>
                         <span class="text-muted"><?= e(__('common.none')) ?></span>
                     <?php endif; ?>
@@ -106,15 +116,54 @@ $cssVer = @filemtime(__DIR__ . '/../assets/css/app.css') ?: time();
                     <?php endif; ?>
                 </td>
                 <td>
-                    <div dir="ltr"><?= e($email !== '' ? $email : '—') ?></div>
-                    <div class="small text-muted"><?= e(dms_delivery_status_label($last['email'] ?? null)) ?></div>
+                    <?php
+                    $mode = function_exists('correspondence_delivery_mode')
+                        ? correspondence_delivery_mode($r)
+                        : 'paper';
+                    $modeLabel = match ($mode) {
+                        'electronic' => __('bulk.delivery_electronic'),
+                        'both' => __('bulk.delivery_both'),
+                        default => __('bulk.delivery_paper'),
+                    };
+                    ?>
+                    <?= e($modeLabel) ?>
+                    <?php if ($mode !== 'electronic'): ?>
+                        <?php $receiptName = trim((string) ($r['receipt_name'] ?? '')); ?>
+                        <?php $receiptPhone = trim((string) ($r['receipt_phone'] ?? '')); ?>
+                        <?php if ($receiptName !== '' || $receiptPhone !== '' || !empty($r['receipt_file_path'])): ?>
+                            <?php if ($receiptName !== ''): ?><div class="small"><?= e($receiptName) ?></div><?php endif; ?>
+                            <?php if ($receiptPhone !== ''): ?><div class="small" dir="ltr"><?= e($receiptPhone) ?></div><?php endif; ?>
+                            <?php if (!empty($r['receipt_date'])): ?>
+                                <div class="small text-muted" dir="ltr"><?= e(format_date((string) $r['receipt_date'])) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($r['receipt_file_path'])): ?>
+                                <div class="small"><?= e(__('receipt.slip_attached')) ?></div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </td>
                 <td>
-                    <div dir="ltr"><?= e($mobile !== '' ? ('+' . $mobile) : '—') ?></div>
-                    <div class="small text-muted"><?= e(dms_delivery_status_label($last['whatsapp'] ?? null)) ?></div>
+                    <?php if ($mode !== 'paper'): ?>
+                        <div dir="ltr"><?= e($email !== '' ? $email : '') ?></div>
+                        <div class="small text-muted"><?= e(dms_delivery_status_label($last['email'] ?? null)) ?></div>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php if ($mode !== 'paper'): ?>
+                        <div dir="ltr"><?= e($mobile !== '' ? ('+' . $mobile) : '') ?></div>
+                        <div class="small text-muted"><?= e(dms_delivery_status_label($last['whatsapp'] ?? null)) ?></div>
+                    <?php endif; ?>
                 </td>
                 <td><?= status_badge((string) ($r['status'] ?? ''), $r['cancel_kind'] ?? null) ?></td>
-                <td><?= $rsvpOn ? e(rsvp_response_label($r['rsvp_response'] ?? null)) : '—' ?></td>
+                <td>
+                    <?php if ($rsvpOn): ?>
+                        <div><?= e(rsvp_response_label($r['rsvp_response'] ?? null, $r['rsvp_mode'] ?? null)) ?></div>
+                        <?php $rsvpNote = trim((string) ($r['rsvp_note'] ?? '')); ?>
+                        <?php if ($rsvpNote !== ''): ?><div class="small"><?= e($rsvpNote) ?></div><?php endif; ?>
+                    <?php else: ?>
+                        —
+                    <?php endif; ?>
+                </td>
             </tr>
         <?php endforeach; ?>
         </tbody>

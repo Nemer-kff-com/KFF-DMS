@@ -307,7 +307,14 @@ $closeDetailsUrl = base_url('correspondence/close.php?id=' . (int) $corr['id']);
                 <div class="corr-meta-grid">
                     <div class="corr-meta-item">
                         <span class="corr-meta-label"><?= e(corr_ref_type_label((string) ($corr['type'] ?? ''))) ?></span>
-                        <span class="corr-meta-value fw-semibold corr-meta-num" dir="ltr"><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($corr) : (string) ($corr['ref_number'] ?? '')) ?></span>
+                        <span class="corr-meta-value fw-semibold">
+                            <span class="corr-meta-num" dir="ltr"><?= e(function_exists('correspondence_ref_display') ? correspondence_ref_display($corr) : (string) ($corr['ref_number'] ?? '')) ?></span>
+                            <?php if ($isOutgoing && $batchId > 0): ?>
+                                <a class="badge corr-batch-chip text-decoration-none ms-1"
+                                   href="<?= e(base_url('outgoing/batch.php?id=' . $batchId)) ?>"
+                                   title="<?= e(__('corr.batch_view')) ?>"><?= e(__('corr.batch_mark')) ?></a>
+                            <?php endif; ?>
+                        </span>
                     </div>
                     <div class="corr-meta-item">
                         <span class="corr-meta-label"><?= e(__('corr.type')) ?></span>

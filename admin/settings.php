@@ -70,6 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         set_setting('outgoing_receipt_alert_days', (string) $alertDays);
 
+        // لقطة مسار الصادر قبل تغيير المفاتيح — لتحرير العالق وفق الإعداد الجديد
+        $prepWasOn = setting('outgoing_prep_enabled', '1') === '1';
+        $flowWasActive = function_exists('outgoing_issue_flow_active') && outgoing_issue_flow_active();
+
         set_setting('outgoing_approval_enabled', isset($_POST['outgoing_approval_enabled']) ? '1' : '0');
 
         $parseTimeout = static function (string $valueKey, string $unitKey): array {
@@ -185,10 +189,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             function_exists('priority_levels_list') ? priority_levels_list() : []
         ));
 
-        set_setting('outgoing_prep_enabled', isset($_POST['outgoing_prep_enabled']) ? '1' : '0');
+        // احفظ مفاتيح المسودة/المراجعة ثم حرّر العالق وفق الحالة النهائية (جماعي = مفرد)
+        $prepNowOn = isset($_POST['outgoing_prep_enabled']);
+        set_setting('outgoing_prep_enabled', $prepNowOn ? '1' : '0');
         set_setting('outgoing_review_enabled', isset($_POST['outgoing_review_enabled']) ? '1' : '0');
         set_setting('incoming_review_enabled', isset($_POST['incoming_review_enabled']) ? '1' : '0');
         set_setting('internal_review_enabled', isset($_POST['internal_review_enabled']) ? '1' : '0');
+        if ($prepWasOn && !$prepNowOn && function_exists('outgoing_prep_release_all_open_if_disabled')) {
+            outgoing_prep_release_all_open_if_disabled($user);
+        }
+        $flowNowActive = function_exists('outgoing_issue_flow_active') && outgoing_issue_flow_active();
+        if ($flowWasActive && !$flowNowActive && function_exists('outgoing_issue_flow_release_all_if_inactive')) {
+            outgoing_issue_flow_release_all_if_inactive($user);
+        }
 
         set_setting('internal_approval_enabled', isset($_POST['internal_approval_enabled']) ? '1' : '0');
         $saveApprovalChain('internal', true);

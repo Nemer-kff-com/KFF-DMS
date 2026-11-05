@@ -84,7 +84,7 @@ require __DIR__ . '/../includes/header.php';
                 <i class="bi bi-printer"></i> <?= e(__('close.print')) ?>
             </button>
         <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url($viewUrl)) ?>"><?= e(__('action.back')) ?></a>
+        <?= dms_back_icon(base_url($viewUrl)) ?>
     </div>
 </div>
 

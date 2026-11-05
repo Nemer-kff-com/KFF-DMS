@@ -68,6 +68,57 @@ function letter_email_snapshot_height(string $letter): int
     return min(3600, max(900, $lines * 36));
 }
 
+/** طباعة HTML إلى PDF عبر Chrome/Edge بدون ترويسة المتصفح. */
+function letter_email_browser_print_pdf(string $bin, string $htmlPath, string $pdfPath): bool
+{
+    $disabled = strtolower((string) ini_get('disable_functions'));
+    if (str_contains($disabled, 'proc_open')) {
+        return false;
+    }
+    $htmlUrl = letter_email_file_url($htmlPath);
+    $modes = ['--headless=new', '--headless'];
+    foreach ($modes as $mode) {
+        if (is_file($pdfPath)) {
+            @unlink($pdfPath);
+        }
+        $args = [
+            $bin,
+            $mode,
+            '--disable-gpu',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+            '--no-pdf-header-footer',
+            '--virtual-time-budget=8000',
+            '--print-to-pdf=' . $pdfPath,
+            $htmlUrl,
+        ];
+        $spec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $proc = @proc_open($args, $spec, $pipes, sys_get_temp_dir(), null, ['bypass_shell' => true]);
+        if (!is_resource($proc)) {
+            continue;
+        }
+        fclose($pipes[0]);
+        stream_set_timeout($pipes[1], 45);
+        stream_set_timeout($pipes[2], 45);
+        stream_get_contents($pipes[1]);
+        stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+        if (is_file($pdfPath) && filesize($pdfPath) > 1200) {
+            return true;
+        }
+        @unlink($pdfPath);
+    }
+
+    return false;
+}
+
 function letter_email_browser_screenshot(string $bin, string $htmlPath, string $pngPath, int $height): bool
 {
     $disabled = strtolower((string) ini_get('disable_functions'));
@@ -195,21 +246,36 @@ function letter_email_src_data_uri(string $src): string
     if ($src === '' || str_starts_with($src, 'data:') || str_starts_with($src, 'cid:')) {
         return '';
     }
+    // إزالة ?v=mtime و#fragment — وإلا يفشل إيجاد الملف على القرص
+    $srcPath = preg_replace('/[?#].*$/', '', $src) ?? $src;
+    $srcPath = str_replace('\\', '/', $srcPath);
     $rel = '';
     if (function_exists('base_url')) {
-        $base = rtrim(base_url(), '/');
-        if ($base !== '' && str_starts_with($src, $base . '/')) {
-            $rel = substr($src, strlen($base) + 1);
+        $base = rtrim((string) base_url(), '/');
+        if ($base !== '' && str_starts_with($srcPath, $base . '/')) {
+            $rel = substr($srcPath, strlen($base) + 1);
         }
     }
-    if ($rel === '' && !preg_match('#^[a-z][a-z0-9+.-]*:#i', $src)) {
-        $rel = ltrim(str_replace('\\', '/', $src), '/');
+    if ($rel === '' && function_exists('dms_web_path')) {
+        $webBase = rtrim((string) dms_web_path(''), '/');
+        if ($webBase !== '' && $webBase !== '/' && str_starts_with($srcPath, $webBase . '/')) {
+            $rel = substr($srcPath, strlen($webBase) + 1);
+        }
+    }
+    if ($rel === '' && !preg_match('#^[a-z][a-z0-9+.-]*:#i', $srcPath)) {
+        $rel = ltrim($srcPath, '/');
     }
     $rel = ltrim(str_replace('\\', '/', $rel), '/');
     if ($rel === '' || str_contains($rel, '..')) {
         return '';
     }
     $disk = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    if (!is_file($disk) && function_exists('dms_org_asset_disk_path')) {
+        $alt = dms_org_asset_disk_path($rel);
+        if (is_file($alt)) {
+            $disk = $alt;
+        }
+    }
     if (!is_file($disk)) {
         return '';
     }

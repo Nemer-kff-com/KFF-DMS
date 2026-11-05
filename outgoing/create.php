@@ -83,9 +83,7 @@ require __DIR__ . '/../includes/header.php';
         <?php elseif ($bulkUi === 'deny'): ?>
         <?= dms_perm_denied_btn(__('corr.outgoing_bulk'), 'bi-people') ?>
         <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/index.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('outgoing/index.php')) ?>
     </div>
 </div>
 
@@ -112,6 +110,8 @@ require __DIR__ . '/../includes/header.php';
                 $attachLabel = __('corr.attach');
                 $electronicChecked = !empty($_POST['intend_electronic']);
                 $rsvpChecked = !empty($_POST['rsvp_required']);
+                $rsvpAllowRemote = (string) ($_POST['rsvp_allow_remote'] ?? '1') !== '0';
+                $emailLetterAttachChecked = !empty($_POST['email_letter_attach']);
                 $notesValue = (string) ($_POST['notes'] ?? '');
                 require __DIR__ . '/../includes/corr_outgoing_attach_options.php';
                 ?>

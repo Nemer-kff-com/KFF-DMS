@@ -259,23 +259,35 @@ function correspondence_linked_letter_template(array $corr): ?array
     return is_array($cache[$id]) ? $cache[$id] : null;
 }
 
+function correspondence_stored_letter_body(array $corr, string $lang): string
+{
+    if ($lang === 'en') {
+        $en = trim((string) ($corr['letter_body_en'] ?? ''));
+        if ($en === '') {
+            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
+        }
+
+        return $en;
+    }
+    $ar = trim((string) ($corr['letter_body'] ?? ''));
+    if ($ar === '') {
+        $ar = trim((string) ($corr['batch_letter_body'] ?? ''));
+    }
+
+    return $ar;
+}
+
 function correspondence_letter_channel_lang(array $corr): string
 {
     if (!letter_name_is_english(correspondence_letter_person_name($corr))) {
         return 'ar';
     }
-    $tpl = correspondence_linked_letter_template($corr);
-    $en = trim((string) ($tpl['body_en'] ?? ''));
-    $ar = trim((string) ($tpl['body'] ?? ''));
-    if ($tpl === null) {
-        $en = trim((string) ($corr['letter_body_en'] ?? ''));
-        if ($en === '') {
-            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
-        }
-        $ar = trim((string) ($corr['letter_body'] ?? ''));
-        if ($ar === '') {
-            $ar = trim((string) ($corr['batch_letter_body'] ?? ''));
-        }
+    $en = correspondence_stored_letter_body($corr, 'en');
+    $ar = correspondence_stored_letter_body($corr, 'ar');
+    if ($en === '' && $ar === '') {
+        $tpl = correspondence_linked_letter_template($corr);
+        $en = trim((string) ($tpl['body_en'] ?? ''));
+        $ar = trim((string) ($tpl['body'] ?? ''));
     }
     if ($en !== '' || $ar === '') {
         return 'en';
@@ -287,6 +299,14 @@ function correspondence_letter_channel_lang(array $corr): string
 function correspondence_letter_raw(array $corr, ?string $lang = null): string
 {
     $lang = $lang ?? correspondence_letter_channel_lang($corr);
+    $primary = correspondence_stored_letter_body($corr, $lang === 'en' ? 'en' : 'ar');
+    if ($primary !== '') {
+        return $primary;
+    }
+    $other = correspondence_stored_letter_body($corr, $lang === 'en' ? 'ar' : 'en');
+    if ($other !== '') {
+        return $other;
+    }
     $tpl = correspondence_linked_letter_template($corr);
     if ($tpl) {
         if ($lang === 'en') {
@@ -299,22 +319,13 @@ function correspondence_letter_raw(array $corr, ?string $lang = null): string
         if ($ar !== '') {
             return $ar;
         }
-    }
-    if ($lang === 'en') {
-        $en = trim((string) ($corr['letter_body_en'] ?? ''));
-        if ($en === '') {
-            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
-        }
+        $en = trim((string) ($tpl['body_en'] ?? ''));
         if ($en !== '') {
             return $en;
         }
     }
-    $ar = trim((string) ($corr['letter_body'] ?? ''));
-    if ($ar === '') {
-        $ar = trim((string) ($corr['batch_letter_body'] ?? ''));
-    }
 
-    return $ar;
+    return '';
 }
 
 function apply_letter_placeholders(string $body, array $row, string $lang = 'ar'): string
@@ -401,15 +412,12 @@ function correspondence_letter_text(array $corr, ?string $lang = null): string
     if ($raw === '') {
         return '';
     }
-    $tpl = correspondence_linked_letter_template($corr);
-    $en = trim((string) ($tpl['body_en'] ?? ''));
-    if ($tpl === null) {
-        $en = trim((string) ($corr['letter_body_en'] ?? ''));
-        if ($en === '') {
-            $en = trim((string) ($corr['batch_letter_body_en'] ?? ''));
-        }
+    $en = correspondence_stored_letter_body($corr, 'en');
+    if ($en === '') {
+        $tpl = correspondence_linked_letter_template($corr);
+        $en = trim((string) ($tpl['body_en'] ?? ''));
     }
-    $used = ($lang === 'en' && $en !== '') ? 'en' : 'ar';
+    $used = ($lang === 'en' && $en !== '' && $raw === $en) ? 'en' : 'ar';
 
     return apply_letter_placeholders($raw, $corr, $used);
 }
@@ -417,6 +425,9 @@ function correspondence_letter_text(array $corr, ?string $lang = null): string
 function get_outgoing_batch(int $id): ?array
 {
     ensure_entity_groups_schema();
+    if (function_exists('ensure_corr_rsvp_schema')) {
+        ensure_corr_rsvp_schema();
+    }
     $stmt = db()->prepare(
         "SELECT b.*, g.name AS group_name, " . user_name_sql('u', 'creator_name') . "
          FROM `tbloutgoing_batches` b
@@ -490,76 +501,62 @@ function outgoing_batches_list(?array $user = null, int $limit = 50): array
     }
     $user = $user ?? (function_exists('current_user') ? current_user() : null);
     $limit = max(1, min(100, $limit));
+    $fetchCap = 200;
 
-    [$scopeSql, $scopeParams] = department_scope_sql($user, 'c');
-    [$apprSql, $apprParams] = outgoing_approval_visibility_sql($user, 'c');
-
-    $visibleParts = [];
-    $visibleParams = [];
-    if ($scopeSql !== '') {
-        $visibleParts[] = $scopeSql;
-        foreach ($scopeParams as $p) {
-            $visibleParams[] = $p;
-        }
-    }
-    if ($apprSql !== '') {
-        $visibleParts[] = $apprSql;
-        foreach ($apprParams as $p) {
-            $visibleParams[] = $p;
-        }
-    }
-    if ($visibleParts !== []) {
-        $visibleSql = '(' . implode(' OR ', $visibleParts) . ')';
-        $scopeAnd = ' AND ' . $visibleSql;
-    } else {
-        $scopeAnd = '';
-        $visibleParams = [];
-    }
-
-    $sql = "SELECT b.id, b.subject, b.created_at, b.requires_rsvp, b.entity_group_id,
+    $sql = "SELECT b.id, b.subject, b.created_at, b.created_by, b.requires_rsvp, b.entity_group_id,
                    g.name AS group_name,
-                   " . user_name_sql('u', 'creator_name') . ",
-                   (
-                       SELECT COUNT(*)
-                       FROM `tblcorrespondence` c
-                       WHERE c.batch_id = b.id AND c.type = 'outgoing'{$scopeAnd}
-                   ) AS item_count,
-                   (
-                       SELECT MIN(c.corr_date)
-                       FROM `tblcorrespondence` c
-                       WHERE c.batch_id = b.id AND c.type = 'outgoing'{$scopeAnd}
-                   ) AS corr_date
+                   " . user_name_sql('u', 'creator_name') . "
             FROM `tbloutgoing_batches` b
             LEFT JOIN `tblentity_groups` g ON g.id = b.entity_group_id
             LEFT JOIN `tblusers` u ON u.id = b.created_by
             WHERE EXISTS (
                 SELECT 1
                 FROM `tblcorrespondence` c
-                WHERE c.batch_id = b.id AND c.type = 'outgoing'{$scopeAnd}
+                WHERE c.batch_id = b.id AND c.type = 'outgoing'
             )
             ORDER BY b.id DESC
-            LIMIT " . $limit;
-
-    $params = [];
-    // ثلاثة مواضع لنفس شرط الظهور
-    foreach ([$visibleParams, $visibleParams, $visibleParams] as $chunk) {
-        foreach ($chunk as $p) {
-            $params[] = $p;
+            LIMIT " . $fetchCap;
+    $rows = db()->query($sql)->fetchAll();
+    $out = [];
+    foreach ($rows as $batch) {
+        $items = outgoing_batch_items_unscoped((int) $batch['id']);
+        if ($items === []) {
+            continue;
+        }
+        $createdBy = (int) ($batch['created_by'] ?? 0);
+        if ($user && function_exists('outgoing_user_can_follow_batch') && !outgoing_user_can_follow_batch($user, $createdBy, $items)) {
+            continue;
+        }
+        $dates = [];
+        foreach ($items as $item) {
+            $date = trim((string) ($item['corr_date'] ?? ''));
+            if ($date !== '') {
+                $dates[] = $date;
+            }
+        }
+        sort($dates);
+        $batch['item_count'] = count($items);
+        $batch['corr_date'] = $dates[0] ?? null;
+        $out[] = $batch;
+        if (count($out) >= $limit) {
+            break;
         }
     }
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
+
+    return $out;
 }
 
-function outgoing_batch_items(int $batchId, ?array $user = null): array
+/** @return list<array<string,mixed>> */
+function outgoing_batch_items_unscoped(int $batchId): array
 {
     ensure_entity_groups_schema();
+    if (function_exists('ensure_corr_rsvp_schema')) {
+        ensure_corr_rsvp_schema();
+    }
     ensure_entities_schema();
     if (function_exists('ensure_letter_templates_schema')) {
         ensure_letter_templates_schema();
     }
-    $user = $user ?? (function_exists('current_user') ? current_user() : null);
     $sql = "SELECT c.*, d.name AS department_name, d.name_en AS department_name_en,
                    idpt.name AS issuing_department_name, idpt.name_en AS issuing_department_name_en,
                    e.name_ar AS entity_name, e.name_en AS entity_name_en,
@@ -567,9 +564,11 @@ function outgoing_batch_items(int $batchId, ?array $user = null): array
                    e.job_title AS entity_job_title,
                    e.honorific AS entity_honorific, e.mobile AS entity_mobile,
                    e.phone AS entity_phone, e.email AS entity_email,
+                   b.created_by AS batch_created_by,
                    b.letter_body AS batch_letter_body,
                    b.letter_body_en AS batch_letter_body_en,
                    b.requires_rsvp AS batch_requires_rsvp,
+                   b.rsvp_allow_remote AS batch_rsvp_allow_remote,
                    b.letter_template_id AS batch_letter_template_id
             FROM `tblcorrespondence` c
             LEFT JOIN `tbldepartments` d ON d.id = c.department_id
@@ -580,14 +579,20 @@ function outgoing_batch_items(int $batchId, ?array $user = null): array
             ORDER BY c.id";
     $stmt = db()->prepare($sql);
     $stmt->execute([$batchId]);
-    $rows = array_map('correspondence_apply_ref_display', $stmt->fetchAll());
 
-    // نفس منطق صفحة العرض: نطاق القسم أو صلاحية اعتماد الإصدار
-    if ($user && function_exists('user_can_access_correspondence')) {
-        $rows = array_values(array_filter(
-            $rows,
-            static fn(array $row): bool => user_can_access_correspondence($row, $user)
-        ));
+    return array_map('correspondence_apply_ref_display', $stmt->fetchAll());
+}
+
+function outgoing_batch_items(int $batchId, ?array $user = null): array
+{
+    $user = $user ?? (function_exists('current_user') ? current_user() : null);
+    $rows = outgoing_batch_items_unscoped($batchId);
+    if ($rows === [] || !$user || !function_exists('outgoing_user_can_follow_batch')) {
+        return $rows;
+    }
+    $createdBy = (int) ($rows[0]['batch_created_by'] ?? 0);
+    if (!outgoing_user_can_follow_batch($user, $createdBy, $rows)) {
+        return [];
     }
 
     return $rows;

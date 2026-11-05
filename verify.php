@@ -60,7 +60,9 @@ if ($valid && $rsvpRequired && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && 
             $corr,
             (string) ($_POST['rsvp_response'] ?? ''),
             (string) ($_POST['rsvp_note'] ?? ''),
-            'public'
+            'public',
+            null,
+            (string) ($_POST['rsvp_mode'] ?? '')
         );
         flash('success', __('rsvp.saved'));
     } catch (Throwable $e) {
@@ -98,7 +100,7 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
                 <?php endif; ?>
                 <?php if (!empty($corr['rsvp_response'])): ?>
                     <div class="mb-3">
-                        <?= rsvp_response_badge($corr['rsvp_response']) ?>
+                        <?= rsvp_response_badge($corr['rsvp_response'], $corr['rsvp_mode'] ?? null) ?>
                         <?php if (!empty($corr['rsvp_at'])): ?>
                             <span class="small text-muted"><?= e(format_datetime($corr['rsvp_at'])) ?></span>
                         <?php endif; ?>
@@ -106,23 +108,63 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
                             <div class="small mt-1"><?= e($corr['rsvp_note']) ?></div>
                         <?php endif; ?>
                     </div>
-                    <p class="small text-muted mb-3"><?= e(__('rsvp.change_hint')) ?></p>
+                    <?php $rsvpAllowRemote = function_exists('correspondence_rsvp_allow_remote') ? correspondence_rsvp_allow_remote($corr) : true; ?>
+                    <p class="small text-muted mb-3"><?= e(__($rsvpAllowRemote ? 'rsvp.change_hint' : 'rsvp.change_hint_in_person')) ?></p>
                 <?php endif; ?>
-                <form method="post" action="<?= e(base_url('verify.php?token=' . urlencode($token) . '&rsvp=1')) ?>">
+                <form method="post" action="<?= e(base_url('verify.php?token=' . urlencode($token) . '&rsvp=1')) ?>" data-rsvp-form>
                     <?= csrf_field() ?>
                     <input type="hidden" name="token" value="<?= e($token) ?>">
+                    <input type="hidden" name="rsvp_mode" value="">
                     <label class="form-label" for="rsvp_note"><?= e(__('rsvp.note')) ?></label>
                     <input type="text" name="rsvp_note" id="rsvp_note" class="form-control mb-3" maxlength="400"
                            value="<?= e((string) ($corr['rsvp_note'] ?? '')) ?>" placeholder="<?= e(__('rsvp.note_ph')) ?>">
+                    <?php
+                    $rsvpAllowRemote = function_exists('correspondence_rsvp_allow_remote') ? correspondence_rsvp_allow_remote($corr) : true;
+                    $rsvpModesOpen = $rsvpAllowRemote && (string) ($corr['rsvp_response'] ?? '') === 'attending';
+                    ?>
                     <div class="d-grid gap-2">
-                        <button class="btn btn-kff" type="submit" name="rsvp_response" value="attending">
+                        <?php if ($rsvpAllowRemote): ?>
+                        <button class="btn verify-rsvp-choice verify-rsvp-choice--here<?= $rsvpModesOpen ? ' d-none' : '' ?>" type="button" data-rsvp-show-modes>
                             <?= e(__('rsvp.attend')) ?>
                         </button>
-                        <button class="btn btn-outline-danger" type="submit" name="rsvp_response" value="declined">
-                            <?= e(__('rsvp.decline')) ?>
+                        <div class="d-grid gap-2<?= $rsvpModesOpen ? '' : ' d-none' ?>" data-rsvp-modes>
+                            <button class="btn verify-rsvp-choice verify-rsvp-choice--here" type="submit" name="rsvp_response" value="attending" data-rsvp-mode="in_person">
+                                <?= e(__('rsvp.public_in_person')) ?>
+                            </button>
+                            <button class="btn verify-rsvp-choice verify-rsvp-choice--remote" type="submit" name="rsvp_response" value="attending" data-rsvp-mode="remote">
+                                <?= e(__('rsvp.public_remote')) ?>
+                            </button>
+                        </div>
+                        <?php else: ?>
+                        <button class="btn verify-rsvp-choice verify-rsvp-choice--here" type="submit" name="rsvp_response" value="attending" data-rsvp-mode="in_person">
+                            <?= e(__('rsvp.public_in_person')) ?>
+                        </button>
+                        <?php endif; ?>
+                        <button class="btn verify-rsvp-choice verify-rsvp-choice--decline" type="submit" name="rsvp_response" value="declined">
+                            <?= e(__('rsvp.public_decline')) ?>
                         </button>
                     </div>
                 </form>
+                <script>
+                (function () {
+                  document.querySelectorAll('[data-rsvp-form]').forEach(function (form) {
+                    var open = form.querySelector('[data-rsvp-show-modes]');
+                    var modes = form.querySelectorAll('[data-rsvp-modes]');
+                    var modeInput = form.querySelector('[name="rsvp_mode"]');
+                    if (open && modes) {
+                      open.addEventListener('click', function () {
+                        modes.forEach(function (el) { el.classList.remove('d-none'); });
+                        open.classList.add('d-none');
+                      });
+                    }
+                    form.querySelectorAll('[data-rsvp-mode]').forEach(function (btn) {
+                      btn.addEventListener('click', function () {
+                        if (modeInput) modeInput.value = btn.getAttribute('data-rsvp-mode') || '';
+                      });
+                    });
+                  });
+                })();
+                </script>
             </div>
     <?php
 };
@@ -133,6 +175,7 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title><?= e($rsvpRequired && $focusRsvp ? __('rsvp.title') : __('verify.page_title')) ?> | <?= e($orgName) ?></title>
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= $cssVer ?>" rel="stylesheet">
 </head>
@@ -170,7 +213,20 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
         <?php endif; ?>
 
         <div class="verify-simple-type"><?= e($typeLabel) ?></div>
-        <div class="verify-simple-number" dir="ltr"><?= e(format_ref_caption((string) ($corr['type'] ?? ''), $corr['ref_number'] ?? '')) ?></div>
+        <?php
+        $verifyRef = function_exists('format_ref_number')
+            ? format_ref_number($corr['ref_number'] ?? '')
+            : trim((string) ($corr['ref_number'] ?? ''));
+        $verifyRefLabel = function_exists('corr_ref_type_label')
+            ? corr_ref_type_label((string) ($corr['type'] ?? ''))
+            : '';
+        ?>
+        <?php if ($verifyRef !== ''): ?>
+        <div class="verify-simple-number">
+            <?php if ($verifyRefLabel !== ''): ?><span class="verify-simple-number-label"><?= e($verifyRefLabel) ?>:</span><?php endif; ?>
+            <span class="verify-simple-number-value" dir="ltr"><?= e($verifyRef) ?></span>
+        </div>
+        <?php endif; ?>
         <?php
         $verifyIsConf = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr);
         if (!$verifyIsConf) {

@@ -70,7 +70,7 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e(__('reports.title')) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= (int) $cssVer ?>" rel="stylesheet">
@@ -83,15 +83,13 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
 <div class="print-toolbar no-print">
     <div class="print-toolbar-title"><?= e(__('reports.title')) ?></div>
     <div class="d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-        </button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('reports/index.php?' . http_build_query([
+        <?= dms_print_icon() ?>
+        <?= dms_back_icon(base_url('reports/index.php?' . http_build_query([
             'from' => $from,
             'to' => $to,
             'department_id' => $deptId,
             'type' => $typeFilter,
-        ]))) ?>"><?= e(__('action.back')) ?></a>
+        ]))) ?>
     </div>
 </div>
 

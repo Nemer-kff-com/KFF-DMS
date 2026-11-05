@@ -116,9 +116,7 @@ $partyField = static function (string $side, string $field) use ($v, $dirParts):
                 <i class="bi bi-file-earmark-word me-1"></i><?= e(__('brief.word')) ?>
             </a>
         <?php endif; ?>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url($viewUrl)) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url($viewUrl)) ?>
     </div>
 </div>
 

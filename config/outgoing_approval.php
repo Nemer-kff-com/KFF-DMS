@@ -853,6 +853,33 @@ function corr_user_can_edit_in_cycle(array $user, array $corr): bool
         || ((int) ($user['id'] ?? 0) > 0 && (int) ($user['id'] ?? 0) === (int) ($corr['created_by'] ?? 0));
 }
 
+/** طريقة التسليم تُعدَّل في المسودة فقط، على المنشئ. نص فارغ = مسموح. */
+function outgoing_delivery_edit_block(array $user, array $corr): string
+{
+    if ((int) ($user['id'] ?? 0) <= 0 && function_exists('current_user')) {
+        $user = current_user() ?? [];
+    }
+    if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+        return __('send.err_cancelled');
+    }
+    $s = outgoing_approval_status_of($corr);
+    if (in_array($s, ['pending_review', 'pending_copy', 'pending_sg', 'pending_deputy', 'pending_alternate'], true)) {
+        return $s === 'pending_review'
+            ? __('issue_review.edit_locked')
+            : __('issue_review.edit_final');
+    }
+    $isDraft = function_exists('outgoing_prep_is_draft') && outgoing_prep_is_draft($corr);
+    if (!$isDraft) {
+        return __('bulk.delivery_locked');
+    }
+    if (!$user) {
+        return __('auth.forbidden');
+    }
+    $admin = ($user['role'] ?? '') === 'admin';
+    $creator = function_exists('outgoing_user_is_prep_creator') && outgoing_user_is_prep_creator($user, $corr);
+    return ($admin || $creator) ? '' : __('auth.forbidden');
+}
+
 /** المراجع طابق المعاملة ولم يُعدها ولم يرفضها المعتمد: المحتوى نهائي على المعد. */
 function outgoing_reviewer_has_passed(array $corr): bool
 {
@@ -962,6 +989,16 @@ function outgoing_approval_badge(array $corr): string
     if (($corr['type'] ?? '') !== 'outgoing') {
         return '';
     }
+    if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
+        $pending = function_exists('outgoing_prep_is_pending_signer') && outgoing_prep_is_pending_signer($corr);
+        $returned = !$pending && function_exists('outgoing_prep_was_returned') && outgoing_prep_was_returned($corr);
+        $stage = $pending ? 'prep_signer' : ($returned ? 'prep_returned' : 'prep_draft');
+        $short = function_exists('outgoing_prep_list_label')
+            ? outgoing_prep_list_label($corr)
+            : __('out_prep.list_draft');
+        $class = $pending ? 'text-bg-warning' : ($returned ? 'text-bg-info' : 'text-bg-secondary');
+        return appr_badge_render($class, $short, $short, $corr, $stage);
+    }
     $s = outgoing_approval_status_of($corr);
     $enabled = outgoing_approval_enabled();
     $class = match ($s) {
@@ -1007,6 +1044,12 @@ function appr_badge_stage_user(array $corr, string $s): array
     $creator = (int) ($corr['created_by'] ?? 0);
     $waiting = __('appr_list.waiting_at');
     switch ($s) {
+        case 'prep_signer':
+            $id = function_exists('outgoing_prep_holder_id') ? outgoing_prep_holder_id($corr) : 0;
+            return ['id' => $id, 'tip' => $waiting];
+        case 'prep_draft':
+        case 'prep_returned':
+            return ['id' => $creator, 'tip' => $waiting];
         case 'pending_review':
             return ['id' => $assignee, 'tip' => $waiting];
         case 'pending_sg':
@@ -1479,6 +1522,10 @@ function outgoing_can_issue(array $corr): bool
     if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
         return false;
     }
+    // مسار الإعداد متوقف: جاهز للإرسال كالمفرد (ما عدا المرفوض)
+    if (!outgoing_issue_flow_active()) {
+        return outgoing_approval_status_of($corr) !== 'rejected';
+    }
     $s = outgoing_approval_status_of($corr);
     if ($s === 'with_comms') {
         return true;
@@ -1486,7 +1533,7 @@ function outgoing_can_issue(array $corr): bool
     if (in_array($s, ['pending_review', 'returned', 'pending_copy', 'pending_sg', 'pending_deputy', 'pending_alternate', 'rejected'], true)) {
         return false;
     }
-    if (setting('outgoing_review_enabled', '0') === '1'
+    if (outgoing_review_enabled()
         && $s === ''
         && trim((string) ($corr['issue_reviewed_at'] ?? '')) === ''
     ) {
@@ -1582,6 +1629,12 @@ function outgoing_user_can_request_approval(array $user, array $corr): bool
         return appr_with($t, static fn (): bool => outgoing_user_can_request_approval($user, $corr));
     }
     if (($corr['type'] ?? '') !== appr_p() || correspondence_is_cancelled($corr)) {
+        return false;
+    }
+    if (appr_p() === 'outgoing'
+        && function_exists('outgoing_prep_is_open')
+        && outgoing_prep_is_open($corr)
+    ) {
         return false;
     }
     if (function_exists('can_edit_correspondence')) {
@@ -2038,20 +2091,6 @@ function outgoing_approval_email_base_rows(array $corr, ?array $requester = null
         }
     }
 
-    if ($requester === null) {
-        $requesterId = (int) ($corr['issue_approval_requested_by'] ?? 0);
-        if ($requesterId > 0) {
-            try {
-                $stmt = db()->prepare('SELECT id, name_ar, name_en, email FROM `tblusers` WHERE id = ?');
-                $stmt->execute([$requesterId]);
-                $requester = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-            } catch (Throwable $e) {
-                $requester = null;
-            }
-        }
-    }
-    $requesterName = $requester ? trim((string) user_display_name($requester)) : '';
-
     $type = (string) ($corr['type'] ?? '');
     $incoming = $type === 'incoming';
     if ($type === 'internal') {
@@ -2060,7 +2099,6 @@ function outgoing_approval_email_base_rows(array $corr, ?array $requester = null
             ['label' => __('corr.subject'), 'value' => trim((string) ($corr['subject'] ?? ''))],
             ['label' => __('internal.section_route'), 'value' => trim((string) ($corr['party_name'] ?? ''))],
             ['label' => __('corr.date'), 'value' => format_date($corr['corr_date'] ?? null)],
-            ['label' => appr__('issue_appr.email_requested_by'), 'value' => $requesterName],
         ];
     }
     return [
@@ -2069,7 +2107,6 @@ function outgoing_approval_email_base_rows(array $corr, ?array $requester = null
         ['label' => __($incoming ? 'corr.party' : 'corr.party_to'), 'value' => trim((string) ($corr['party_name'] ?? ''))],
         ['label' => __($incoming ? 'corr.date' : 'corr.date_out'), 'value' => format_date($corr['corr_date'] ?? null)],
         ['label' => __($incoming ? 'corr.department' : 'corr.dept_preparing'), 'value' => $deptName],
-        ['label' => appr__('issue_appr.email_requested_by'), 'value' => $requesterName],
     ];
 }
 
@@ -2847,6 +2884,10 @@ function outgoing_is_comms_print_stage(array $corr): bool
     if (($corr['type'] ?? '') !== 'outgoing') {
         return false;
     }
+    // بلا مسار مراجعة/اعتماد في الإعدادات لا تُحصر الطباعة/الإرسال على الاتصالات
+    if (!outgoing_issue_flow_active()) {
+        return false;
+    }
     $s = outgoing_approval_status_of($corr);
     // with_comms المسار الحالي؛ approved صفوف قديمة قبل توحيد الحالة
     return in_array($s, ['with_comms', 'approved'], true)
@@ -3116,6 +3157,111 @@ function outgoing_release_to_communications(int $corrId): void
            AND (issue_approval_status IS NULL OR issue_approval_status = '')"
     )->execute([$corrId]);
     outgoing_handoff_print_to_communications($corrId);
+}
+
+/**
+ * حالات عالقة في دورة المراجعة/الاعتماد/الاتصالات — تُصفَّر عند إيقاف المسار من الإعدادات.
+ *
+ * @return list<string>
+ */
+function outgoing_issue_flow_stale_statuses(): array
+{
+    return [
+        'pending_review',
+        'pending_copy',
+        'pending_sg',
+        'pending_deputy',
+        'pending_alternate',
+        'with_comms',
+        'returned',
+    ];
+}
+
+/**
+ * أخرج معاملة عالقة في المراجعة/الاعتماد إذا أُوقف مسار الإعدادات،
+ * لتبقى جاهزة للإرسال كما في الإصدار العادي بلا مسار.
+ */
+function outgoing_issue_flow_release_if_inactive(array $corr, ?array $actor = null): ?array
+{
+    if (($corr['type'] ?? '') !== 'outgoing' || outgoing_issue_flow_active()) {
+        return null;
+    }
+    if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+        return null;
+    }
+    if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
+        return null;
+    }
+    $s = outgoing_approval_status_of($corr);
+    if (!in_array($s, outgoing_issue_flow_stale_statuses(), true)) {
+        return null;
+    }
+    $id = (int) ($corr['id'] ?? 0);
+    if ($id < 1) {
+        return null;
+    }
+    $actor = $actor ?? (function_exists('current_user') ? current_user() : null);
+    $uid = (int) ($actor['id'] ?? ($corr['created_by'] ?? 0));
+    db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET issue_approval_status = NULL,
+             issue_approval_assignee_id = NULL
+         WHERE id = ? AND type = 'outgoing'"
+    )->execute([$id]);
+    log_activity(
+        $uid > 0 ? $uid : null,
+        $id,
+        'issue_approval',
+        __('issue_appr.released_flow_off')
+    );
+
+    return function_exists('get_correspondence') ? get_correspondence($id) : null;
+}
+
+/** صفّر حالات المسار العالقة لخطابات دفعة بعد إيقاف مسار الإعدادات. */
+function outgoing_batch_issue_flow_release_if_inactive(int $batchId, ?array $user = null): int
+{
+    if (outgoing_issue_flow_active() || $batchId <= 0) {
+        return 0;
+    }
+    $rows = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : [];
+    $n = 0;
+    foreach ($rows as $row) {
+        if (outgoing_issue_flow_release_if_inactive($row, $user)) {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
+/** صفّر كل المعاملات العالقة في دورة الصادر بعد إيقاف مسار الإعدادات. */
+function outgoing_issue_flow_release_all_if_inactive(?array $user = null): int
+{
+    if (outgoing_issue_flow_active()) {
+        return 0;
+    }
+    ensure_outgoing_approval_schema();
+    $statuses = outgoing_issue_flow_stale_statuses();
+    $ph = implode(',', array_fill(0, count($statuses), '?'));
+    $stmt = db()->prepare(
+        "SELECT * FROM `tblcorrespondence`
+         WHERE type = 'outgoing' AND status <> 'cancelled'
+           AND issue_approval_status IN ($ph)
+         ORDER BY id"
+    );
+    $stmt->execute($statuses);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $n = 0;
+    foreach ($rows as $row) {
+        if (outgoing_issue_flow_release_if_inactive($row, $user)) {
+            $n++;
+        }
+    }
+
+    return $n;
 }
 
 function outgoing_approval_decide(int $corrId, array $user, bool $approve, string $note = '', bool $notify = true): void
@@ -3509,6 +3655,96 @@ function outgoing_approval_escalate_to_alternate(array $corr, int $altId, string
 }
 
 /**
+ * الدفعة تظهر لمن لم تنته مرحلته بعد.
+ * بعد آخر موافقة تبقى للمنشئ ولمرحلة الاتصالات الإدارية لمتابعة الإرسال والردود.
+ */
+function outgoing_user_can_follow_batch(array $user, int $createdBy, array $items): bool
+{
+    $uid = (int) ($user['id'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+    if (function_exists('appr_user_is_admin') && appr_user_is_admin($user)) {
+        return true;
+    }
+    if ($createdBy > 0 && $uid === $createdBy) {
+        return true;
+    }
+    $principalCache = [];
+    foreach ($items as $corr) {
+        if (($corr['type'] ?? '') !== 'outgoing') {
+            continue;
+        }
+        if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        if ((int) ($corr['created_by'] ?? 0) === $uid) {
+            return true;
+        }
+        if ((int) ($corr['issue_approval_requested_by'] ?? 0) === $uid) {
+            return true;
+        }
+        $deptId = (int) ($corr['department_id'] ?? 0);
+        if ($deptId > 0 && function_exists('department_principal_user_id')) {
+            if (!array_key_exists($deptId, $principalCache)) {
+                $principalCache[$deptId] = department_principal_user_id($deptId);
+            }
+            if ($principalCache[$deptId] === $uid) {
+                return true;
+            }
+        }
+        if (function_exists('outgoing_user_can_review') && outgoing_user_can_review($user, $corr)) {
+            return true;
+        }
+        if (function_exists('outgoing_user_can_decide_approval') && outgoing_user_can_decide_approval($user, $corr)) {
+            return true;
+        }
+        if (function_exists('outgoing_user_can_request_approval') && outgoing_user_can_request_approval($user, $corr)) {
+            return true;
+        }
+        if (function_exists('outgoing_user_can_prep_decide') && outgoing_user_can_prep_decide($user, $corr)) {
+            return true;
+        }
+        if (function_exists('outgoing_user_can_prep_submit') && outgoing_user_can_prep_submit($user, $corr)) {
+            return true;
+        }
+    }
+
+    return outgoing_user_follows_batch_comms($user, $items);
+}
+
+/** الاتصالات الإدارية بعد وصول الدفعة إلى مرحلة الإرسال والطباعة، وتبقى بعدها لمتابعة الردود. */
+function outgoing_user_follows_batch_comms(array $user, array $items): bool
+{
+    $reached = false;
+    foreach ($items as $corr) {
+        if (($corr['type'] ?? '') !== 'outgoing') {
+            continue;
+        }
+        if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        $status = outgoing_approval_status_of($corr);
+        if (in_array($status, ['with_comms', 'approved'], true)) {
+            $reached = true;
+            break;
+        }
+    }
+    if (!$reached) {
+        return false;
+    }
+    if (outgoing_user_has_dispatch($user)) {
+        return true;
+    }
+    $uid = (int) ($user['id'] ?? 0);
+
+    return $uid > 0 && (
+        $uid === outgoing_dispatch_primary_user_id()
+        || $uid === outgoing_dispatch_alternate_user_id()
+    );
+}
+
+/**
  * ملخص موافقة الإصدار لدفعة جماعية.
  *
  * @param list<array<string,mixed>> $items
@@ -3684,9 +3920,66 @@ function outgoing_batch_enable_rsvp(int $batchId, array $user): string
     return $resetErr;
 }
 
-/**
- * @param array<int,int> $countsByUser
- */
+/** صفوف بريد الدفعة: عدد/مجموعة المستلمين فقط، بلا أسماءهم وبلا رقم معاملة واحدة. «موجهة من» تبقى لأنها واحدة. */
+function outgoing_batch_email_rows(int $batchId, array $sampleCorr, ?array $actor, int $count): array
+{
+    $base = function_exists('outgoing_approval_email_base_rows')
+        ? outgoing_approval_email_base_rows($sampleCorr, $actor)
+        : [];
+    $skip = [__('corr.number'), __('corr.party_to'), __('corr.party'), __('corr.party_from')];
+    $rows = [];
+    $placedCount = false;
+    $recipientsValue = (string) max(0, $count);
+    $batch = function_exists('get_outgoing_batch') ? get_outgoing_batch($batchId) : null;
+    $groupName = trim((string) ($batch['group_name'] ?? ''));
+    if ($groupName === '' && (int) ($batch['entity_group_id'] ?? 0) > 0 && function_exists('get_entity_group')) {
+        $group = get_entity_group((int) $batch['entity_group_id']);
+        $groupName = trim((string) ($group['name'] ?? ''));
+    }
+    if ($groupName !== '') {
+        $recipientsValue = str_replace(
+            [':group', ':count'],
+            [$groupName, (string) max(0, $count)],
+            __('bulk.recipients_group')
+        );
+    } elseif ($count > 0) {
+        $recipientsValue = str_replace(':count', (string) $count, __('bulk.recipients_count'));
+    }
+    $countRow = ['label' => __('bulk.recipients'), 'value' => $recipientsValue, 'party' => true];
+    foreach ($base as $row) {
+        $label = (string) ($row['label'] ?? '');
+        if (in_array($label, $skip, true)) {
+            continue;
+        }
+        $rows[] = $row;
+        if ($label === __('corr.subject')) {
+            $rows[] = $countRow;
+            $placedCount = true;
+        }
+    }
+    if (!$placedCount) {
+        $rows[] = $countRow;
+    }
+    if (function_exists('dms_notification_party_rows')) {
+        foreach (dms_notification_party_rows((int) ($sampleCorr['id'] ?? 0)) as $party) {
+            if ((string) ($party['label'] ?? '') !== __('print.directed_from')) {
+                continue;
+            }
+            $at = 0;
+            foreach ($rows as $i => $row) {
+                if ((string) ($row['label'] ?? '') === __('bulk.recipients')) {
+                    $at = $i + 1;
+                    break;
+                }
+            }
+            array_splice($rows, $at, 0, [$party]);
+            break;
+        }
+    }
+
+    return $rows;
+}
+
 function outgoing_batch_send_digest(
     int $batchId,
     array $countsByUser,
@@ -3707,9 +4000,6 @@ function outgoing_batch_send_digest(
     $subject = trim((string) ($batch['subject'] ?? $sampleCorr['subject'] ?? ''));
     $link = 'outgoing/batch.php?id=' . $batchId;
     $deptId = (int) ($sampleCorr['department_id'] ?? 0) ?: null;
-    $baseRows = function_exists('outgoing_approval_email_rows')
-        ? outgoing_approval_email_rows($sampleCorr, $actor)
-        : [];
     $actorId = (int) ($actor['id'] ?? 0);
     foreach ($countsByUser as $uid => $count) {
         $uid = (int) $uid;
@@ -3717,8 +4007,7 @@ function outgoing_batch_send_digest(
         if ($uid <= 0 || $count <= 0 || $uid === $actorId) {
             continue;
         }
-        $rows = $baseRows;
-        $rows[] = ['label' => __('bulk.recipients'), 'value' => (string) $count];
+        $rows = outgoing_batch_email_rows($batchId, $sampleCorr, $actor, $count);
         if ($note !== '') {
             $rows[] = ['label' => __('issue_review.note'), 'value' => $note];
         }
@@ -3945,9 +4234,10 @@ function outgoing_batch_request_approvals(int $batchId, array $user): int
     if (!outgoing_issue_flow_active() || $batchId <= 0) {
         return 0;
     }
-    $items = function_exists('outgoing_batch_items')
-        ? outgoing_batch_items($batchId, $user)
-        : [];
+    // كل خطابات الدفعة (بدون نطاق العرض) — نفس منطق طلب المفرد لكل معاملة
+    $items = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : (function_exists('outgoing_batch_items') ? outgoing_batch_items($batchId, $user) : []);
     $n = 0;
     $done = [];
     foreach ($items as $corr) {

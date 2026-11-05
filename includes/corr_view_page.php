@@ -20,7 +20,9 @@ if (!$corr || ($corr['type'] ?? '') !== $corrType || (!$ccViewerOnly && !user_ca
 $ref = ($corrType === 'outgoing' && function_exists('correspondence_ref_display'))
     ? correspondence_ref_display($corr)
     : (string) ($corr['ref_number'] ?? '');
-$pageTitle = $ref . ' — ' . __('type.' . $corrType);
+$pageTitle = $ref . ' — ' . (($corrType === 'outgoing' && (int) ($corr['batch_id'] ?? 0) > 0)
+    ? __('corr.outgoing_bulk')
+    : __('type.' . $corrType));
 $documents = get_documents($id);
 $referrals = get_referrals($id);
 $comments = get_comments($id);

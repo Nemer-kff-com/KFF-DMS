@@ -7,7 +7,6 @@ if (!user_can('outgoing.bulk', $user)) {
     redirect(base_url('outgoing/index.php'));
 }
 
-$pageTitle = __('bulk.title');
 ensure_entity_groups_schema();
 $departments = departments_list();
 $categories = categories_list();
@@ -15,8 +14,41 @@ $groups = entity_groups_list(true, $user);
 $priorityRows = priority_levels_list();
 $confidentialityRows = confidentiality_levels_list();
 $error = '';
+$editBatchId = (int) ($_GET['id'] ?? $_POST['batch_id'] ?? 0);
+$editBatch = $editBatchId > 0 && function_exists('get_outgoing_batch') ? get_outgoing_batch($editBatchId) : null;
+$editRows = [];
+$editing = false;
+if ($editBatchId > 0) {
+    if (!$editBatch || !function_exists('outgoing_batch_draft_editable') || !outgoing_batch_draft_editable($user, $editBatchId)) {
+        flash('danger', __('bulk.edit_locked'));
+        redirect(base_url($editBatch ? 'outgoing/batch.php?id=' . $editBatchId : 'outgoing/batches.php'));
+    }
+    $editing = true;
+    $editRows = outgoing_batch_draft_rows($editBatchId);
+}
+$pageTitle = $editing ? __('bulk.edit_title') : __('bulk.title');
+$editSource = $editRows[0] ?? [];
+$editDelivery = [];
+foreach ($editRows as $editRow) {
+    $editEntityId = (int) ($editRow['entity_id'] ?? 0);
+    if ($editEntityId > 0 && function_exists('correspondence_delivery_mode')) {
+        $editDelivery[$editEntityId] = correspondence_delivery_mode($editRow);
+    }
+}
 $preGroup = (int) ($_GET['group'] ?? $_POST['entity_group_id'] ?? 0);
 $selectedIds = array_map('intval', $_POST['entity_ids'] ?? []);
+if ($editing && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    if ($preGroup === 0) {
+        $preGroup = (int) ($editBatch['entity_group_id'] ?? 0);
+    }
+    $selectedIds = [];
+    foreach ($editRows as $editRow) {
+        $editEntityId = (int) ($editRow['entity_id'] ?? 0);
+        if ($editEntityId > 0) {
+            $selectedIds[] = $editEntityId;
+        }
+    }
+}
 
 $groupMembers = [];
 foreach ($groups as $g) {
@@ -36,25 +68,63 @@ if ($selectedIds) {
     $postedDelivery = is_array($_POST['recipient_delivery'] ?? null) ? $_POST['recipient_delivery'] : [];
     foreach ($selectedIds as $id) {
         if (!isset($byId[$id])) {
-            continue;
+            $entity = function_exists('get_entity') ? get_entity($id) : null;
+            if (!$entity) {
+                continue;
+            }
+            $byId[$id] = entity_picker_payload($entity, false);
         }
         $payload = $byId[$id];
-        $mode = (string) ($postedDelivery[$id] ?? $postedDelivery[(string) $id] ?? 'paper');
+        $mode = (string) ($postedDelivery[$id] ?? $postedDelivery[(string) $id] ?? ($editDelivery[$id] ?? 'paper'));
         $payload['delivery'] = in_array($mode, ['electronic', 'paper', 'both'], true) ? $mode : 'paper';
         $selectedPayloads[] = $payload;
     }
 }
 
-$v = static function (string $key, $default = '') {
-    return $_POST[$key] ?? $default;
+$v = static function (string $key, $default = '') use ($editSource) {
+    if (array_key_exists($key, $_POST)) {
+        return $_POST[$key];
+    }
+    if ($editSource !== [] && array_key_exists($key, $editSource) && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return $editSource[$key];
+    }
+
+    return $default;
 };
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
+    $postedBatchId = (int) ($_POST['batch_id'] ?? 0);
     try {
+        $sendPrep = !empty($_POST['out_prep_submit'])
+            && function_exists('outgoing_prep_enabled')
+            && outgoing_prep_enabled()
+            && function_exists('outgoing_batch_prep_submit');
+        if ($postedBatchId > 0) {
+            update_outgoing_batch($postedBatchId, $_POST, $_POST['entity_ids'] ?? [], $user, $_FILES['attachments'] ?? $_FILES['attachment'] ?? null);
+            $batchId = $postedBatchId;
+            if ($sendPrep) {
+                $result = outgoing_batch_prep_submit($batchId, $user);
+                flash('success', $result === 'converted' ? __('bulk.converted') : __('bulk.submitted'));
+                redirect(base_url('outgoing/batch.php?id=' . $batchId));
+            }
+            flash('success', __('bulk.saved'));
+            redirect(base_url('outgoing/bulk.php?id=' . $batchId));
+        }
         $batchId = save_outgoing_batch($_POST, $_POST['entity_ids'] ?? [], $user, $_FILES['attachments'] ?? $_FILES['attachment'] ?? null);
+        if ($sendPrep) {
+            try {
+                $result = outgoing_batch_prep_submit($batchId, $user);
+                flash('success', $result === 'converted' ? __('bulk.converted') : __('bulk.submitted'));
+                redirect(base_url('outgoing/batch.php?id=' . $batchId));
+            } catch (Throwable $submitEx) {
+                flash('warning', __('out_prep.saved') . ' — ' . $submitEx->getMessage());
+                redirect(base_url('outgoing/bulk.php?id=' . $batchId));
+            }
+        }
         if (function_exists('outgoing_prep_enabled') && outgoing_prep_enabled()) {
             flash('success', __('bulk.created') . ' — ' . __('out_prep.saved'));
+            redirect(base_url('outgoing/bulk.php?id=' . $batchId));
         } elseif (function_exists('outgoing_review_enabled') && outgoing_review_enabled()
             && !(function_exists('outgoing_approval_is_configured') && outgoing_approval_is_configured())) {
             flash('success', __('bulk.created') . ' — ' . __('issue_review.requested_ok'));
@@ -73,12 +143,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $pageScripts = dms_page_scripts_with_date_picker($pageScripts ?? '');
 require __DIR__ . '/../includes/header.php';
 $type = 'outgoing';
-$corr = null;
+$corr = $editRows[0] ?? null;
+$prepOn = function_exists('outgoing_prep_enabled') && outgoing_prep_enabled();
+$letterTemplateId = (int) (is_array($editBatch) ? ($editBatch['letter_template_id'] ?? 0) : 0);
+$prepReturned = $corr && function_exists('outgoing_prep_was_returned') && outgoing_prep_was_returned($corr);
+$prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') && outgoing_user_is_prep_signer($user, $corr);
 ?>
 <div class="page-header page-narrow">
     <div>
-        <h1 class="page-title"><?= e(__('bulk.title')) ?></h1>
-        <p class="page-sub"><?= e(__('bulk.subtitle')) ?></p>
+        <h1 class="page-title"><?= e($editing ? __('bulk.edit_title') : __('bulk.title')) ?></h1>
+        <p class="page-sub"><?= e($editing ? __('bulk.edit_sub') : __('bulk.subtitle')) ?></p>
     </div>
     <div class="page-header-actions">
         <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/batches.php')) ?>">
@@ -87,9 +161,12 @@ $corr = null;
         <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/entity_groups.php')) ?>">
             <i class="bi bi-people me-1"></i><?= e(__('nav.entity_groups')) ?>
         </a>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/index.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
+        <?php if ($editing): ?>
+        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/batch.php?id=' . $editBatchId)) ?>">
+            <i class="bi bi-collection me-1"></i><?= e(__('corr.batch_view')) ?>
         </a>
+        <?php endif; ?>
+        <?= dms_back_icon(base_url('outgoing/index.php')) ?>
     </div>
 </div>
 
@@ -98,18 +175,24 @@ $corr = null;
         <div class="card-header">
             <div class="admin-editor-header">
                 <span class="admin-editor-icon"><i class="bi bi-send-plus"></i></span>
-                <span><?= e(__('bulk.title')) ?></span>
+                <span><?= e($editing ? __('bulk.edit_title') : __('bulk.title')) ?></span>
             </div>
         </div>
         <div class="card-body">
             <?php require __DIR__ . '/../includes/corr_form_error.php'; ?>
-            <?php if (function_exists('outgoing_prep_enabled') && outgoing_prep_enabled()): ?>
+            <?php if ($prepOn): ?>
                 <div class="alert alert-info py-2 small no-print">
                     <i class="bi bi-pencil-square me-1"></i>
-                    <?= e(__('out_prep.create_hint')) ?>
+                    <?= e($editing ? __('bulk.prep_hint') : __('out_prep.create_hint')) ?>
                 </div>
             <?php endif; ?>
-            <?php if (function_exists('outgoing_approval_is_configured') && outgoing_approval_is_configured()): ?>
+            <?php if ($prepReturned): ?>
+                <div class="alert alert-warning py-2 small no-print">
+                    <div class="fw-semibold"><?= e(__('out_prep.returned_note')) ?></div>
+                    <div class="mt-1"><?= e(trim((string) ($corr['outgoing_prep_note'] ?? ''))) ?></div>
+                </div>
+            <?php endif; ?>
+            <?php if (!$prepOn && function_exists('outgoing_approval_is_configured') && outgoing_approval_is_configured()): ?>
                 <div class="alert alert-info py-2 small no-print">
                     <i class="bi bi-shield-check me-1"></i>
                     <?= e(function_exists('outgoing_appr_text') ? outgoing_appr_text('issue_appr.batch_create_hint') : __('issue_appr.batch_create_hint')) ?>
@@ -127,8 +210,11 @@ $corr = null;
                 };
             }
             ?>
-            <form method="post" enctype="multipart/form-data" class="admin-form" data-confirm="<?= e($bulkConfirm) ?>">
+            <form method="post" enctype="multipart/form-data" class="admin-form"<?= $prepOn ? '' : ' data-confirm="' . e($bulkConfirm) . '"' ?>>
                 <?= csrf_field() ?>
+                <?php if ($editing): ?>
+                <input type="hidden" name="batch_id" value="<?= (int) $editBatchId ?>">
+                <?php endif; ?>
                 <input type="hidden" name="entity_id" id="entity_id" value="">
 
                 <div class="admin-form-section">
@@ -154,7 +240,6 @@ $corr = null;
                                     $inputName = 'entity_ids[]';
                                     $pickerId = 'bulk-recipients';
                                     $showDeliveryMode = true;
-                                    $hintText = __('bulk.delivery_per_hint');
                                     require __DIR__ . '/../includes/entity_multi_picker.php';
                                     ?>
                                 </div>
@@ -187,7 +272,7 @@ $corr = null;
                                         render_dms_gregorian_date_field([
                                             'name' => 'reply_due',
                                             'id' => 'reply_due',
-                                            'value' => $_SERVER['REQUEST_METHOD'] === 'POST' ? (string) $v('reply_due') : '',
+                                            'value' => (string) $v('reply_due'),
                                         ]);
                                         ?>
                                     </div>
@@ -274,8 +359,41 @@ $corr = null;
                                 <div class="corr-field-card-body flex-grow-1 d-flex flex-column">
                                     <div class="corr-option-grid corr-option-grid-compact corr-option-stack flex-grow-1">
                                         <label class="corr-option-card" title="<?= e(__('rsvp.require_hint')) ?>">
-                                            <input class="form-check-input" type="checkbox" name="requires_rsvp" id="requires_rsvp" value="1" <?= !empty($_POST['requires_rsvp']) ? 'checked' : '' ?>>
+                                            <?php
+                                            $rsvpChecked = $_SERVER['REQUEST_METHOD'] === 'POST'
+                                                ? !empty($_POST['requires_rsvp'])
+                                                : ($editing && (!empty($editBatch['requires_rsvp']) || !empty($editSource['rsvp_required'])));
+                                            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                                                $rsvpAllowRemote = (string) ($_POST['rsvp_allow_remote'] ?? '1') !== '0';
+                                            } elseif (is_array($editBatch) && array_key_exists('rsvp_allow_remote', $editBatch)) {
+                                                $rsvpAllowRemote = (int) $editBatch['rsvp_allow_remote'] === 1;
+                                            } elseif (array_key_exists('rsvp_allow_remote', $editSource)) {
+                                                $rsvpAllowRemote = (int) $editSource['rsvp_allow_remote'] === 1;
+                                            } else {
+                                                $rsvpAllowRemote = true;
+                                            }
+                                            ?>
+                                            <input class="form-check-input" type="checkbox" name="requires_rsvp" id="requires_rsvp" value="1" <?= $rsvpChecked ? 'checked' : '' ?>>
                                             <span class="corr-option-title"><?= e(__('rsvp.require')) ?></span>
+                                        </label>
+                                        <div class="rsvp-attend-mode<?= $rsvpChecked ? '' : ' d-none' ?>" id="rsvp-attend-mode">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="rsvp_allow_remote" id="rsvp_allow_remote_0" value="0" <?= $rsvpAllowRemote ? '' : 'checked' ?><?= $rsvpChecked ? '' : ' disabled' ?>>
+                                                <label class="form-check-label" for="rsvp_allow_remote_0"><?= e(__('rsvp.attend_in_person_only')) ?></label>
+                                            </div>
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="radio" name="rsvp_allow_remote" id="rsvp_allow_remote_1" value="1" <?= $rsvpAllowRemote ? 'checked' : '' ?><?= $rsvpChecked ? '' : ' disabled' ?>>
+                                                <label class="form-check-label" for="rsvp_allow_remote_1"><?= e(__('rsvp.attend_either')) ?></label>
+                                            </div>
+                                        </div>
+                                        <?php
+                                        $emailLetterChecked = $_SERVER['REQUEST_METHOD'] === 'POST'
+                                            ? !empty($_POST['email_letter_attach'])
+                                            : ($editing && !empty($editBatch['email_letter_attach']));
+                                        ?>
+                                        <label class="corr-option-card" title="<?= e(__('send.email_letter_attach_hint')) ?>">
+                                            <input class="form-check-input" type="checkbox" name="email_letter_attach" id="email_letter_attach" value="1" <?= $emailLetterChecked ? 'checked' : '' ?>>
+                                            <span class="corr-option-title"><?= e(__('send.email_letter_attach')) ?></span>
                                         </label>
                                     </div>
                                 </div>
@@ -291,11 +409,26 @@ $corr = null;
                     <textarea name="notes" id="notes" class="form-control" rows="1"><?= e((string) $v('notes')) ?></textarea>
                 </div>
 
-                <div class="admin-form-actions">
-                    <button class="btn btn-kff" type="submit">
+                <div class="corr-issue-decide">
+                    <div class="corr-decide-actions">
+                    <?php if ($prepOn): ?>
+                    <button class="btn btn-kff" type="submit" name="out_prep_submit" value="1" data-keep-label
+                            data-confirm="<?= e($prepSelf ? __('out_prep.confirm_submit_self') : __('out_prep.confirm_submit')) ?>">
+                        <i class="bi bi-send me-1"></i><?= e($prepSelf
+                            ? ($editing ? __('out_prep.save_and_resend_self') : __('out_prep.submit_self'))
+                            : (($editing && $prepReturned) ? __('out_prep.save_and_resend') : __('out_prep.save_and_submit'))) ?>
+                    </button>
+                    <button class="btn btn-outline-secondary" type="submit" data-keep-label
+                            data-confirm="<?= e($editing ? __('bulk.confirm_save') : __('bulk.confirm_prep')) ?>">
+                        <i class="bi bi-check2 me-1"></i><?= e($editing ? __('action.save_changes') : __('corr.save_draft')) ?>
+                    </button>
+                    <?php else: ?>
+                    <button class="btn btn-kff" type="submit" data-keep-label data-confirm="<?= e($bulkConfirm) ?>">
                         <i class="bi bi-send-plus me-1"></i><?= e(__('bulk.save')) ?>
                     </button>
-                    <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/index.php')) ?>"><?= e(__('action.cancel')) ?></a>
+                    <?php endif; ?>
+                    <a class="btn btn-kff-soft" data-keep-label data-confirm="<?= e($editing ? __('bulk.confirm_cancel_edit') : __('bulk.confirm_cancel')) ?>" href="<?= e(base_url($editing ? 'outgoing/batch.php?id=' . $editBatchId : 'outgoing/index.php')) ?>"><?= e(__('action.cancel')) ?></a>
+                    </div>
                 </div>
             </form>
         </div>
@@ -315,6 +448,20 @@ $corr = null;
     var obs = new MutationObserver(syncPreviewEntity);
     obs.observe(inputsEl, { childList: true });
     syncPreviewEntity();
+  }
+  var rsvpBox = document.getElementById('requires_rsvp');
+  var rsvpMode = document.getElementById('rsvp-attend-mode');
+  function syncRsvpMode() {
+    if (!rsvpBox || !rsvpMode) return;
+    var on = rsvpBox.checked;
+    rsvpMode.classList.toggle('d-none', !on);
+    rsvpMode.querySelectorAll('input[type="radio"]').forEach(function (input) {
+      input.disabled = !on;
+    });
+  }
+  if (rsvpBox) {
+    rsvpBox.addEventListener('change', syncRsvpMode);
+    syncRsvpMode();
   }
   if (form && !form.dataset.invalidBound) {
     form.dataset.invalidBound = '1';

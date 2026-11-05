@@ -67,7 +67,7 @@ require __DIR__ . '/../includes/header.php';
         <?php if (!$isForm): ?>
             <?= btn_icon_add(base_url('admin/letter_templates.php?new=1'), __('tpl.new')) ?>
         <?php else: ?>
-            <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/letter_templates.php')) ?>"><?= e(__('action.back')) ?></a>
+            <?= dms_back_icon(base_url('admin/letter_templates.php')) ?>
         <?php endif; ?>
     </div>
 </div>

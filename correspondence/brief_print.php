@@ -33,7 +33,7 @@ $printHijriDate = $headerDate !== '' ? format_hijri_date($headerDate) : '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title) ?> — <?= e($corr['ref_number']) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= $cssVer ?>" rel="stylesheet">
@@ -51,28 +51,22 @@ $printHijriDate = $headerDate !== '' ? format_hijri_date($headerDate) : '';
         <div class="print-label-toolbar-top">
             <div class="print-label-toolbar-actions">
                 <?= briefing_swap_dir_button('btn btn-outline-secondary btn-sm') ?>
-                <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-                    <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-                </button>
+                <?= dms_print_icon() ?>
                 <a class="btn btn-outline-secondary btn-sm" href="<?= e(briefing_word_url($id)) ?>">
                     <i class="bi bi-file-earmark-word me-1"></i><?= e(__('brief.word')) ?>
                 </a>
                 <a class="btn btn-outline-secondary btn-sm" href="<?= e($editUrl) ?>"><?= e(__('brief.page')) ?></a>
-                <a class="btn btn-outline-secondary btn-sm" href="<?= e($backUrl) ?>">
-                    <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-                </a>
+                <?= dms_back_icon($backUrl) ?>
             </div>
             <div class="print-toolbar-title"><?= e($title) ?> — <span dir="ltr"><?= e($corr['ref_number']) ?></span></div>
             <div class="print-label-toolbar-actions print-label-toolbar-actions-ghost" aria-hidden="true">
                 <button type="button" class="btn btn-outline-secondary btn-sm" tabindex="-1" disabled>
                     <i class="bi bi-arrow-down-up" aria-hidden="true"></i>
                 </button>
-                <button type="button" class="btn btn-kff btn-sm" tabindex="-1" disabled>
-                    <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-                </button>
+                <?= dms_print_icon_ghost() ?>
                 <a class="btn btn-outline-secondary btn-sm" tabindex="-1"><?= e(__('brief.word')) ?></a>
                 <a class="btn btn-outline-secondary btn-sm" tabindex="-1"><?= e(__('brief.page')) ?></a>
-                <a class="btn btn-outline-secondary btn-sm" tabindex="-1"><?= e(__('action.back')) ?></a>
+                <?= dms_back_icon() ?>
             </div>
         </div>
     </div>

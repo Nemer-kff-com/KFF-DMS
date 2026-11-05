@@ -32,27 +32,28 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('circulars/index.php')) ?>"><?= e(__('action.back')) ?></a>
+        <?= dms_back_icon(base_url('circulars/index.php')) ?>
         <?php
         $canPrintCircular = function_exists('user_can') && user_can('circulars.print_form', $user);
         $canPrintCircularThermal = function_exists('user_can') && user_can('circulars.print_thermal', $user);
         ?>
         <?php if ($canPrintCircular || $canPrintCircularThermal): ?>
-        <div class="dropdown d-inline-block">
-            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-printer me-1"></i><?= e(__('corr.print_menu')) ?>
+        <div class="corr-actions-print dropdown d-inline-block" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('corr.print_menu')) ?>">
+            <button type="button" class="btn btn-icon btn-outline-secondary dropdown-toggle batch-print-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?= e(__('corr.print_menu')) ?>">
+                <i class="bi bi-printer" aria-hidden="true"></i>
+                <i class="bi bi-chevron-down batch-print-caret" aria-hidden="true"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
+            <ul class="dropdown-menu batch-print-menu">
                 <?php if ($canPrintCircular && circular_is_electronic($item) && circular_has_letter($item)): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/letter.php?id='.$id)) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-file-earmark-text me-2"></i><?= e(__('circular.print_letter')) ?>
+                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span><?= e(__('circular.print_letter')) ?></span>
                     </a>
                 </li>
                 <?php if (trim((string) ($item['letter_body'] ?? '')) !== '' && trim((string) ($item['letter_body_en'] ?? '')) !== ''): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/letter.php?id='.$id.'&lang=en')) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-file-earmark-text me-2"></i><?= e(__('circular.print_letter_en')) ?>
+                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span><?= e(__('circular.print_letter_en')) ?></span>
                     </a>
                 </li>
                 <?php endif; ?>
@@ -60,14 +61,14 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($canPrintCircular): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/print.php?id='.$id)) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-printer me-2"></i><?= e(__('circular.print')) ?>
+                        <i class="bi bi-printer" aria-hidden="true"></i><span><?= e(__('circular.print')) ?></span>
                     </a>
                 </li>
                 <?php endif; ?>
                 <?php if ($canPrintCircularThermal): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/thermal_label.php?id='.$id)) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-upc me-2"></i><?= e(__('thermal.print')) ?>
+                        <i class="bi bi-upc" aria-hidden="true"></i><span><?= e(__('thermal.print')) ?></span>
                     </a>
                 </li>
                 <?php endif; ?>

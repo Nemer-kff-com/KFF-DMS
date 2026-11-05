@@ -11,6 +11,12 @@ $canDecide = outgoing_user_can_prep_decide($user, $corr);
 $wasReturned = outgoing_prep_was_returned($corr);
 $showSubmit = $canSubmit && !$wasReturned;
 $selfConvert = $showSubmit && outgoing_user_is_prep_signer($user, $corr);
+$prepBatchId = (int) ($corr['batch_id'] ?? 0);
+if ($prepBatchId > 0) {
+    $canSubmit = false;
+    $canDecide = false;
+    $showSubmit = false;
+}
 $prepNote = trim((string) ($corr['outgoing_prep_note'] ?? ''));
 $prepLatestId = function_exists('outgoing_prep_latest_id') ? outgoing_prep_latest_id($corr) : (int) ($corr['id'] ?? 0);
 $prepPrevious = function_exists('outgoing_prep_previous_rows') ? outgoing_prep_previous_rows($corr) : [];
@@ -58,6 +64,13 @@ $prepPrevious = function_exists('outgoing_prep_previous_rows') ? outgoing_prep_p
                 <div class="fw-semibold"><?= e(__('out_prep.returned_note')) ?></div>
                 <div class="mt-1"><?= e($prepNote) ?></div>
             </div>
+        <?php endif; ?>
+
+        <?php if ($prepBatchId > 0 && !$prepSuperseded): ?>
+            <p class="small text-muted mb-3"><?= e(__('bulk.decide_on_batch')) ?></p>
+            <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('outgoing/batch.php?id=' . $prepBatchId)) ?>">
+                <i class="bi bi-collection me-1"></i><?= e(__('bulk.open_batch')) ?>
+            </a>
         <?php endif; ?>
 
         <?php if ($prepStatus === 'pending_signer'): ?>

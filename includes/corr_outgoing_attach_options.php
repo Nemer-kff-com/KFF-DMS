@@ -6,6 +6,8 @@
 $attachLabel = $attachLabel ?? __('corr.attach');
 $electronicChecked = !empty($electronicChecked);
 $rsvpChecked = !empty($rsvpChecked);
+$rsvpAllowRemote = !isset($rsvpAllowRemote) || !empty($rsvpAllowRemote);
+$emailLetterAttachChecked = !empty($emailLetterAttachChecked);
 $notesValue = (string) ($notesValue ?? '');
 $editDocuments = [];
 $editDocReturn = '';
@@ -133,6 +135,20 @@ if (!isset($dmsEditDocForms)) {
                             <input class="form-check-input" type="checkbox" name="rsvp_required" id="rsvp_required" value="1" <?= $rsvpChecked ? 'checked' : '' ?>>
                             <span class="corr-option-title"><?= e(__('rsvp.require')) ?></span>
                         </label>
+                        <div class="rsvp-attend-mode<?= $rsvpChecked ? '' : ' d-none' ?>" id="rsvp-attend-mode">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="rsvp_allow_remote" id="rsvp_allow_remote_0" value="0" <?= $rsvpAllowRemote ? '' : 'checked' ?><?= $rsvpChecked ? '' : ' disabled' ?>>
+                                <label class="form-check-label" for="rsvp_allow_remote_0"><?= e(__('rsvp.attend_in_person_only')) ?></label>
+                            </div>
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="radio" name="rsvp_allow_remote" id="rsvp_allow_remote_1" value="1" <?= $rsvpAllowRemote ? 'checked' : '' ?><?= $rsvpChecked ? '' : ' disabled' ?>>
+                                <label class="form-check-label" for="rsvp_allow_remote_1"><?= e(__('rsvp.attend_either')) ?></label>
+                            </div>
+                        </div>
+                        <label class="corr-option-card<?= empty($electronicChecked) ? ' d-none' : '' ?>" id="email-letter-attach-wrap" title="<?= e(__('send.email_letter_attach_hint')) ?>">
+                            <input class="form-check-input" type="checkbox" name="email_letter_attach" id="email_letter_attach" value="1" <?= !empty($emailLetterAttachChecked) ? 'checked' : '' ?>>
+                            <span class="corr-option-title"><?= e(__('send.email_letter_attach')) ?></span>
+                        </label>
                     </div>
                     <p class="admin-form-hint mb-0 mt-1 text-truncate d-none" id="entity-email-hint" role="status"></p>
                 </div>
@@ -154,3 +170,32 @@ if (!isset($dmsEditDocForms)) {
         </div>
     </div>
 </div>
+<script>
+(function () {
+  var box = document.getElementById('intend_electronic');
+  var wrap = document.getElementById('email-letter-attach-wrap');
+  var flag = document.getElementById('email_letter_attach');
+  if (box && wrap) {
+    function syncOfficialAttach() {
+      var on = !!box.checked;
+      wrap.classList.toggle('d-none', !on);
+      if (flag) flag.disabled = !on;
+    }
+    box.addEventListener('change', syncOfficialAttach);
+    syncOfficialAttach();
+  }
+  var rsvpBox = document.getElementById('rsvp_required');
+  var rsvpMode = document.getElementById('rsvp-attend-mode');
+  if (rsvpBox && rsvpMode) {
+    function syncRsvpMode() {
+      var on = !!rsvpBox.checked;
+      rsvpMode.classList.toggle('d-none', !on);
+      rsvpMode.querySelectorAll('input[type="radio"]').forEach(function (input) {
+        input.disabled = !on;
+      });
+    }
+    rsvpBox.addEventListener('change', syncRsvpMode);
+    syncRsvpMode();
+  }
+})();
+</script>

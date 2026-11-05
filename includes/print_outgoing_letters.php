@@ -22,7 +22,7 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($letterPrintTitle) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/img/favicon.ico')) ?>">
+    <?= function_exists('dms_favicon_link_html') ? dms_favicon_link_html() : '' ?>
     <link href="<?= e(dms_bootstrap_css()) ?>" rel="stylesheet">
     <link href="<?= e(dms_bootstrap_icons_css()) ?>" rel="stylesheet">
     <link href="<?= e(base_url('assets/css/app.css')) ?>?v=<?= $cssVer ?>" rel="stylesheet">
@@ -37,7 +37,7 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
         }
         .letter-batch-print .letter-thermal-host {
             position: absolute !important;
-            top: 14mm !important;
+            top: 17mm !important;
             left: 1.4cm !important;
             right: auto !important;
             inset: auto auto auto 1.4cm !important;
@@ -126,9 +126,21 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
         }
         .letter-batch-print .letter-sheet {
             padding-top: 14mm;
+            padding-bottom: 10mm;
+        }
+        .letter-batch-print .print-page-footer {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 4mm;
+            margin: 0;
+            padding: 0 2.5cm;
+            box-sizing: border-box;
+            width: auto;
+            z-index: 5;
         }
         .letter-batch-print .letter-thermal-host {
-            top: 14mm !important;
+            top: 17mm !important;
         }
         @media print {
             html, body.letter-batch-print {
@@ -146,11 +158,11 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
                 min-height: 297mm !important;
                 height: 297mm !important;
                 box-sizing: border-box !important;
-                padding: 14mm 2.5cm 22mm 2.5cm !important;
+                padding: 14mm 2.5cm 10mm 2.5cm !important;
                 overflow: visible !important;
             }
             .letter-batch-print .letter-thermal-host {
-                top: 14mm !important;
+                top: 17mm !important;
                 left: 1.4cm !important;
                 right: auto !important;
                 width: 50mm !important;
@@ -186,7 +198,7 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
                 position: absolute !important;
                 left: 0 !important;
                 right: 0 !important;
-                bottom: 8mm !important;
+                bottom: 4mm !important;
                 margin: 0 !important;
                 width: auto !important;
                 z-index: 5;
@@ -298,12 +310,8 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
                         <option value="<?= e($code) ?>"<?= $code === 'greta' ? ' selected' : '' ?>><?= e($opt['label']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <button type="button" class="btn btn-kff btn-sm" onclick="window.print()">
-                    <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-                </button>
-                <a class="btn btn-outline-secondary btn-sm" href="<?= e($letterPrintBackUrl) ?>">
-                    <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-                </a>
+                <?= dms_print_icon() ?>
+                <?= dms_back_icon($letterPrintBackUrl) ?>
             </div>
             <div class="print-toolbar-title">
                 <?= e($letterPrintTitle) ?>
@@ -313,10 +321,8 @@ $jsVer = (int) (@filemtime(__DIR__ . '/../assets/js/app.js') ?: 1);
             </div>
             <div class="print-label-toolbar-actions print-label-toolbar-actions-ghost" aria-hidden="true">
                 <select class="form-select form-select-sm letter-print-font-select" tabindex="-1" disabled></select>
-                <button type="button" class="btn btn-kff btn-sm" tabindex="-1" disabled>
-                    <i class="bi bi-printer me-1"></i><?= e(__('action.print')) ?>
-                </button>
-                <a class="btn btn-outline-secondary btn-sm" tabindex="-1"><?= e(__('action.back')) ?></a>
+                <?= dms_print_icon_ghost() ?>
+                <?= dms_back_icon() ?>
             </div>
         </div>
         <div class="letter-print-switches">
@@ -357,8 +363,9 @@ foreach ($letterPrintItems as $corr) {
     var img = document.createElement('img');
     img.src = thermalQrs[id];
     img.alt = '';
-    img.width = 160;
-    img.height = 160;
+    img.width = 640;
+    img.height = 640;
+    img.style.imageRendering = 'pixelated';
     img.decoding = 'sync';
     el.appendChild(img);
   });

@@ -72,35 +72,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 require __DIR__ . '/../includes/header.php';
 ?>
-<div class="page-header">
+<div class="page-header page-narrow">
     <div>
         <h1 class="page-title"><?= e(__('groups.new')) ?></h1>
         <p class="page-sub"><?= e(__('groups.subtitle')) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/entity_groups.php')) ?>">
-            <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-        </a>
+        <?= dms_back_icon(base_url('admin/entity_groups.php')) ?>
     </div>
 </div>
 
-<div class="admin-editor">
-    <div class="card-panel">
-        <div class="card-header">
-            <div class="admin-editor-header">
-                <span class="admin-editor-icon"><i class="bi bi-people"></i></span>
-                <span><?= e(__('groups.new')) ?></span>
+<div class="card-panel page-narrow">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-people me-1"></i><?= e(__('groups.new')) ?></span>
+    </div>
+    <?php if ($error !== ''): ?>
+        <div class="px-3 pt-3">
+            <div class="alert alert-danger mb-0"><i class="bi bi-exclamation-circle me-1"></i><?= e($error) ?></div>
+        </div>
+    <?php endif; ?>
+    <form method="post" class="admin-form mb-0">
+        <?= csrf_field() ?>
+        <div class="p-3">
+            <?php require __DIR__ . '/_entity_group_form.php'; ?>
+            <div class="admin-form-actions mt-3">
+                <button class="btn btn-kff" type="submit">
+                    <i class="bi bi-check2 me-1"></i><?= e(__('action.save')) ?>
+                </button>
+                <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/entity_groups.php')) ?>"><?= e(__('action.cancel')) ?></a>
             </div>
         </div>
-        <div class="card-body">
-            <?php if ($error !== ''): ?>
-                <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-1"></i><?= e($error) ?></div>
-            <?php endif; ?>
-            <form method="post" class="admin-form">
-                <?= csrf_field() ?>
-                <?php require __DIR__ . '/_entity_group_form.php'; ?>
-            </form>
-        </div>
-    </div>
+    </form>
 </div>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

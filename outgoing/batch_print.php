@@ -44,12 +44,6 @@ if (!$items) {
     flash('warning', __('cancel.batch_print_empty'));
     redirect(base_url('outgoing/batch.php?id=' . $id));
 }
-if (function_exists('outgoing_batch_can_issue') && !outgoing_batch_can_issue($items)) {
-    $sum = function_exists('outgoing_batch_approval_summary') ? outgoing_batch_approval_summary($items) : [];
-    $msg = (string) ($sum['block_reason'] ?? '');
-    flash('warning', $msg !== '' ? $msg : __('issue_appr.batch_blocked_pending'));
-    redirect(base_url('outgoing/batch.php?id=' . $id));
-}
 
 $letterPrintItems = $items;
 $letterPrintTitle = __('bulk.print_letters') . ' — ' . (string) ($batch['subject'] ?? '');

@@ -1,8 +1,19 @@
 <?php
 $activity = $activity ?? [];
+$activityCollapsed = !empty($activityCollapsed);
+$activityCollapseId = (string) ($activityCollapseId ?? 'corr-activity-body');
 ?>
 <div class="card-panel mb-3">
-    <div class="card-header"><i class="bi bi-journal-text me-1"></i><?= e(__('corr.activity_title')) ?></div>
+    <?php if ($activityCollapsed): ?>
+    <button type="button" class="card-header corr-activity-toggle" data-bs-toggle="collapse"
+            data-bs-target="#<?= e($activityCollapseId) ?>" aria-expanded="false" aria-controls="<?= e($activityCollapseId) ?>">
+        <span><i class="bi bi-journal-text me-1"></i><?= e($activityTitle ?? __('corr.activity_title')) ?></span>
+        <i class="bi bi-chevron-down corr-activity-chevron" aria-hidden="true"></i>
+    </button>
+    <?php else: ?>
+    <div class="card-header"><i class="bi bi-journal-text me-1"></i><?= e($activityTitle ?? __('corr.activity_title')) ?></div>
+    <?php endif; ?>
+    <div<?= $activityCollapsed ? ' class="collapse" id="' . e($activityCollapseId) . '"' : '' ?>>
     <div class="card-body p-3">
         <?php if (!$activity): ?>
             <p class="text-muted small mb-0"><?= e(__('corr.activity_empty')) ?></p>
@@ -28,5 +39,6 @@ $activity = $activity ?? [];
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
+    </div>
     </div>
 </div>

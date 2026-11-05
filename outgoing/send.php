@@ -40,7 +40,14 @@ if ($batchId > 0) {
         flash('warning', __('send.none_selected'));
         redirect(base_url('outgoing/batch.php?id=' . $batchId));
     }
-    $summary = dms_send_outgoing_batch_channel($batchId, $channel, $user, $selectedIds);
+    $postedNames = $_POST['receipt_name'] ?? [];
+    $receiptNames = [];
+    if (is_array($postedNames)) {
+        foreach ($postedNames as $key => $value) {
+            $receiptNames[(int) $key] = trim((string) $value);
+        }
+    }
+    $summary = dms_send_outgoing_batch_channel($batchId, $channel, $user, $selectedIds, $receiptNames);
     if ((int) ($summary['total'] ?? 0) === 0) {
         flash('warning', __('send.none_selected'));
         redirect(base_url('outgoing/batch.php?id=' . $batchId));
@@ -55,7 +62,7 @@ if (!$corr || ($corr['type'] ?? '') !== 'outgoing' || !user_can_access_correspon
     redirect(base_url('outgoing/index.php'));
 }
 
-$result = dms_send_outgoing_channel($corr, $channel, $user);
+$result = dms_send_outgoing_channel($corr, $channel, $user, trim((string) ($_POST['receipt_name'] ?? '')));
 dms_send_flash_from_result($result);
 if ($returnBatch > 0 && (int) ($corr['batch_id'] ?? 0) === $returnBatch) {
     redirect(base_url('outgoing/batch.php?id=' . $returnBatch));

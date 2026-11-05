@@ -147,7 +147,7 @@ $hasSecondaryActions = $secondaryActions !== [];
                     <span class="badge text-bg-secondary"><?= e(__('receipt.pending')) ?></span>
                 <?php endif; ?>
                 <?php if ($rsvpRequired): ?>
-                    <?= rsvp_response_badge($corr['rsvp_response'] ?? null) ?>
+                    <?= rsvp_response_badge($corr['rsvp_response'] ?? null, $corr['rsvp_mode'] ?? null) ?>
                 <?php endif; ?>
             <?php endif; ?>
             <?php if ($briefSheet): ?>
@@ -169,6 +169,13 @@ $hasSecondaryActions = $secondaryActions !== [];
         if ($isOutgoing && !$isCancelled && function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
             $apprHeadline = outgoing_prep_list_label($corr);
             $apprHeadlineClass = outgoing_prep_is_pending_signer($corr) ? 'text-bg-warning' : 'text-bg-secondary';
+            if (function_exists('outgoing_prep_was_returned') && outgoing_prep_was_returned($corr)) {
+                $apprHeadlineClass = 'text-bg-info';
+            }
+            $holderId = function_exists('outgoing_prep_holder_id') ? outgoing_prep_holder_id($corr) : 0;
+            if ($holderId > 0 && function_exists('outgoing_user_name_by_id')) {
+                $apprHeadlineSub = outgoing_user_name_by_id($holderId);
+            }
         } elseif ($isOutgoing && !$isCancelled && function_exists('outgoing_prep_is_superseded') && outgoing_prep_is_superseded($corr)) {
             $apprHeadline = outgoing_prep_list_label($corr);
             $apprHeadlineClass = 'text-bg-secondary';
@@ -264,10 +271,6 @@ $hasSecondaryActions = $secondaryActions !== [];
     </div>
     <div class="page-header-actions corr-view-actions">
         <div class="corr-actions-group corr-actions-primary">
-            <a class="btn btn-outline-secondary corr-action-primary" href="<?= e(base_url($ccViewerOnly ? 'cc/index.php' : $typeFolder . '/index.php')) ?>">
-                <i class="bi <?= dms_is_rtl() ? 'bi-arrow-right' : 'bi-arrow-left' ?> me-1"></i><?= e(__('action.back')) ?>
-            </a>
-
             <?php
             $corrPrintType = (string) ($corr['type'] ?? '');
             $canPrintForm = function_exists('corr_user_can_print') && corr_user_can_print($corrPrintType, 'form', $user, $corr);
@@ -281,18 +284,19 @@ $hasSecondaryActions = $secondaryActions !== [];
             $showPrintMenu = !$ccViewerOnly && ($hasLetterPrint || $canPrintForm || $showPrintEnvelope || $showPrintThermal || $showPrintMail || $showPrintClose);
             ?>
             <?php if ($showPrintMenu): ?>
-            <div class="corr-actions-print dropdown">
-                <button type="button" class="btn btn-outline-secondary dropdown-toggle corr-action-primary" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-printer me-1"></i><?= e(__('corr.print_menu')) ?>
+            <div class="corr-actions-print dropdown" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('corr.print_menu')) ?>">
+                <button type="button" class="btn btn-icon btn-outline-secondary dropdown-toggle batch-print-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?= e(__('corr.print_menu')) ?>">
+                    <i class="bi bi-printer" aria-hidden="true"></i>
+                    <i class="bi bi-chevron-down batch-print-caret" aria-hidden="true"></i>
                 </button>
                 <?php
                 $printItem = static function (string $href, string $icon, string $label, string $blockedTip): void {
                     if ($blockedTip !== '') {
                         echo '<span class="d-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="' . e($blockedTip) . '">'
-                            . '<span class="dropdown-item disabled" aria-disabled="true"><i class="bi ' . e($icon) . ' me-2"></i>' . e($label) . '</span></span>';
+                            . '<span class="dropdown-item disabled" aria-disabled="true"><i class="bi ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span></span></span>';
                         return;
                     }
-                    echo '<a class="dropdown-item" href="' . e($href) . '" target="_blank" rel="noopener"><i class="bi ' . e($icon) . ' me-2"></i>' . e($label) . '</a>';
+                    echo '<a class="dropdown-item" href="' . e($href) . '" target="_blank" rel="noopener"><i class="bi ' . e($icon) . '" aria-hidden="true"></i><span>' . e($label) . '</span></a>';
                 };
                 $printBlockedTip = $apprHeld ? $apprHeldTip : '';
                 $thermalBlockedTip = $isIncoming ? '' : $printBlockedTip;
@@ -302,9 +306,9 @@ $hasSecondaryActions = $secondaryActions !== [];
                         : __('out_prep.thermal_blocked_short');
                 }
                 ?>
-                <ul class="dropdown-menu dropdown-menu-end">
+                <ul class="dropdown-menu batch-print-menu">
                     <?php if ($hasLetterPrint): ?>
-                    <li><?php $printItem($printLetterUrl, 'bi-file-text', __('bulk.print_letter'), $printBlockedTip); ?></li>
+                    <li><?php $printItem($printLetterUrl, 'bi-file-text', __('bulk.print_letter'), ''); ?></li>
                     <?php endif; ?>
                     <?php if ($canPrintForm): ?>
                     <li><?php $printItem($printFormUrl, $printFormIcon, $printFormLabel, $printBlockedTip); ?></li>
@@ -325,7 +329,7 @@ $hasSecondaryActions = $secondaryActions !== [];
                     <li class="js-mail-draft-item d-none d-lg-block">
                         <a class="dropdown-item js-mail-draft" href="<?= e($mailDraftUrl) ?>"
                            title="<?= e(__('mail_draft.action_tip')) ?>" data-bs-toggle="tooltip" data-bs-placement="top">
-                            <i class="bi bi-envelope-paper me-2"></i><?= e(__('mail_draft.action')) ?>
+                            <i class="bi bi-envelope-paper" aria-hidden="true"></i><span><?= e(__('mail_draft.action')) ?></span>
                         </a>
                     </li>
                     <?php endif; ?>
@@ -334,7 +338,7 @@ $hasSecondaryActions = $secondaryActions !== [];
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <a class="dropdown-item" href="<?= e(base_url('correspondence/close_print.php?id='.(int)$corr['id'])) ?>" target="_blank" rel="noopener">
-                            <i class="bi bi-printer me-2"></i><?= e(__('close.print')) ?>
+                            <i class="bi bi-printer" aria-hidden="true"></i><span><?= e(__('close.print')) ?></span>
                         </a>
                     </li>
                     <?php endif; ?>
@@ -365,20 +369,22 @@ $hasSecondaryActions = $secondaryActions !== [];
 
             <?php if ($showEdit && $editLockTip !== ''): ?>
                 <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e($editLockTip) ?>">
-                    <button type="button" class="btn btn-kff corr-action-primary" disabled>
-                        <i class="bi bi-pencil-square me-1"></i><?= e(__('action.edit')) ?>
+                    <button type="button" class="btn btn-icon btn-kff" disabled aria-disabled="true" aria-label="<?= e(__('action.edit')) ?>">
+                        <i class="bi bi-pencil-square" aria-hidden="true"></i>
                     </button>
                 </span>
             <?php elseif ($showEdit): ?>
-                <a class="btn btn-kff corr-action-primary" href="<?= e(base_url($typeFolder . '/edit.php?id='.(int)$corr['id'])) ?>">
-                    <i class="bi bi-pencil-square me-1"></i><?= e(__('action.edit')) ?>
-                </a>
+                <?= btn_icon(__('action.edit'), [
+                    'href' => base_url($typeFolder . '/edit.php?id=' . (int) $corr['id']),
+                    'icon' => 'bi-pencil-square',
+                    'class' => 'btn-kff',
+                ]) ?>
             <?php endif; ?>
 
             <?php if ($hasSecondaryActions): ?>
-            <div class="corr-actions-more dropdown d-md-none">
-                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?= e(__('corr.more_actions')) ?>">
-                    <i class="bi bi-three-dots me-1"></i><?= e(__('corr.more_actions')) ?>
+            <div class="corr-actions-more dropdown d-md-none" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('corr.more_actions')) ?>">
+                <button type="button" class="btn btn-icon btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="<?= e(__('corr.more_actions')) ?>">
+                    <i class="bi bi-three-dots" aria-hidden="true"></i>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <?php foreach ($secondaryActions as $action): ?>
@@ -411,25 +417,32 @@ $hasSecondaryActions = $secondaryActions !== [];
             <?php foreach ($secondaryActions as $action): ?>
                 <?php
                 $btnClass = trim((string) ($action['class'] ?? 'btn-outline-secondary'));
+                $actionLabel = (string) $action['label'];
+                $actionIcon = (string) $action['icon'];
                 ?>
                 <?php if (($action['disabled'] ?? '') !== ''): ?>
                     <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e((string) $action['disabled']) ?>">
-                        <span class="btn <?= e($btnClass) ?> corr-action-secondary disabled" aria-disabled="true">
-                            <i class="bi <?= e((string) $action['icon']) ?> me-1"></i><?= e((string) $action['label']) ?>
+                        <span class="btn btn-icon <?= e($btnClass) ?> disabled" aria-disabled="true" aria-label="<?= e($actionLabel) ?>">
+                            <i class="bi <?= e($actionIcon) ?>" aria-hidden="true"></i>
                         </span>
                     </span>
                 <?php elseif (($action['kind'] ?? '') === 'modal'): ?>
-                    <button type="button" class="btn <?= e($btnClass) ?> corr-action-secondary" data-bs-toggle="modal" data-bs-target="<?= e((string) ($action['modal'] ?? '')) ?>">
-                        <i class="bi <?= e((string) $action['icon']) ?> me-1"></i><?= e((string) $action['label']) ?>
-                    </button>
+                    <span class="d-inline-block" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e($actionLabel) ?>">
+                        <button type="button" class="btn btn-icon <?= e($btnClass) ?>" data-bs-toggle="modal" data-bs-target="<?= e((string) ($action['modal'] ?? '')) ?>" aria-label="<?= e($actionLabel) ?>">
+                            <i class="bi <?= e($actionIcon) ?>" aria-hidden="true"></i>
+                        </button>
+                    </span>
                 <?php else: ?>
-                    <a class="btn <?= e($btnClass) ?> corr-action-secondary" href="<?= e((string) ($action['href'] ?? '#')) ?>">
-                        <i class="bi <?= e((string) $action['icon']) ?> me-1"></i><?= e((string) $action['label']) ?>
-                    </a>
+                    <?= btn_icon($actionLabel, [
+                        'href' => (string) ($action['href'] ?? '#'),
+                        'icon' => $actionIcon,
+                        'class' => $btnClass,
+                    ]) ?>
                 <?php endif; ?>
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
+        <?= dms_back_icon(base_url($ccViewerOnly ? 'cc/index.php' : $typeFolder . '/index.php')) ?>
     </div>
 </div>
 
