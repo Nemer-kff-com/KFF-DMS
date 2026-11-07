@@ -920,6 +920,39 @@ function print_org_work_name(): string
     return $ar !== '' ? $ar : $en;
 }
 
+/**
+ * اسم القسم لخيار طباعة «موجهة من» بالقسم وجهة العمل.
+ * صادر/داخلي: مكتب الإصدار. وارد: فارغ لأن «موجهة من» جهة خارجية.
+ */
+function print_from_department_name(array $corr): string
+{
+    $type = (string) ($corr['type'] ?? '');
+    if ($type === 'incoming') {
+        return '';
+    }
+    if ($type === 'internal' && function_exists('correspondence_internal_route_names')) {
+        $from = trim((string) (correspondence_internal_route_names($corr)['from'] ?? ''));
+        if ($from !== '') {
+            return $from;
+        }
+    }
+    $name = '';
+    if (function_exists('department_display_name')) {
+        $name = department_display_name($corr, 'issuing_department_name', 'issuing_department_name_en');
+        if ($name === '') {
+            $name = department_display_name($corr, 'department_name', 'department_name_en');
+        }
+    }
+    if ($name === '') {
+        $name = trim((string) ($corr['issuing_department_name'] ?? ''));
+    }
+    if ($name === '') {
+        $name = trim((string) ($corr['department_name'] ?? ''));
+    }
+
+    return $name;
+}
+
 function print_signer_titles(): array
 {
     $titles = [];
@@ -1144,15 +1177,35 @@ function render_print_direction(array $corr, bool $swap = false, string $tableId
         return;
     }
 
+    $fromDeptOnly = print_from_department_name($corr);
+    $fromOrgOnly = $fromDeptOnly !== '' ? print_org_work_name() : '';
     $tableId = preg_replace('/[^A-Za-z0-9_-]/', '', $tableId) ?: 'printDirection';
     echo '<table class="table table-bordered print-direction" id="' . e($tableId) . '">';
     foreach ($keys as $key) {
         echo '<tr data-dir-row="' . e($key) . '">';
-        echo '<th>' . e($labels[$key]) . '</th><td>';
+        echo '<th>' . e($labels[$key]) . '</th>';
+        if ($key === 'from' && $fromDeptOnly !== '') {
+            echo '<td data-dept-only="' . e($fromDeptOnly) . '" data-org-only="' . e($fromOrgOnly) . '">';
+        } else {
+            echo '<td>';
+        }
         render_print_party_stack($parts[$key]);
         echo '</td></tr>';
     }
     echo '</table>';
+}
+
+/** بطاقة تبديل شريط الطباعة: اسم القسم فقط في «موجهة من» (نفس أسلوب طباعة الخطابات). */
+function render_print_from_dept_only_control(): void
+{
+    echo '<label class="letter-official-switch" for="fromDeptOnlyChk" title="' . e(__('print.from_dept_only_hint')) . '">';
+    echo '<span class="letter-official-switch-icon" aria-hidden="true"><i class="bi bi-building"></i></span>';
+    echo '<span class="letter-official-switch-text">';
+    echo '<span class="letter-official-switch-title">' . e(__('print.from_dept_only')) . '</span>';
+    echo '<span class="letter-official-switch-state" data-from-dept-state>' . e(__('print.from_dept_only_off')) . '</span>';
+    echo '</span>';
+    echo '<input type="checkbox" class="form-check-input" id="fromDeptOnlyChk" value="1" autocomplete="off">';
+    echo '</label>';
 }
 
 /**
@@ -1667,7 +1720,7 @@ function ensure_entities_schema(): void
                     directed_to VARCHAR(255) DEFAULT NULL COMMENT 'الاسم في الخطاب',
                     title_prefix VARCHAR(255) DEFAULT NULL COMMENT 'اللقب مثل سعادة أو معالي',
                     job_title VARCHAR(255) DEFAULT NULL COMMENT 'الوظيفة',
-                    honorific VARCHAR(100) DEFAULT NULL COMMENT 'التكريم مثل حفظه الله',
+                    honorific VARCHAR(100) DEFAULT NULL COMMENT 'التكريم مثل يحفظه الله',
                     phone VARCHAR(50) DEFAULT NULL,
                     mobile VARCHAR(50) DEFAULT NULL COMMENT 'الجوال لإرسال واتساب',
                     email VARCHAR(150) DEFAULT NULL,
@@ -1697,8 +1750,9 @@ function ensure_entities_schema(): void
             $pdo->exec("ALTER TABLE `tblentities` ADD COLUMN job_title VARCHAR(255) NULL DEFAULT NULL COMMENT 'الوظيفة' AFTER `$after`");
         }
         if (empty($cols['honorific'])) {
-            $pdo->exec("ALTER TABLE `tblentities` ADD COLUMN honorific VARCHAR(100) NULL DEFAULT NULL COMMENT 'التكريم مثل حفظه الله' AFTER job_title");
+            $pdo->exec("ALTER TABLE `tblentities` ADD COLUMN honorific VARCHAR(100) NULL DEFAULT NULL COMMENT 'التكريم مثل يحفظه الله' AFTER job_title");
         }
+        entity_honorific_migrate_legacy_wording();
         entity_migrate_title_prefix_from_directed_to($pdo);
         if (empty($cols['mobile'])) {
             $after = empty($cols['phone']) ? 'honorific' : 'phone';
@@ -4322,62 +4376,206 @@ function get_entity(int $id): ?array
     return $row ?: null;
 }
 
-/** عبارات التكريم الافتراضية في الخطابات */
-function entity_honorific_base_presets(): array
+/** ترحيل صياغة التكريم القديمة (حفظه الله → يحفظه الله) على الجهات والمعاملات. */
+function entity_honorific_migrate_legacy_wording(): void
 {
-    return [
-        '' => __('entities.honorific_none'),
-        'حفظه الله' => __('entities.honorific_him'),
-        'حفظها الله' => __('entities.honorific_her'),
-        'حفظهم الله' => __('entities.honorific_them'),
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    $map = [
+        'حفظه الله' => 'يحفظه الله',
+        'حفظها الله' => 'يحفظها الله',
+        'حفظهم الله' => 'يحفظهم الله',
     ];
+    try {
+        if (dms_db_table_exists('tblentities') && dms_db_column_exists('tblentities', 'honorific')) {
+            $upd = db()->prepare('UPDATE `tblentities` SET honorific = ? WHERE honorific = ?');
+            foreach ($map as $from => $to) {
+                $upd->execute([$to, $from]);
+            }
+        }
+        if (dms_db_table_exists('tblcorrespondence') && dms_db_column_exists('tblcorrespondence', 'snap_honorific')) {
+            $updCorr = db()->prepare('UPDATE `tblcorrespondence` SET snap_honorific = ? WHERE snap_honorific = ?');
+            foreach ($map as $from => $to) {
+                $updCorr->execute([$to, $from]);
+            }
+        }
+    } catch (Throwable $e) {
+        $done = false;
+    }
 }
 
-/** @return string[] */
-function entity_honorific_extra_presets(): array
+function ensure_entity_honorifics_schema(): void
 {
-    $raw = setting('entity_honorific_extra', '[]');
-    $decoded = json_decode($raw, true);
-    if (!is_array($decoded)) {
-        return [];
+    static $done = false;
+    if ($done) {
+        return;
     }
-    $out = [];
+    $done = true;
+    try {
+        db()->exec(
+            "CREATE TABLE IF NOT EXISTS `tblentity_honorifics` (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                name_ar VARCHAR(100) NOT NULL,
+                name_en VARCHAR(150) NULL DEFAULT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                is_system TINYINT(1) NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_entity_honorific_ar (name_ar)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        entity_honorific_migrate_legacy_wording();
+        entity_honorific_seed_defaults();
+        entity_honorific_migrate_extras_setting();
+    } catch (Throwable $e) {
+        $done = false;
+    }
+}
+
+function entity_honorific_seed_defaults(): void
+{
+    if (!dms_db_table_exists('tblentity_honorifics')) {
+        return;
+    }
+    $defaults = [
+        ['يحفظه الله', 'may God protect him', 10],
+        ['يحفظها الله', 'may God protect her', 20],
+        ['يحفظهم الله', 'may God protect them', 30],
+    ];
+    $chk = db()->prepare('SELECT id FROM `tblentity_honorifics` WHERE name_ar = ? LIMIT 1');
+    $ins = db()->prepare(
+        'INSERT INTO `tblentity_honorifics` (name_ar, name_en, sort_order, is_active, is_system)
+         VALUES (?, ?, ?, 1, 1)'
+    );
+    foreach ($defaults as [$ar, $en, $sort]) {
+        $chk->execute([$ar]);
+        if ($chk->fetchColumn()) {
+            continue;
+        }
+        $ins->execute([$ar, $en, $sort]);
+    }
+}
+
+/** ينقل البنود الإضافية القديمة من الإعدادات إلى الجدول مرة واحدة. */
+function entity_honorific_migrate_extras_setting(): void
+{
+    if (!function_exists('setting') || !dms_db_table_exists('tblentity_honorifics')) {
+        return;
+    }
+    $raw = setting('entity_honorific_extra', '');
+    if ($raw === '' || $raw === '[]') {
+        return;
+    }
+    $decoded = json_decode((string) $raw, true);
+    if (!is_array($decoded)) {
+        return;
+    }
     foreach ($decoded as $item) {
         $value = trim((string) $item);
-        if ($value !== '' && !in_array($value, $out, true)) {
-            $out[] = $value;
+        if ($value === '') {
+            continue;
         }
+        entity_honorific_save_extra_preset($value);
     }
-    return $out;
+    if (function_exists('set_setting')) {
+        set_setting('entity_honorific_extra', '[]', 'بنود التكريم الإضافية لجهات المراسلة');
+    }
 }
 
+/** @return list<array<string,mixed>> */
+function entity_honorifics_list(bool $activeOnly = true): array
+{
+    ensure_entity_honorifics_schema();
+    try {
+        $sql = 'SELECT * FROM `tblentity_honorifics`';
+        if ($activeOnly) {
+            $sql .= ' WHERE is_active = 1';
+        }
+        $sql .= ' ORDER BY sort_order, id';
+        return db()->query($sql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function entity_honorific_label(array $row): string
+{
+    $ar = trim((string) ($row['name_ar'] ?? ''));
+    $en = trim((string) ($row['name_en'] ?? ''));
+    if (function_exists('lang') && lang() === 'en' && $en !== '') {
+        return $en;
+    }
+    return $ar !== '' ? $ar : $en;
+}
+
+/** عبارات التكريم للقوائم المنسدلة في بطاقة الجهة */
 function entity_honorific_presets(): array
 {
-    $presets = entity_honorific_base_presets();
-    foreach (entity_honorific_extra_presets() as $extra) {
-        if (!array_key_exists($extra, $presets)) {
-            $presets[$extra] = $extra;
+    ensure_entity_honorifics_schema();
+    $presets = ['' => __('entities.honorific_none')];
+    foreach (entity_honorifics_list(true) as $row) {
+        $phrase = trim((string) ($row['name_ar'] ?? ''));
+        if ($phrase === '') {
+            continue;
         }
+        $presets[$phrase] = entity_honorific_label($row);
     }
     return $presets;
 }
 
 function entity_honorific_save_extra_preset(string $value): bool
 {
+    ensure_entity_honorifics_schema();
     $value = trim($value);
     if ($value === '' || mb_strlen($value) > 100) {
         return false;
     }
-    if (array_key_exists($value, entity_honorific_base_presets())) {
+    try {
+        $chk = db()->prepare('SELECT id FROM `tblentity_honorifics` WHERE name_ar = ? LIMIT 1');
+        $chk->execute([$value]);
+        if ($chk->fetchColumn()) {
+            return true;
+        }
+        $sort = (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM `tblentity_honorifics`')->fetchColumn();
+        db()->prepare(
+            'INSERT INTO `tblentity_honorifics` (name_ar, name_en, sort_order, is_active, is_system)
+             VALUES (?, NULL, ?, 1, 0)'
+        )->execute([$value, $sort]);
+        return true;
+    } catch (Throwable $e) {
         return false;
     }
-    $extras = entity_honorific_extra_presets();
-    if (in_array($value, $extras, true)) {
-        return true;
+}
+
+function entity_honorific_usage_count(string $phrase): int
+{
+    $phrase = trim($phrase);
+    if ($phrase === '' || !dms_db_table_exists('tblentities') || !dms_db_column_exists('tblentities', 'honorific')) {
+        return 0;
     }
-    $extras[] = $value;
-    set_setting('entity_honorific_extra', json_encode(array_values($extras), JSON_UNESCAPED_UNICODE), 'بنود التكريم الإضافية لجهات المراسلة');
-    return true;
+    try {
+        $st = db()->prepare('SELECT COUNT(*) FROM `tblentities` WHERE honorific = ?');
+        $st->execute([$phrase]);
+        return (int) $st->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+function entity_honorific_remap_phrase(string $from, string $to): void
+{
+    $from = trim($from);
+    $to = trim($to);
+    if ($from === '' || $to === '' || $from === $to) {
+        return;
+    }
+    if (!dms_db_table_exists('tblentities') || !dms_db_column_exists('tblentities', 'honorific')) {
+        return;
+    }
+    db()->prepare('UPDATE `tblentities` SET honorific = ? WHERE honorific = ?')->execute([$to, $from]);
 }
 
 /** @return string[] */
@@ -4893,11 +5091,19 @@ function render_corr_list_person(array $part): void
 {
     $prefix = trim((string) ($part['prefix'] ?? ''));
     $person = trim((string) ($part['person'] ?? ''));
+    $honorific = trim((string) ($part['honorific'] ?? ''));
     if ($prefix !== '') {
         echo '<div class="small text-muted lh-sm">' . e($prefix) . '</div>';
     }
-    if ($person !== '') {
-        echo '<div' . ($prefix !== '' ? ' class="fw-semibold"' : '') . '>' . e($person) . '</div>';
+    if ($person !== '' || $honorific !== '') {
+        echo '<div' . ($prefix !== '' ? ' class="fw-semibold"' : '') . '>';
+        if ($person !== '') {
+            echo e($person);
+        }
+        if ($honorific !== '') {
+            echo ($person !== '' ? ' ' : '') . '<span class="corr-party-honorific">' . e($honorific) . '</span>';
+        }
+        echo '</div>';
     }
 }
 
@@ -7738,10 +7944,197 @@ function ensure_corr_letter_schema(): void
  * @param array<string,mixed> $data
  * @return array<string,mixed>
  */
+/** أول مستلم من النموذج: entity_id أو أول entity_ids[]. */
+function correspondence_preview_entity_id(array $data): int
+{
+    $id = (int) ($data['entity_id'] ?? 0);
+    if ($id > 0) {
+        return $id;
+    }
+    $ids = $data['entity_ids'] ?? null;
+    if (!is_array($ids)) {
+        if ($ids === null || $ids === '') {
+            return 0;
+        }
+        $ids = [$ids];
+    }
+    foreach ($ids as $raw) {
+        $eid = (int) $raw;
+        if ($eid > 0) {
+            return $eid;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * يضمن وجود رابط مكان الاجتماع على صف المعاينة (نموذج → صف → دفعة).
+ *
+ * @param array<string, mixed> $row
+ * @param array<string, mixed> $data
+ * @return array<string, mixed>
+ */
+function letter_preview_ensure_letter_link(array $row, array $data = [], int $batchId = 0): array
+{
+    $url = trim((string) ($row['letter_link_url'] ?? ''));
+    $label = trim((string) ($row['letter_link_label'] ?? ''));
+    if ($url === '' || !preg_match('#^https?://#i', $url)) {
+        $postedUrl = trim((string) ($data['letter_link_url'] ?? ''));
+        $postedLabel = trim((string) ($data['letter_link_label'] ?? ''));
+        if ($postedUrl !== '' && preg_match('#^https?://#i', $postedUrl)) {
+            $url = $postedUrl;
+            $label = $postedLabel;
+        }
+    }
+    if (($url === '' || !preg_match('#^https?://#i', $url)) && $batchId > 0) {
+        try {
+            $bst = db()->prepare(
+                'SELECT letter_link_label, letter_link_url FROM `tbloutgoing_batches` WHERE id = ? LIMIT 1'
+            );
+            $bst->execute([$batchId]);
+            $brow = $bst->fetch(PDO::FETCH_ASSOC) ?: [];
+            $batchUrl = trim((string) ($brow['letter_link_url'] ?? ''));
+            if ($batchUrl !== '' && preg_match('#^https?://#i', $batchUrl)) {
+                $url = $batchUrl;
+                $label = trim((string) ($brow['letter_link_label'] ?? ''));
+            }
+        } catch (Throwable $e) {
+            // تجاهل — المعاينة تبقى بدون رابط
+        }
+    }
+    if ($url !== '' && preg_match('#^https?://#i', $url)) {
+        $row['letter_link_url'] = $url;
+        $row['letter_link_label'] = $label !== '' ? $label : null;
+    }
+
+    return $row;
+}
+
+/**
+ * صف معاينة الخطاب/البريد: أول مستلم من القائمة أو أول خطاب في الدفعة.
+ *
+ * @return array<string, mixed>
+ */
+function letter_preview_form_row(array $data, ?array $user = null, string $lang = 'ar', int $deptId = 0): array
+{
+    $user = $user ?? (function_exists('current_user') ? current_user() : null);
+    $lang = $lang === 'en' ? 'en' : 'ar';
+    $entityId = correspondence_preview_entity_id($data);
+    if ($entityId > 0) {
+        $data['entity_id'] = $entityId;
+    }
+    $batchId = (int) ($data['batch_id'] ?? 0);
+    // صادر فردي: correspondence_id من نموذج التعديل (لا تخلطه مع id القالب)
+    $corrId = (int) ($data['correspondence_id'] ?? $data['corr_id'] ?? 0);
+
+    $base = null;
+    if ($corrId > 0 && function_exists('get_correspondence')) {
+        $loaded = get_correspondence($corrId);
+        if (is_array($loaded) && ($loaded['type'] ?? '') === 'outgoing') {
+            if (!(function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($loaded))) {
+                $base = $loaded;
+                if ($batchId <= 0) {
+                    $batchId = (int) ($loaded['batch_id'] ?? 0);
+                }
+                if ($entityId <= 0) {
+                    $entityId = (int) ($loaded['entity_id'] ?? 0);
+                    if ($entityId > 0) {
+                        $data['entity_id'] = $entityId;
+                    }
+                }
+            }
+        }
+    }
+    if ($base === null && $batchId > 0 && function_exists('outgoing_batch_items_unscoped')) {
+        $items = outgoing_batch_items_unscoped($batchId);
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($item)) {
+                continue;
+            }
+            if ($entityId > 0 && (int) ($item['entity_id'] ?? 0) !== $entityId) {
+                continue;
+            }
+            $base = $item;
+            break;
+        }
+        // إن لم يُطابق entity_id، خذ أول مستلم في الدفعة
+        if ($base === null) {
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($item)) {
+                    continue;
+                }
+                $base = $item;
+                break;
+            }
+        }
+    }
+
+    $draft = function_exists('correspondence_outgoing_draft_row')
+        ? correspondence_outgoing_draft_row($data, $user, $base === null && $entityId <= 0)
+        : [];
+
+    if (is_array($base) && $base !== []) {
+        $row = $base;
+        foreach ([
+            'subject', 'letter_body', 'letter_body_en', 'rsvp_required', 'rsvp_allow_remote',
+            'letter_link_label', 'letter_link_url', 'email_letter_attach',
+            'intend_electronic', 'intend_paper', 'department_id', 'issuing_department_id',
+        ] as $key) {
+            if (is_array($draft) && array_key_exists($key, $draft) && $draft[$key] !== null && $draft[$key] !== '') {
+                $row[$key] = $draft[$key];
+            }
+        }
+        if (is_array($draft) && array_key_exists('rsvp_required', $draft)) {
+            $row['rsvp_required'] = (int) $draft['rsvp_required'];
+        }
+        // نص المحرر غير المحفوظ يتقدّم على نص الدفعة
+        $postedBody = trim((string) ($data['letter_body'] ?? $data['body'] ?? ''));
+        $postedBodyEn = trim((string) ($data['letter_body_en'] ?? ''));
+        if ($lang === 'en') {
+            if ($postedBody !== '') {
+                $row['letter_body_en'] = $postedBody;
+            } elseif ($postedBodyEn !== '') {
+                $row['letter_body_en'] = $postedBodyEn;
+            }
+        } elseif ($postedBody !== '') {
+            $row['letter_body'] = $postedBody;
+        }
+
+        return letter_preview_ensure_letter_link($row, $data, $batchId);
+    }
+
+    if (is_array($draft) && $draft !== [] && ((int) ($draft['entity_id'] ?? 0) > 0 || $entityId > 0)) {
+        return letter_preview_ensure_letter_link($draft, $data, $batchId);
+    }
+
+    if (is_array($draft) && $draft !== [] && trim((string) ($draft['snap_person_name'] ?? '')) !== '') {
+        return letter_preview_ensure_letter_link($draft, $data, $batchId);
+    }
+
+    $sample = function_exists('letter_preview_sample_row')
+        ? letter_preview_sample_row($lang, $deptId > 0 ? $deptId : (int) ($draft['department_id'] ?? 0))
+        : [];
+    $merged = is_array($draft) && $draft !== [] ? array_merge($sample, $draft) : $sample;
+
+    return letter_preview_ensure_letter_link(is_array($merged) ? $merged : [], $data, $batchId);
+}
+
 function correspondence_outgoing_draft_row(array $data, ?array $user = null, bool $sampleIfNoEntity = true): array
 {
     $user = $user ?? (function_exists('current_user') ? current_user() : null);
-    $entityId = (int) ($data['entity_id'] ?? 0);
+    $entityId = function_exists('correspondence_preview_entity_id')
+        ? correspondence_preview_entity_id($data)
+        : (int) ($data['entity_id'] ?? 0);
+    if ($entityId > 0) {
+        $data['entity_id'] = $entityId;
+    }
     $entity = ($entityId > 0 && function_exists('get_entity')) ? get_entity($entityId) : null;
     $subject = trim((string) ($data['subject'] ?? ''));
     $corrDate = trim((string) ($data['corr_date'] ?? '')) ?: date('Y-m-d');
@@ -7755,6 +8148,24 @@ function correspondence_outgoing_draft_row(array $data, ?array $user = null, boo
     $rsvp = (!empty($data['rsvp_required']) || !empty($data['requires_rsvp'])) ? 1 : 0;
     $rsvpAllowRemote = ($rsvp === 1 && (string) ($data['rsvp_allow_remote'] ?? '1') === '0') ? 0 : 1;
 
+    $linkLabel = '';
+    $linkUrl = '';
+    if (function_exists('correspondence_normalize_letter_link_input')) {
+        try {
+            [$linkLabel, $linkUrl] = correspondence_normalize_letter_link_input($data);
+        } catch (Throwable $e) {
+            $linkLabel = trim((string) ($data['letter_link_label'] ?? ''));
+            $linkUrl = trim((string) ($data['letter_link_url'] ?? ''));
+            if ($linkUrl !== '' && !preg_match('#^https?://#i', $linkUrl)) {
+                $linkUrl = '';
+                $linkLabel = '';
+            }
+        }
+    } else {
+        $linkLabel = trim((string) ($data['letter_link_label'] ?? ''));
+        $linkUrl = trim((string) ($data['letter_link_url'] ?? ''));
+    }
+
     $row = [
         'id' => (int) ($data['id'] ?? 0),
         'type' => 'outgoing',
@@ -7767,10 +8178,15 @@ function correspondence_outgoing_draft_row(array $data, ?array $user = null, boo
         'rsvp_allow_remote' => $rsvpAllowRemote,
         'intend_electronic' => !empty($data['intend_electronic']) ? 1 : 0,
         'intend_paper' => !empty($data['intend_paper']) ? 1 : 0,
+        'email_letter_attach' => !empty($data['email_letter_attach']) ? 1 : 0,
+        'letter_link_label' => $linkLabel !== '' ? $linkLabel : null,
+        'letter_link_url' => $linkUrl !== '' ? $linkUrl : null,
         'department_id' => $deptId > 0 ? $deptId : null,
         'issuing_department_id' => $issuingId > 0 ? $issuingId : null,
         'entity_id' => $entityId > 0 ? $entityId : null,
-        'qr_token' => 'preview',
+        'qr_token' => preg_match('/^[a-f0-9]{32}$/', strtolower(trim((string) ($data['qr_token'] ?? ''))))
+            ? strtolower(trim((string) $data['qr_token']))
+            : 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     ];
     if ($row['ref_number'] === '' && function_exists('corr_ref_sample')) {
         $row['ref_number'] = corr_ref_sample(function_exists('setting') ? (string) setting('outgoing_prefix', '') : '');
@@ -8114,6 +8530,11 @@ function render_letter_rsvp_notice(array $corr, string $lang = 'ar'): void
     if (function_exists('letter_end_with_action_cta')) {
         $text = letter_end_with_action_cta($text, 'print');
     }
+    // ضمان رمز صالح للمعاينة إن نُقص من الصف
+    $token = strtolower(trim((string) ($corr['qr_token'] ?? '')));
+    if (!preg_match('/^[a-f0-9]{32}$/', $token)) {
+        $corr = array_merge($corr, ['qr_token' => 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']);
+    }
     $qrUri = dms_corr_qr_data_uri($corr, 0, true);
     $rsvpUrl = function_exists('dms_corr_rsvp_url') ? dms_corr_rsvp_url($corr, true) : '';
     $qrImg = $qrUri !== '' && function_exists('dms_qr_img_tag')
@@ -8269,10 +8690,21 @@ function save_outgoing_receipt(int $corrId, array $data, ?array $file, int $user
         throw new InvalidArgumentException(__('corr.not_found'));
     }
     correspondence_assert_mutable($corr);
-    if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
-        $msg = function_exists('outgoing_approval_block_post_issue')
-            ? outgoing_approval_block_post_issue($corr)
-            : __('issue_appr.blocked_post_issue');
+    $actor = function_exists('current_user') ? current_user() : null;
+    if (!is_array($actor) || (int) ($actor['id'] ?? 0) !== $userId) {
+        $st = db()->prepare('SELECT * FROM `tblusers` WHERE id = ? LIMIT 1');
+        $st->execute([$userId]);
+        $actor = $st->fetch(PDO::FETCH_ASSOC) ?: ['id' => $userId];
+    }
+    if (function_exists('outgoing_user_may_issue')
+        ? !outgoing_user_may_issue($actor, $corr)
+        : (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr))
+    ) {
+        $msg = function_exists('outgoing_user_issue_block_reason')
+            ? outgoing_user_issue_block_reason($actor, $corr)
+            : (function_exists('outgoing_approval_block_post_issue')
+                ? outgoing_approval_block_post_issue($corr)
+                : __('issue_appr.blocked_post_issue'));
         throw new RuntimeException($msg !== '' ? $msg : __('issue_appr.blocked_post_issue'));
     }
 
@@ -8361,10 +8793,16 @@ function clear_outgoing_receipt_file(int $corrId): void
         throw new InvalidArgumentException(__('corr.not_found'));
     }
     correspondence_assert_mutable($corr);
-    if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
-        $msg = function_exists('outgoing_approval_block_post_issue')
-            ? outgoing_approval_block_post_issue($corr)
-            : __('issue_appr.blocked_post_issue');
+    $actor = function_exists('current_user') ? current_user() : null;
+    if (function_exists('outgoing_user_may_issue')
+        ? !outgoing_user_may_issue(is_array($actor) ? $actor : null, $corr)
+        : (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr))
+    ) {
+        $msg = function_exists('outgoing_user_issue_block_reason')
+            ? outgoing_user_issue_block_reason(is_array($actor) ? $actor : null, $corr)
+            : (function_exists('outgoing_approval_block_post_issue')
+                ? outgoing_approval_block_post_issue($corr)
+                : __('issue_appr.blocked_post_issue'));
         throw new RuntimeException($msg !== '' ? $msg : __('issue_appr.blocked_post_issue'));
     }
     $path = (string) ($corr['receipt_file_path'] ?? '');

@@ -5,7 +5,8 @@
  * اختياري: $entityLetterControlClass, $entityLetterSelectClass
  */
 $entityLetterControlClass = $entityLetterControlClass ?? 'form-control';
-$entityLetterSelectClass = $entityLetterSelectClass ?? 'form-select';
+$entityLetterSelectClass = $entityLetterSelectClass ?? 'form-select';$canAddHonorificPreset = $canAddHonorificPreset
+    ?? (function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user ?? (function_exists('current_user') ? current_user() : null)));
 ?>
 <label class="form-label" for="<?= e($efId('entity_honorific')) ?>"><?= e(__('entities.honorific')) ?></label>
 <select name="honorific_choice" id="<?= e($efId('entity_honorific')) ?>" class="<?= e($entityLetterSelectClass) ?> entity-letter-field">
@@ -19,6 +20,7 @@ $entityLetterSelectClass = $entityLetterSelectClass ?? 'form-select';
            value="<?= e($honorificIsCustom ? $honorificValue : '') ?>"
            placeholder="<?= e(__('entities.honorific_custom_ph')) ?>">
 </div>
+<?php if ($canAddHonorificPreset): ?>
 <div class="entity-honorific-add mt-2">
     <button type="button" class="btn btn-sm btn-link entity-honorific-add-toggle px-0" id="<?= e($efId('entityHonorificAddToggle')) ?>">
         <i class="bi bi-plus-circle me-1"></i><?= e(__('entities.honorific_add_toggle')) ?>
@@ -32,3 +34,4 @@ $entityLetterSelectClass = $entityLetterSelectClass ?? 'form-select';
         <div class="small text-danger d-none mt-1" id="<?= e($efId('entityHonorificAddError')) ?>"></div>
     </div>
 </div>
+<?php endif; ?>

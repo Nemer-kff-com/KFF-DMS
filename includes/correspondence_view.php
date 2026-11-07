@@ -20,8 +20,9 @@ $qrContent = $showThermalSide ? dms_corr_qr_content($corr) : '';
 $isInternal = ($corr['type'] ?? '') === 'internal';
 $isIncoming = !$isOutgoing && !$isInternal;
 $canIssueActions = !$isOutgoing
-    || !function_exists('outgoing_can_issue')
-    || outgoing_can_issue($corr);
+    || (function_exists('outgoing_user_may_issue')
+        ? outgoing_user_may_issue($user, $corr)
+        : (!function_exists('outgoing_can_issue') || outgoing_can_issue($corr)));
 $issueBlockPost = ($isOutgoing && !$canIssueActions && function_exists('outgoing_approval_block_post_issue'))
     ? outgoing_approval_block_post_issue($corr)
     : '';
@@ -561,9 +562,17 @@ $closeDetailsUrl = base_url('correspondence/close.php?id=' . (int) $corr['id']);
 
         <?php if ($letterText !== ''): ?>
         <div class="card-panel mb-3">
-            <div class="card-header"><i class="bi bi-file-text me-1"></i><?= e(__('corr.letter_body')) ?></div>
+            <div class="card-header"><i class="bi bi-file-earmark-font me-1"></i><?= e(__('corr.letter_body')) ?></div>
             <div class="card-body">
-                <div class="corr-letter-text" dir="<?= $letterLang === 'en' ? 'ltr' : 'rtl' ?>"><?= render_letter_body_html($letterText, false, $corr) ?></div>
+                <div class="corr-letter-text letter-content" dir="<?= $letterLang === 'en' ? 'ltr' : 'rtl' ?>">
+                    <?= render_letter_body_html($letterText, false, $corr) ?>
+                    <?php
+                    // نفس أسفل الخطاب (مكان الاجتماع + تأكيد الحضور) للإلكتروني والورقي
+                    if ($isOutgoing && function_exists('render_letter_end_actions')) {
+                        render_letter_end_actions($corr, $letterLang);
+                    }
+                    ?>
+                </div>
             </div>
         </div>
         <?php endif; ?>

@@ -21,28 +21,30 @@ $letterSectionOpen = $letterSectionAlways
     || !empty($_POST['intend_electronic'])
     || (!empty($corr['intend_electronic']) && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST');
 ?>
-<div class="admin-form-section<?= $letterSectionOpen ? '' : ' d-none' ?>" id="outgoing-letter-section"
+<div class="admin-form-section outgoing-letter-section<?= $letterSectionOpen ? '' : ' d-none' ?>" id="outgoing-letter-section"
      <?= $letterSectionAlways ? 'data-letter-always="1"' : 'data-depends-on="intend_electronic"' ?>>
-    <div class="admin-form-section-title">
-        <span><?= e(__('bulk.letter_body')) ?></span>
+    <div class="outgoing-letter-head">
+        <div class="admin-form-section-title mb-0">
+            <span><?= e(__('bulk.letter_body')) ?></span>
+        </div>
+        <?php if ($templates): ?>
+        <div class="outgoing-letter-tpl">
+            <label class="form-label mb-0" for="letter_template_id"><?= e(__('tpl.apply')) ?></label>
+            <select name="letter_template_id" id="letter_template_id" class="form-select form-select-sm" data-letter-templates>
+                <option value=""><?= e(__('common.none')) ?></option>
+                <?php
+                $letterTplSelected = (int) ($_POST['letter_template_id'] ?? ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)));
+                foreach ($templates as $tpl): ?>
+                    <option value="<?= (int) $tpl['id'] ?>"
+                            data-body="<?= e((string) ($tpl['body'] ?? '')) ?>"
+                            data-body-en="<?= e((string) ($tpl['body_en'] ?? '')) ?>"
+                            <?= $letterTplSelected === (int) $tpl['id'] ? 'selected' : '' ?>><?= e(letter_template_label($tpl)) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
     </div>
-    <?php if ($templates): ?>
-    <div class="mb-2">
-        <label class="form-label" for="letter_template_id"><?= e(__('tpl.apply')) ?></label>
-        <select name="letter_template_id" id="letter_template_id" class="form-select" data-letter-templates>
-            <option value=""><?= e(__('common.none')) ?></option>
-            <?php
-            $letterTplSelected = (int) ($_POST['letter_template_id'] ?? ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)));
-            foreach ($templates as $tpl): ?>
-                <option value="<?= (int) $tpl['id'] ?>"
-                        data-body="<?= e((string) ($tpl['body'] ?? '')) ?>"
-                        data-body-en="<?= e((string) ($tpl['body_en'] ?? '')) ?>"
-                        <?= $letterTplSelected === (int) $tpl['id'] ? 'selected' : '' ?>><?= e(letter_template_label($tpl)) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <?php endif; ?>
-    <?php render_letter_lang_editor('letter_body', 'letter_body_en', $letterAr, $letterEn, 8, false, [], [], '', letter_signer_insert_tokens(), [
+    <?php render_letter_lang_editor('letter_body', 'letter_body_en', $letterAr, $letterEn, 12, false, [], [], '', letter_signer_insert_tokens(), [
         'template_id' => (int) ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)),
         'ar' => 'letter_body',
         'en' => 'letter_body_en',
@@ -62,25 +64,37 @@ $letterSectionOpen = $letterSectionAlways
         ? (!empty($_POST['letter_link_enable']) || $linkUrlVal !== '')
         : ($linkUrlVal !== '');
     ?>
-    <div class="mt-3">
-        <label class="corr-option-card d-inline-flex" title="<?= e(__('letter_link.enable_hint')) ?>">
-            <input type="checkbox" class="form-check-input" name="letter_link_enable" id="letter_link_enable" value="1" <?= $linkEnabled ? 'checked' : '' ?>>
-            <span class="corr-option-title"><?= e(__('letter_link.enable')) ?></span>
+    <div class="letter-link-panel letter-link-panel-compact<?= $linkEnabled ? ' is-on' : '' ?>" id="letter-link-panel">
+        <label class="letter-link-toggle" for="letter_link_enable" title="<?= e(__('letter_link.enable_hint')) ?>">
+            <input type="checkbox" class="form-check-input" name="letter_link_enable" id="letter_link_enable" value="1"
+                   <?= $linkEnabled ? 'checked' : '' ?>>
+            <span class="letter-link-toggle-copy">
+                <span class="letter-link-toggle-title">
+                    <i class="bi bi-geo-alt" aria-hidden="true"></i>
+                    <?= e(__('letter_link.enable')) ?>
+                </span>
+                <span class="letter-link-toggle-hint"><?= e(__('letter_link.enable_hint')) ?></span>
+            </span>
         </label>
         <div class="letter-link-fields<?= $linkEnabled ? '' : ' d-none' ?>" id="letter-link-fields">
-            <p class="admin-form-hint mb-2"><?= e(__('letter_link.enable_hint')) ?></p>
-            <div class="row g-2">
-                <div class="col-md-5">
+            <div class="letter-link-grid">
+                <div class="letter-link-field">
                     <label class="form-label" for="letter_link_label"><?= e(__('letter_link.label')) ?></label>
-                    <input type="text" class="form-control" name="letter_link_label" id="letter_link_label"
-                           value="<?= e($linkLabelVal) ?>" maxlength="200" placeholder="<?= e(__('letter_link.label_ph')) ?>"
-                           <?= $linkEnabled ? '' : 'disabled' ?>>
+                    <div class="input-group letter-link-input input-group-sm">
+                        <span class="input-group-text" aria-hidden="true"><i class="bi bi-tag"></i></span>
+                        <input type="text" class="form-control" name="letter_link_label" id="letter_link_label"
+                               value="<?= e($linkLabelVal) ?>" maxlength="200" placeholder="<?= e(__('letter_link.label_ph')) ?>"
+                               <?= $linkEnabled ? '' : 'disabled' ?>>
+                    </div>
                 </div>
-                <div class="col-md-7">
+                <div class="letter-link-field is-url">
                     <label class="form-label" for="letter_link_url"><?= e(__('letter_link.url')) ?></label>
-                    <input type="url" class="form-control" name="letter_link_url" id="letter_link_url" dir="ltr"
-                           value="<?= e($linkUrlVal) ?>" maxlength="500" placeholder="<?= e(__('letter_link.url_ph')) ?>"
-                           <?= $linkEnabled ? '' : 'disabled' ?>>
+                    <div class="input-group letter-link-input input-group-sm">
+                        <span class="input-group-text" aria-hidden="true"><i class="bi bi-link-45deg"></i></span>
+                        <input type="url" class="form-control" name="letter_link_url" id="letter_link_url" dir="ltr"
+                               value="<?= e($linkUrlVal) ?>" maxlength="500" placeholder="<?= e(__('letter_link.url_ph')) ?>"
+                               <?= $linkEnabled ? '' : 'disabled' ?>>
+                    </div>
                 </div>
             </div>
         </div>
@@ -117,10 +131,12 @@ $letterSectionOpen = $letterSectionAlways
 
   var linkBox = document.getElementById('letter_link_enable');
   var linkFields = document.getElementById('letter-link-fields');
+  var linkPanel = document.getElementById('letter-link-panel');
   if (linkBox && linkFields) {
     function syncLetterLink() {
       var on = !!linkBox.checked;
       linkFields.classList.toggle('d-none', !on);
+      if (linkPanel) linkPanel.classList.toggle('is-on', on);
       linkFields.querySelectorAll('input').forEach(function (input) {
         input.disabled = !on;
       });

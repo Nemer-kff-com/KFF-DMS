@@ -9,7 +9,7 @@
             }
             $stickerFile .= '.png';
             ?>
-            <div class="card-panel mb-3">
+            <div class="card-panel mb-3" id="corr-qr">
                 <div class="card-header"><i class="bi bi-upc me-1"></i><?= e(__('thermal.title')) ?></div>
                 <div class="card-body text-center p-3">
                     <div class="corr-sticker-host print-thermal-page is-50x25">

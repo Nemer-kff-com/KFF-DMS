@@ -106,6 +106,9 @@ function ensure_lookups_schema(): void
         }
 
         seed_lookup_defaults();
+        if (function_exists('ensure_entity_honorifics_schema')) {
+            ensure_entity_honorifics_schema();
+        }
     } catch (Throwable $e) {
         // قاعدة غير جاهزة
     }

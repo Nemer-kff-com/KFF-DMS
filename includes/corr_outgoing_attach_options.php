@@ -55,14 +55,31 @@ if (!isset($dmsEditDocForms)) {
     $dmsEditDocForms = '';
 }
 ?>
-<div class="admin-form-section">
-    <div class="row g-3">
+<div class="admin-form-section outgoing-attach-options-section">
+    <div class="row g-2">
         <div class="col-lg-6">
             <div class="corr-field-card h-100">
                 <?php require __DIR__ . '/corr_attachments_card_title.php'; ?>
                 <div class="corr-field-card-body">
+                <?php
+                $showEnclosure = true;
+                $attachUploadShowFile = (bool) $showDraftUpload;
+                $enclosureOnlyWhenUpload = true;
+                $dmsFile = [
+                    'name' => 'attachments[]',
+                    'id' => 'attachment',
+                    'multiple' => true,
+                    'accept' => '.pdf,.jpg,.jpeg,.png,.gif,.webp',
+                    'label' => $attachLabel,
+                    'hint' => '',
+                    'browse' => __('file.browse'),
+                    'placeholder' => $editDocuments ? __('file.placeholder_more') : __('file.placeholder'),
+                    'selected' => __('file.selected'),
+                ];
+                require __DIR__ . '/corr_attachments_upload_block.php';
+                ?>
                 <?php if ($editDocuments): ?>
-                    <div class="corr-file-list mb-2">
+                    <div class="corr-file-list mt-3">
                         <?php foreach ($editDocuments as $doc): ?>
                             <?php
                             $docId = (int) $doc['id'];
@@ -102,23 +119,6 @@ if (!isset($dmsEditDocForms)) {
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
-                <?php
-                $showEnclosure = true;
-                $attachUploadShowFile = (bool) $showDraftUpload;
-                $enclosureOnlyWhenUpload = true;
-                $dmsFile = [
-                    'name' => 'attachments[]',
-                    'id' => 'attachment',
-                    'multiple' => true,
-                    'accept' => '.pdf,.jpg,.jpeg,.png,.gif,.webp',
-                    'label' => $attachLabel,
-                    'hint' => '',
-                    'browse' => __('file.browse'),
-                    'placeholder' => $editDocuments ? __('file.placeholder_more') : __('file.placeholder'),
-                    'selected' => __('file.selected'),
-                ];
-                require __DIR__ . '/corr_attachments_upload_block.php';
-                ?>
                 </div>
             </div>
         </div>

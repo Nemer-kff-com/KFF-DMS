@@ -2,7 +2,7 @@
 
 ## الهدف
 
-صفحة **النسخ الاحتياطي** (`admin/backup.php`) — منسوخة من نظام الدعوات (`Invitations/Ceremony/admin/backup.php`) ومكيّفة لـ DMS. تتيح:
+صفحة **النسخ الاحتياطي** في الإعدادات تتيح:
 
 - نسخة **SQL** لقاعدة البيانات `dms`
 - نسخة **ZIP** لملفات المشروع
@@ -17,26 +17,7 @@
 
 ## الوصول
 
-| العنصر | المسار |
-|--------|--------|
-| الصفحة | `admin/backup.php` |
-| تنزيل ملف | `admin/backup_download.php` |
-| OAuth سحابي | `admin/backup_oauth.php` |
-| مجدول Cron | `tools/backup-maintenance/cron_scheduler.php` |
-| الإعدادات | `tools/backup-maintenance/ui_settings.json` |
-
----
-
-## الملفات البرمجية
-
-| الملف | الوظيفة |
-|-------|---------|
-| `config/backup/db.php` | إعدادات اتصال DB للنسخ |
-| `config/backup/cloud.php` | OneDrive / Google Drive OAuth ورفع |
-| `config/backup/mysql_runner.php` | إنشاء dump SQL عبر `mysqldump` |
-| `config/backup/project_runner.php` | أرشفة ZIP للمشروع |
-| `config/backup/maint.php` | تحميل/حفظ الإعدادات، استرجاع، قائمة الملفات |
-| `tools/backup-maintenance/cron_scheduler.php` | تنفيذ المهام المجدولة (CLI فقط) |
+من القائمة الجانبية ← **الإعدادات ← النسخ الاحتياطي** (مدير النظام).
 
 ---
 
@@ -71,11 +52,7 @@
 
 ### Redirect URI (يظهر في الصفحة)
 
-```text
-https://YOUR-DOMAIN/dms/admin/backup_oauth.php
-```
-
-محلياً: `http://localhost/dms/admin/backup_oauth.php`
+في Azure سجّل **Redirect URI** لصفحة ربط OneDrive في النظام (رابط إعادة التوجيه يظهر في شاشة النسخ الاحتياطي عند الربط).
 
 ### الحقول
 

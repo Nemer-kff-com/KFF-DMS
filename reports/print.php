@@ -7,6 +7,9 @@ $user = require_login();
 if (function_exists('ensure_correspondence_party_snapshot_schema')) {
     ensure_correspondence_party_snapshot_schema();
 }
+if (function_exists('ensure_correspondence_issuing_schema')) {
+    ensure_correspondence_issuing_schema();
+}
 
 require __DIR__ . '/../includes/reports_scope.php';
 
@@ -34,10 +37,14 @@ $printLimit = 2000;
 $detailStmt = db()->prepare(
     "SELECT c.ref_number, c.type, c.subject, c.party_name, c.corr_date, c.reply_due, c.status,
             c.snap_title_prefix, c.snap_person_name, c.snap_job_title, c.snap_honorific, c.snap_org_name,
+            c.snap_from_prefix, c.snap_from_person, c.snap_from_job, c.snap_from_org,
             d.name AS department_name, d.name_en AS department_name_en,
-            d.title_prefix AS department_title_prefix, d.directed_from AS department_directed_from
+            d.title_prefix AS department_title_prefix, d.directed_from AS department_directed_from,
+            idpt.name AS issuing_department_name, idpt.name_en AS issuing_department_name_en,
+            idpt.title_prefix AS issuing_title_prefix, idpt.directed_from AS issuing_directed_from
      FROM `tblcorrespondence` c
      LEFT JOIN `tbldepartments` d ON d.id = c.department_id
+     LEFT JOIN `tbldepartments` idpt ON idpt.id = IFNULL(c.issuing_department_id, c.department_id)
      WHERE $whereSql
      ORDER BY c.corr_date DESC, c.id DESC
      LIMIT " . ($printLimit + 1)
@@ -51,11 +58,31 @@ if ($detailsTruncated) {
 
 $deptLabel = '';
 $deptOffice = '';
-if ($deptId > 0) {
+$fromDeptForLabel = $issuingDeptId > 0 ? $issuingDeptId : 0;
+if ($fromDeptForLabel > 0) {
     foreach (departments_list() as $d) {
-        if ((int) $d['id'] === $deptId) {
+        if ((int) $d['id'] === $fromDeptForLabel) {
             $deptLabel = department_person_option_label($d);
             $deptOffice = department_officer_subtitle($d);
+            break;
+        }
+    }
+}
+$entityLabel = '';
+if ($entityId > 0 && function_exists('get_entity')) {
+    $ent = get_entity($entityId);
+    if ($ent) {
+        $entityLabel = trim((string) (entity_picker_payload($ent, $typeFilter === 'incoming')['display'] ?? ''));
+        if ($entityLabel === '') {
+            $entityLabel = trim((string) ($ent['name'] ?? $ent['name_ar'] ?? ''));
+        }
+    }
+}
+$toDeptLabel = '';
+if ($toDeptId > 0 && ($typeFilter === 'incoming' || $typeFilter === 'internal')) {
+    foreach (departments_list() as $d) {
+        if ((int) $d['id'] === $toDeptId) {
+            $toDeptLabel = department_person_option_label($d);
             break;
         }
     }
@@ -84,12 +111,14 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
     <div class="print-toolbar-title"><?= e(__('reports.title')) ?></div>
     <div class="d-flex flex-wrap gap-2">
         <?= dms_print_icon() ?>
-        <?= dms_back_icon(base_url('reports/index.php?' . http_build_query([
+        <?= dms_back_icon(base_url('reports/index.php?' . http_build_query(array_filter([
             'from' => $from,
             'to' => $to,
-            'department_id' => $deptId,
+            'issuing_department_id' => $issuingDeptId > 0 ? $issuingDeptId : null,
+            'department_id' => $toDeptId > 0 ? $toDeptId : null,
+            'entity_id' => $entityId > 0 ? $entityId : null,
             'type' => $typeFilter,
-        ]))) ?>
+        ], static fn ($v) => $v !== null && $v !== '')))) ?>
     </div>
 </div>
 
@@ -104,7 +133,13 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
                     <?= e(__('common.from')) ?> <?= e(format_date($from)) ?>
                     — <?= e(__('common.to')) ?> <?= e(format_date($to)) ?>
                     <?php if ($deptLabel !== ''): ?>
-                        · <?= e(__('departments.col_officer')) ?>: <?= e($deptLabel) ?><?php if ($deptOffice !== ''): ?> <span class="small"><?= e($deptOffice) ?></span><?php endif; ?>
+                        · <?= e(__('corr.filter_from')) ?>: <?= e($deptLabel) ?><?php if ($deptOffice !== ''): ?> <span class="small"><?= e($deptOffice) ?></span><?php endif; ?>
+                    <?php endif; ?>
+                    <?php if ($entityLabel !== ''): ?>
+                        · <?= e($typeFilter === 'incoming' ? __('corr.filter_from') : __('corr.filter_to')) ?>: <?= e($entityLabel) ?>
+                    <?php endif; ?>
+                    <?php if ($toDeptLabel !== ''): ?>
+                        · <?= e(__('corr.filter_to')) ?>: <?= e($toDeptLabel) ?>
                     <?php endif; ?>
                     <?php if ($typeFilter !== 'all'): ?>
                         · <?= e(__('corr.type')) ?>: <?= e(type_label($typeFilter)) ?>
@@ -167,11 +202,11 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
                 <col class="c-ref">
                 <col class="c-type">
                 <col class="c-subject">
+                <col class="c-dept">
                 <col class="c-party">
                 <col class="c-date">
                 <col class="c-date">
                 <col class="c-status">
-                <col class="c-dept">
             </colgroup>
             <thead>
                 <tr>
@@ -179,11 +214,11 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
                     <th><?= e(__('corr.number')) ?></th>
                     <th><?= e(__('corr.type')) ?></th>
                     <th><?= e(__('corr.subject')) ?></th>
-                    <th><?= e(__('corr.party')) ?></th>
+                    <th><?= e(__('corr.party_from')) ?></th>
+                    <th><?= e(__('corr.party_to')) ?></th>
                     <th><?= e(__('corr.date')) ?></th>
                     <th><?= e(__('corr.reply_due')) ?></th>
                     <th><?= e(__('corr.status')) ?></th>
-                    <th><?= e(__('departments.col_officer')) ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -200,11 +235,17 @@ $avgClose = $extras['avg_close_days'] !== null ? (string) $extras['avg_close_day
                         </span>
                     </td>
                     <td><?= e($r['subject']) ?></td>
-                    <td><?= e(correspondence_party_display_name($r)) ?></td>
+                    <td><?php render_correspondence_department_officer($r, 'issuing'); ?></td>
+                    <td><?php
+                        $partyParts = correspondence_archived_party($r);
+                        if (trim((string) ($partyParts['person'] ?? '')) === '') {
+                            $partyParts['person'] = trim((string) ($r['party_name'] ?? ''));
+                        }
+                        render_corr_list_person($partyParts);
+                    ?></td>
                     <td><?php render_corr_date_cell($r['corr_date'] ?? null); ?></td>
                     <td><?= e(format_date($r['reply_due'])) ?></td>
                     <td><?= e(status_label($r['status'])) ?></td>
-                    <td><?php render_correspondence_officer($r); ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($detailsTruncated): ?>

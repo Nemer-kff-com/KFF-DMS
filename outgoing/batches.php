@@ -11,20 +11,22 @@ $rows = outgoing_batches_list($user, 50);
 require __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header page-narrow">
-    <div>
+    <div class="page-header-main">
         <h1 class="page-title"><?= e(__('bulk.batches_title')) ?></h1>
         <p class="page-sub"><?= e(__('bulk.batches_sub')) ?></p>
     </div>
     <div class="page-header-actions">
-        <?= dms_back_icon(base_url('outgoing/index.php')) ?>
         <?php $bulkUi = dms_perm_ui('outgoing.bulk', $user); ?>
         <?php if ($bulkUi === 'allow'): ?>
-            <a class="btn btn-kff" href="<?= e(base_url('outgoing/bulk.php')) ?>">
-                <i class="bi bi-people me-1"></i><?= e(__('corr.outgoing_bulk')) ?>
-            </a>
+            <?= btn_icon(__('corr.outgoing_bulk'), [
+                'href' => base_url('outgoing/bulk.php'),
+                'icon' => 'bi-people',
+                'class' => 'btn-kff',
+            ]) ?>
         <?php elseif ($bulkUi === 'deny'): ?>
-            <?= dms_perm_denied_btn(__('corr.outgoing_bulk'), 'bi-people', 'btn-kff') ?>
+            <?= dms_perm_denied_icon_btn(__('corr.outgoing_bulk'), 'bi-people') ?>
         <?php endif; ?>
+        <?= dms_back_icon(base_url('outgoing/index.php')) ?>
     </div>
 </div>
 
@@ -59,9 +61,11 @@ require __DIR__ . '/../includes/header.php';
                     <td><span class="badge text-bg-light text-dark"><?= (int) ($r['item_count'] ?? 0) ?></span></td>
                     <td><?= e(trim((string) ($r['group_name'] ?? '')) !== '' ? (string) $r['group_name'] : __('common.none')) ?></td>
                     <td class="text-end">
-                        <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/batch.php?id=' . (int) $r['id'])) ?>">
-                            <?= e(__('corr.batch_view')) ?>
-                        </a>
+                        <?= btn_icon(__('corr.batch_view'), [
+                            'href' => base_url('outgoing/batch.php?id=' . (int) $r['id']),
+                            'icon' => 'bi-eye',
+                            'class' => 'btn-outline-primary btn-sm',
+                        ]) ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

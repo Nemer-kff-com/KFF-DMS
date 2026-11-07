@@ -9,6 +9,7 @@ if (function_exists('archive_ensure_extra_schema')) {
     archive_ensure_extra_schema();
 }
 
+$canManageHonorifics = function_exists('dms_user_is_system_admin') && dms_user_is_system_admin($user);
 $tabs = [
     'categories' => [
         'label' => __('nav.categories'),
@@ -53,6 +54,18 @@ $tabs = [
         'sub' => '',
     ],
 ];
+if ($canManageHonorifics) {
+    // تاب التكريم لمدير النظام فقط — يُدرج قبل قوائم المرجع
+    $legacyTab = $tabs['legacy_ref'];
+    unset($tabs['legacy_ref']);
+    $tabs['honorifics'] = [
+        'label' => __('lookups.honorifics'),
+        'icon' => 'bi-chat-quote',
+        'title' => __('lookups.honorifics_title'),
+        'sub' => __('lookups.honorifics_sub'),
+    ];
+    $tabs['legacy_ref'] = $legacyTab;
+}
 
 $tab = (string) ($_GET['tab'] ?? 'categories');
 if (!isset($tabs[$tab])) {
@@ -75,6 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postTab = (string) ($_POST['tab'] ?? $tab);
     if (!isset($tabs[$postTab])) {
         $postTab = 'categories';
+    }
+    if ($postTab === 'honorifics' && !$canManageHonorifics) {
+        flash('danger', __('auth.no_permission'));
+        redirect(base_url('admin/lookups.php'));
     }
     $id = (int) ($_POST['id'] ?? 0);
     $action = (string) ($_POST['action'] ?? '');
@@ -107,6 +124,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 db()->prepare('DELETE FROM `tblattachment_types` WHERE id=?')->execute([$id]);
                 flash('success', __('lookups.deleted'));
+            }
+        } elseif ($postTab === 'honorifics') {
+            ensure_entity_honorifics_schema();
+            $row = admin_row('tblentity_honorifics', $id);
+            if (!$row) {
+                flash('danger', __('common.not_found'));
+            } elseif (!empty($row['is_system'])) {
+                db()->prepare('UPDATE `tblentity_honorifics` SET is_active = 0 WHERE id = ?')->execute([$id]);
+                flash('success', __('lookups.deactivated_system'));
+            } else {
+                $phrase = trim((string) ($row['name_ar'] ?? ''));
+                $used = $phrase !== '' ? entity_honorific_usage_count($phrase) : 0;
+                if ($used > 0) {
+                    db()->prepare('UPDATE `tblentity_honorifics` SET is_active = 0 WHERE id = ?')->execute([$id]);
+                    flash('success', __('lookups.honorifics_deactivated_used'));
+                } else {
+                    db()->prepare('DELETE FROM `tblentity_honorifics` WHERE id=?')->execute([$id]);
+                    flash('success', __('lookups.deleted'));
+                }
             }
         } elseif ($postTab === 'legacy_ref') {
             $delDef = archive_catalog_def((string) ($_POST['list'] ?? $catalogKey));
@@ -180,6 +216,7 @@ $confRows = $tab === 'confidentiality' ? confidentiality_levels_list(false) : []
 $statusRows = $tab === 'statuses' ? status_levels_list(false) : [];
 $archiveTypeRows = $tab === 'archive_types' ? archive_doc_types_list(false) : [];
 $attachmentTypeRows = $tab === 'attachment_types' ? attachment_types_list(false) : [];
+$honorificRows = $tab === 'honorifics' ? entity_honorifics_list(false) : [];
 
 $catalogRows = ($tab === 'legacy_ref' && $catalogDef) ? archive_lookups($catalogDef['key'], false) : [];
 $catalogCountryOptions = [];
@@ -200,6 +237,7 @@ $count = match ($tab) {
     'confidentiality' => count($confRows),
     'statuses' => count($statusRows),
     'archive_types' => count($archiveTypeRows),
+    'honorifics' => count($honorificRows),
     'legacy_ref' => count($catalogRows),
     default => count($attachmentTypeRows),
 };
@@ -220,6 +258,7 @@ require __DIR__ . '/../includes/header.php';
             'confidentiality' => __('lookups.new_confidentiality'),
             'statuses' => __('lookups.new_status'),
             'archive_types' => __('lookups.new_type'),
+            'honorifics' => __('lookups.new_honorific'),
             'legacy_ref' => __('lookups.new_catalog'),
             default => __('lookups.new_attachment_type'),
         };
@@ -408,6 +447,66 @@ require __DIR__ . '/../includes/header.php';
                                     <form method="post" class="d-inline" data-confirm="<?= e(__('common.confirm_delete')) ?>">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="tab" value="categories">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="<?= e(__('action.delete')) ?>">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+    <?php elseif ($tab === 'honorifics'): ?>
+        <?php if (!$honorificRows): ?>
+            <div class="admin-empty">
+                <i class="bi bi-chat-quote"></i>
+                <p><?= e(__('common.no_data')) ?></p>
+            </div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0 align-middle">
+                    <thead>
+                        <tr>
+                            <th><?= e(__('lookups.sort')) ?></th>
+                            <th><?= e(__('lookups.honorific_phrase')) ?></th>
+                            <th><?= e(__('lookups.name_en')) ?></th>
+                            <th><?= e(__('common.status')) ?></th>
+                            <th class="text-end"><?= e(__('common.actions')) ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($honorificRows as $r): ?>
+                        <tr>
+                            <td><?= (int) ($r['sort_order'] ?? 0) ?></td>
+                            <td><div class="admin-entity-name"><?= e((string) ($r['name_ar'] ?? '')) ?></div></td>
+                            <td dir="ltr"><?= e((string) (($r['name_en'] ?? '') !== '' ? $r['name_en'] : __('common.none'))) ?></td>
+                            <td>
+                                <?= (int) ($r['is_active'] ?? 1)
+                                    ? '<span class="badge text-bg-success">' . e(__('common.active')) . '</span>'
+                                    : '<span class="badge text-bg-secondary">' . e(__('common.inactive')) . '</span>' ?>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <div class="admin-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            data-lookup-modal
+                                            data-kind="honorifics"
+                                            data-id="<?= (int) $r['id'] ?>"
+                                            data-sort="<?= (int) ($r['sort_order'] ?? 0) ?>"
+                                            data-name-ar="<?= e((string) ($r['name_ar'] ?? '')) ?>"
+                                            data-name-en="<?= e((string) ($r['name_en'] ?? '')) ?>"
+                                            data-active="<?= (int) ($r['is_active'] ?? 1) ?>"
+                                            title="<?= e(__('action.edit')) ?>">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form method="post" class="d-inline" data-confirm="<?= e(__('common.confirm_delete')) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="tab" value="honorifics">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
                                         <button class="btn btn-sm btn-outline-danger" type="submit" title="<?= e(__('action.delete')) ?>">

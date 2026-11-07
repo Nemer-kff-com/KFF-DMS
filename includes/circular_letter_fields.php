@@ -41,7 +41,7 @@ if ($circularElectronic && !empty($item['id']) && function_exists('get_circular_
         <input type="hidden" name="content_mode" value="<?= e($contentMode) ?>">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
             <span class="badge text-bg-light border">
-                <i class="bi <?= $circularElectronic ? 'bi-file-earmark-text' : 'bi-paperclip' ?> me-1"></i>
+                <i class="bi <?= $circularElectronic ? 'bi-file-earmark-font' : 'bi-paperclip' ?> me-1"></i>
                 <?= e($circularElectronic ? __('circular.mode_electronic') : __('circular.mode_file')) ?>
             </span>
         </div>
@@ -64,7 +64,7 @@ if ($circularElectronic && !empty($item['id']) && function_exists('get_circular_
             </label>
             <label class="circular-mode-card<?= $circularElectronic ? ' is-on' : '' ?>" for="circular_mode_electronic">
                 <input class="form-check-input" type="radio" name="content_mode" id="circular_mode_electronic" value="electronic" <?= $circularElectronic ? 'checked' : '' ?>>
-                <span class="circular-mode-icon" aria-hidden="true"><i class="bi bi-file-earmark-text"></i></span>
+                <span class="circular-mode-icon" aria-hidden="true"><i class="bi bi-file-earmark-font"></i></span>
                 <span>
                     <span class="circular-mode-title"><?= e(__('circular.mode_electronic')) ?></span>
                     <span class="circular-mode-hint"><?= e(__('circular.mode_electronic_hint')) ?></span>

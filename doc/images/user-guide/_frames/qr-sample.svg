@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" width="176" height="176" shape-rendering="crispEdges" role="img" aria-label="QR">
+  <rect width="29" height="29" fill="#fff"/>
+  <!-- finder TL -->
+  <path fill="#1a1a1a" d="M1,1h7v7h-7z M2,2h5v5h-5z"/>
+  <rect x="3" y="3" width="3" height="3" fill="#1a1a1a"/>
+  <!-- finder TR -->
+  <path fill="#1a1a1a" d="M21,1h7v7h-7z M22,2h5v5h-5z"/>
+  <rect x="23" y="3" width="3" height="3" fill="#1a1a1a"/>
+  <!-- finder BL -->
+  <path fill="#1a1a1a" d="M1,21h7v7h-7z M2,22h5v5h-5z"/>
+  <rect x="3" y="23" width="3" height="3" fill="#1a1a1a"/>
+  <!-- timing -->
+  <path fill="#1a1a1a" d="M9,1h1v1h-1z M11,1h1v1h-1z M13,1h1v1h-1z M15,1h1v1h-1z M17,1h1v1h-1z M19,1h1v1h-1z"/>
+  <path fill="#1a1a1a" d="M1,9h1v1h-1z M1,11h1v1h-1z M1,13h1v1h-1z M1,15h1v1h-1z M1,17h1v1h-1z M1,19h1v1h-1z"/>
+  <!-- sample data modules -->
+  <path fill="#1a1a1a" d="
+    M9,3h1v1h-1z M12,3h1v1h-1z M14,3h2v1h-2z M18,3h1v1h-1z
+    M10,4h1v1h-1z M13,4h1v1h-1z M16,4h1v1h-1z M19,4h1v1h-1z
+    M9,5h2v1h-2z M12,5h1v1h-1z M15,5h2v1h-2z M18,5h1v1h-1z
+    M11,6h1v1h-1z M14,6h1v1h-1z M17,6h1v1h-1z
+    M9,7h1v1h-1z M12,7h2v1h-2z M16,7h1v1h-1z M19,7h1v1h-1z
+    M10,9h1v1h-1z M13,9h1v1h-1z M15,9h1v1h-1z M18,9h2v1h-2z M22,9h1v1h-1z M25,9h1v1h-1z M27,9h1v1h-1z
+    M9,10h2v1h-2z M14,10h1v1h-1z M17,10h1v1h-1z M21,10h1v1h-1z M24,10h2v1h-2z M27,10h1v1h-1z
+    M11,11h1v1h-1z M13,11h2v1h-2z M18,11h1v1h-1z M20,11h1v1h-1z M23,11h1v1h-1z M26,11h1v1h-1z
+    M9,12h1v1h-1z M12,12h1v1h-1z M15,12h1v1h-1z M17,12h2v1h-2z M21,12h2v1h-2z M25,12h1v1h-1z M27,12h1v1h-1z
+    M10,13h1v1h-1z M13,13h1v1h-1z M16,13h1v1h-1z M19,13h1v1h-1z M22,13h1v1h-1z M24,13h2v1h-2z
+    M9,14h2v1h-2z M14,14h1v1h-1z M17,14h1v1h-1z M20,14h1v1h-1z M23,14h1v1h-1z M26,14h1v1h-1z
+    M11,15h1v1h-1z M13,15h1v1h-1z M16,15h2v1h-2z M21,15h1v1h-1z M24,15h1v1h-1z M27,15h1v1h-1z
+    M9,16h1v1h-1z M12,16h1v1h-1z M15,16h1v1h-1z M18,16h1v1h-1z M20,16h2v1h-2z M25,16h1v1h-1z
+    M10,17h1v1h-1z M13,17h2v1h-2z M17,17h1v1h-1z M19,17h1v1h-1z M22,17h1v1h-1z M24,17h1v1h-1z M26,17h2v1h-2z
+    M9,18h2v1h-2z M14,18h1v1h-1z M16,18h1v1h-1z M20,18h1v1h-1z M23,18h2v1h-2z M27,18h1v1h-1z
+    M11,19h1v1h-1z M13,19h1v1h-1z M15,19h2v1h-2z M19,19h1v1h-1z M21,19h1v1h-1z M25,19h1v1h-1z
+    M9,20h1v1h-1z M12,20h1v1h-1z M16,20h1v1h-1z M18,20h2v1h-2z M22,20h1v1h-1z M24,20h1v1h-1z M27,20h1v1h-1z
+    M10,21h1v1h-1z M13,21h1v1h-1z M15,21h1v1h-1z M19,21h1v1h-1z
+    M9,22h2v1h-2z M14,22h1v1h-1z M17,22h1v1h-1z M20,22h1v1h-1z
+    M11,23h1v1h-1z M13,23h2v1h-2z M16,23h1v1h-1z M19,23h1v1h-1z
+    M9,24h1v1h-1z M12,24h1v1h-1z M15,24h1v1h-1z M18,24h1v1h-1z
+    M10,25h1v1h-1z M13,25h1v1h-1z M16,25h2v1h-2z M19,25h1v1h-1z
+    M9,26h2v1h-2z M14,26h1v1h-1z M17,26h1v1h-1z
+    M11,27h1v1h-1z M13,27h1v1h-1z M16,27h1v1h-1z M18,27h2v1h-2z
+  "/>
+</svg>

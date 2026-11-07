@@ -30,8 +30,8 @@ function dms_permission_catalog(): array
             'outgoing.view_thermal' => $p('معاينة الملصق الحراري', 'View thermal sticker', ['admin', 'communications'], true, $printRoles),
             'outgoing.print_thermal' => $p('طباعة الملصق الحراري', 'Print thermal sticker', ['admin', 'communications'], true, $printRoles),
             'outgoing.dispatch' => $p(
-                'مرحلة الاتصالات — تنفيذ الطباعة بعد الاعتماد',
-                'Communications stage — print after approval',
+                'مرحلة الاتصالات — الطباعة والإرسال بعد جهوزية الصادر',
+                'Communications stage — print and send when outgoing is ready',
                 ['admin', 'communications'],
                 true,
                 ['admin', 'communications', 'archive', 'department', 'viewer']
@@ -159,12 +159,40 @@ function ensure_permissions_schema(): void
         dms_permissions_seed_new_codes();
         dms_permissions_split_view_confidential();
         dms_permissions_confine_thermal_to_comms();
+        dms_permissions_ensure_comms_send();
         db()->exec("DELETE FROM `tblrole_permissions` WHERE perm_code = 'outgoing.print_dispatch'");
         ensure_user_permissions_schema();
         db()->exec("DELETE FROM `tbluser_permissions` WHERE perm_code = 'outgoing.print_dispatch'");
     } catch (Throwable $e) {
         $done = false;
         error_log('DMS permissions schema: ' . $e->getMessage());
+    }
+}
+
+/**
+ * دور الاتصالات يحتاج الإرسال ضمن مرحلة التنفيذ (طباعة + بريد/واتساب).
+ * يُمنح مرة واحدة للأدوار الأساسية/المشتقة من communications إن كان ناقصاً.
+ */
+function dms_permissions_ensure_comms_send(): void
+{
+    if ((string) setting('perm_comms_send_ensured', '') === '1') {
+        return;
+    }
+    try {
+        $ids = db()->query(
+            "SELECT id FROM `tblroles`
+             WHERE code = 'communications' OR base_role = 'communications'"
+        )->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $ins = db()->prepare('INSERT IGNORE INTO `tblrole_permissions` (role_id, perm_code) VALUES (?, ?)');
+        foreach ($ids as $rid) {
+            $ins->execute([(int) $rid, 'outgoing.send']);
+        }
+        if (function_exists('dms_role_permissions_map')) {
+            dms_role_permissions_map(true);
+        }
+        set_setting('perm_comms_send_ensured', '1', 'منح صلاحية إرسال الصادر لدور الاتصالات (داخلي)');
+    } catch (Throwable $e) {
+        error_log('DMS ensure comms send perm: ' . $e->getMessage());
     }
 }
 

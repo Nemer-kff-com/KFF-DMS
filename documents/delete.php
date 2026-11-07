@@ -91,16 +91,83 @@ if ($isCloseDoc && !user_can('documents.delete', $user) && !user_can('correspond
     flash('danger', __('documents.delete_forbidden'));
     redirect(base_url($return));
 }
-$sharedPath = db()->prepare('SELECT COUNT(*) FROM `tbldocuments` WHERE file_path = ? AND id <> ?');
-$sharedPath->execute([(string) $doc['file_path'], $id]);
-$sharedByOther = (int) $sharedPath->fetchColumn() > 0;
-if (!$sharedByOther && dms_is_safe_upload_path((string) $doc['file_path'])) {
-    $path = dms_storage_disk_path((string) $doc['file_path']);
+// في مسودة الدفعة: احذف نسخة المرفق من كل المستلمين (المسار قد يختلف بعد النسخ بالرقم)
+$batchSiblingIds = [];
+$batchId = (int) ($corr['batch_id'] ?? 0);
+$filePath = (string) ($doc['file_path'] ?? '');
+$fileSize = (int) ($doc['file_size'] ?? 0);
+$fileType = (string) ($doc['file_type'] ?? '');
+$uploadedAt = (string) ($doc['uploaded_at'] ?? '');
+if ($batchId > 0
+    && function_exists('outgoing_batch_items_unscoped')
+    && function_exists('outgoing_batch_draft_editable')
+    && outgoing_batch_draft_editable($user, $batchId)
+) {
+    foreach (outgoing_batch_items_unscoped($batchId) as $item) {
+        $siblingCorrId = (int) ($item['id'] ?? 0);
+        if ($siblingCorrId <= 0 || $siblingCorrId === (int) $doc['correspondence_id']) {
+            continue;
+        }
+        if ($filePath !== '') {
+            $sibStmt = db()->prepare(
+                'SELECT id FROM `tbldocuments` WHERE correspondence_id = ? AND file_path = ?'
+            );
+            $sibStmt->execute([$siblingCorrId, $filePath]);
+            foreach ($sibStmt->fetchAll() as $sibDoc) {
+                $sibId = (int) ($sibDoc['id'] ?? 0);
+                if ($sibId > 0 && $sibId !== $id) {
+                    $batchSiblingIds[] = $sibId;
+                }
+            }
+        }
+        // نُسخ الدفعة بأسماء مختلفة: طابق الحجم/النوع وقرب وقت الرفع
+        if ($fileSize > 0 && $uploadedAt !== '') {
+            $sibStmt = db()->prepare(
+                'SELECT id FROM `tbldocuments`
+                 WHERE correspondence_id = ?
+                   AND file_size = ?
+                   AND file_type = ?
+                   AND ABS(TIMESTAMPDIFF(SECOND, uploaded_at, ?)) <= 120
+                   AND id <> ?'
+            );
+            $sibStmt->execute([$siblingCorrId, $fileSize, $fileType, $uploadedAt, $id]);
+            foreach ($sibStmt->fetchAll() as $sibDoc) {
+                $sibId = (int) ($sibDoc['id'] ?? 0);
+                if ($sibId > 0) {
+                    $batchSiblingIds[] = $sibId;
+                }
+            }
+        }
+    }
+}
+$deleteIds = array_values(array_unique(array_merge([$id], $batchSiblingIds)));
+$placeholders = implode(',', array_fill(0, count($deleteIds), '?'));
+$pathStmt = db()->prepare("SELECT DISTINCT file_path FROM `tbldocuments` WHERE id IN ($placeholders)");
+$pathStmt->execute($deleteIds);
+$pathsToRemove = [];
+foreach ($pathStmt->fetchAll() as $pathRow) {
+    $rel = (string) ($pathRow['file_path'] ?? '');
+    if ($rel === '') {
+        continue;
+    }
+    $sharedPath = db()->prepare(
+        "SELECT COUNT(*) FROM `tbldocuments` WHERE file_path = ? AND id NOT IN ($placeholders)"
+    );
+    $sharedPath->execute(array_merge([$rel], $deleteIds));
+    if ((int) $sharedPath->fetchColumn() === 0) {
+        $pathsToRemove[] = $rel;
+    }
+}
+foreach ($pathsToRemove as $rel) {
+    if (!dms_is_safe_upload_path($rel)) {
+        continue;
+    }
+    $path = dms_storage_disk_path($rel);
     if ($path !== '' && is_file($path)) {
         @unlink($path);
     }
 }
-db()->prepare("DELETE FROM `tbldocuments` WHERE id = ?")->execute([$id]);
-log_activity((int)$user['id'], (int)$doc['correspondence_id'], 'delete_doc', 'حذف مرفق: ' . $doc['file_name']);
+db()->prepare("DELETE FROM `tbldocuments` WHERE id IN ($placeholders)")->execute($deleteIds);
+log_activity((int) $user['id'], (int) $doc['correspondence_id'], 'delete_doc', 'حذف مرفق: ' . $doc['file_name']);
 flash('success', __('documents.deleted'));
 redirect(base_url($return));

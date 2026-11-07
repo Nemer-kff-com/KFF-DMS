@@ -507,8 +507,9 @@ function outgoing_issue_flow_active(): bool
 }
 
 /**
- * أول وجهة بعد الإنشاء حسب إعدادات النوع: prep | review | approval | none
- * (الوارد عند التسجيل يبقى في المكتب؛ الوجهة تُحسب عند إكمال المسار.)
+ * أول وجهة بعد الإنشاء حسب إعدادات النوع: prep | review | approval | comms | none
+ * الصادر: الاتصالات مرحلة مستقلة أخيرة (حتى بلا مراجعة/اعتماد).
+ * الوارد عند التسجيل يبقى في المكتب؛ الوجهة تُحسب عند إكمال المسار.
  */
 function corr_issue_first_destination(string $type): string
 {
@@ -529,17 +530,35 @@ function corr_issue_first_destination(string $type): string
             return 'approval';
         }
 
-        return 'none';
+        return $type === 'outgoing' ? 'comms' : 'none';
     });
 }
 
 /**
- * وجهة مسار النوع الحالية من الإعدادات: prep | review | approval | none
+ * وجهة مسار النوع الحالية من الإعدادات: prep | review | approval | comms | none
  * تُستخدم لرسائل التأكيد بعد تغيير الإعدادات مباشرة.
  */
 function corr_path_destination(string $type): string
 {
     return corr_issue_first_destination($type);
+}
+
+/**
+ * بعد جهوزية الصادر (إنشاء بلا مسودة أو تحويل مسودة):
+ * مراجعة/اعتماد إن وُجدت، وإلا إحالة مباشرة للاتصالات الإدارية.
+ * مسار موحّد للمفرد والجماعي.
+ */
+function outgoing_enter_next_path(int $corrId, array $user, bool $notify = true): void
+{
+    if ($corrId <= 0) {
+        return;
+    }
+    if (outgoing_issue_flow_active() && function_exists('outgoing_approval_request')) {
+        outgoing_approval_request($corrId, $user, $notify);
+
+        return;
+    }
+    outgoing_release_to_communications($corrId, $notify);
 }
 
 /** رسالة تأكيد زر الحفظ عند إنشاء صادر/وارد/داخلي — تتبع إعداد المسار. */
@@ -552,6 +571,7 @@ function corr_create_confirm_message(string $type): string
             'prep' => __('out_prep.confirm_submit'),
             'review' => __('corr.confirm_save_out_review'),
             'approval' => __('corr.confirm_save_out_approver'),
+            'comms', 'none' => __('corr.confirm_save_out'),
             default => __('corr.confirm_save_out'),
         },
         'incoming' => match ($dest) {
@@ -853,11 +873,19 @@ function corr_user_can_edit_in_cycle(array $user, array $corr): bool
         || ((int) ($user['id'] ?? 0) > 0 && (int) ($user['id'] ?? 0) === (int) ($corr['created_by'] ?? 0));
 }
 
-/** طريقة التسليم تُعدَّل في المسودة فقط، على المنشئ. نص فارغ = مسموح. */
+/**
+ * تعديل طريقة التسليم (إلكتروني/ورقي).
+ * المسودة: المنشئ أو مدير النظام.
+ * بعد التحويل/في مرحلة الإصدار: الاتصالات الإدارية أو مدير النظام.
+ * نص فارغ = مسموح.
+ */
 function outgoing_delivery_edit_block(array $user, array $corr): string
 {
     if ((int) ($user['id'] ?? 0) <= 0 && function_exists('current_user')) {
         $user = current_user() ?? [];
+    }
+    if (!$user) {
+        return __('auth.forbidden');
     }
     if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
         return __('send.err_cancelled');
@@ -868,16 +896,24 @@ function outgoing_delivery_edit_block(array $user, array $corr): string
             ? __('issue_review.edit_locked')
             : __('issue_review.edit_final');
     }
+    $admin = function_exists('appr_user_is_admin')
+        ? appr_user_is_admin($user)
+        : ((string) ($user['role'] ?? '') === 'admin');
     $isDraft = function_exists('outgoing_prep_is_draft') && outgoing_prep_is_draft($corr);
-    if (!$isDraft) {
-        return __('bulk.delivery_locked');
+    if ($isDraft) {
+        $creator = function_exists('outgoing_user_is_prep_creator') && outgoing_user_is_prep_creator($user, $corr);
+
+        return ($admin || $creator) ? '' : __('auth.forbidden');
     }
-    if (!$user) {
-        return __('auth.forbidden');
+    // بعد المسودة: من ينفّذ الإصدار (اتصالات) أو المدير — إن كانت المعاملة جاهزة/لدى الاتصالات
+    if (function_exists('outgoing_user_may_issue') && outgoing_user_may_issue($user, $corr)) {
+        return '';
     }
-    $admin = ($user['role'] ?? '') === 'admin';
-    $creator = function_exists('outgoing_user_is_prep_creator') && outgoing_user_is_prep_creator($user, $corr);
-    return ($admin || $creator) ? '' : __('auth.forbidden');
+    if ($admin && function_exists('outgoing_can_issue') && outgoing_can_issue($corr)) {
+        return '';
+    }
+
+    return __('bulk.delivery_locked');
 }
 
 /** المراجع طابق المعاملة ولم يُعدها ولم يرفضها المعتمد: المحتوى نهائي على المعد. */
@@ -1522,9 +1558,13 @@ function outgoing_can_issue(array $corr): bool
     if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
         return false;
     }
-    // مسار الإعداد متوقف: جاهز للإرسال كالمفرد (ما عدا المرفوض)
+    // بلا مراجعة/اعتماد: الإصدار عند الاتصالات (with_comms) أو سجلات قديمة بلا حالة
     if (!outgoing_issue_flow_active()) {
-        return outgoing_approval_status_of($corr) !== 'rejected';
+        $s = outgoing_approval_status_of($corr);
+        if ($s === 'rejected') {
+            return false;
+        }
+        return in_array($s, ['', 'with_comms', 'approved'], true);
     }
     $s = outgoing_approval_status_of($corr);
     if ($s === 'with_comms') {
@@ -2628,6 +2668,8 @@ function outgoing_comms_auto_perm_codes(): array
 {
     return [
         'outgoing.dispatch',
+        'outgoing.send',
+        'outgoing.receipt',
         'outgoing.print_form',
         'outgoing.print_envelope',
         'outgoing.print_thermal',
@@ -2878,14 +2920,10 @@ function outgoing_dispatch_assignee_eligible(int $assigneeId): bool
         && outgoing_user_has_dispatch($row);
 }
 
-/** هل المعاملة في مرحلة طباعة الاتصالات (بعد الاعتماد أو مسار المراجعة فقط)؟ */
+/** هل المعاملة في مرحلة طباعة الاتصالات (مستقلة عن تفعيل المراجعة/الاعتماد)؟ */
 function outgoing_is_comms_print_stage(array $corr): bool
 {
     if (($corr['type'] ?? '') !== 'outgoing') {
-        return false;
-    }
-    // بلا مسار مراجعة/اعتماد في الإعدادات لا تُحصر الطباعة/الإرسال على الاتصالات
-    if (!outgoing_issue_flow_active()) {
         return false;
     }
     $s = outgoing_approval_status_of($corr);
@@ -2920,6 +2958,37 @@ function outgoing_user_can_dispatch(array $user, array $corr): bool
     }
     // مجمّع: أي من يملك الصلاحية (والمدير)
     return $isAdmin || outgoing_user_has_dispatch($user);
+}
+
+/**
+ * هل يجوز للمستخدم تنفيذ الإصدار الآن (طباعة/إرسال/تسليم)؟
+ * في مرحلة الاتصالات: الاتصالات الإدارية فقط — بغض النظر عن تفعيل المراجعة/الاعتماد.
+ */
+function outgoing_user_may_issue(?array $user, array $corr): bool
+{
+    if (!outgoing_can_issue($corr)) {
+        return false;
+    }
+    if (outgoing_is_comms_print_stage($corr)) {
+        return is_array($user) && outgoing_user_can_dispatch($user, $corr);
+    }
+
+    return true;
+}
+
+/** سبب منع الإصدار لهذا المستخدم (فارغ = مسموح). */
+function outgoing_user_issue_block_reason(?array $user, array $corr): string
+{
+    if (outgoing_user_may_issue($user, $corr)) {
+        return '';
+    }
+    if (outgoing_can_issue($corr) && outgoing_is_comms_print_stage($corr)) {
+        return __('issue_appr.comms_only_issue');
+    }
+
+    return function_exists('outgoing_approval_block_reason')
+        ? outgoing_approval_block_reason($corr)
+        : __('issue_appr.blocked_pending');
 }
 
 function outgoing_user_may_see_dispatch_queue(?array $user = null): bool
@@ -3020,7 +3089,7 @@ function outgoing_require_print_perm(string $perm, array $user, string $backUrl,
 }
 
 /** آخر خطوة في الصادر: الإحالة إلى الاتصالات الإدارية للطباعة، بعد آخر مرحلة مفعّلة. */
-function outgoing_handoff_print_to_communications(int $corrId): void
+function outgoing_handoff_print_to_communications(int $corrId, bool $notifyUsers = true): void
 {
     if ($corrId <= 0) {
         return;
@@ -3046,7 +3115,7 @@ function outgoing_handoff_print_to_communications(int $corrId): void
     if (function_exists('log_activity')) {
         log_activity(null, $corrId, 'issue_print_handoff', __('activity.action.issue_print_handoff'));
     }
-    if ($notify === [] || !function_exists('dms_notify_users') || !function_exists('get_correspondence')) {
+    if (!$notifyUsers || $notify === [] || !function_exists('dms_notify_users') || !function_exists('get_correspondence')) {
         return;
     }
     $corr = get_correspondence($corrId);
@@ -3144,8 +3213,11 @@ function outgoing_dispatch_escalate_if_due(array $corr): bool
     return true;
 }
 
-/** الصادر الذي أنهى المراحل المفعّلة بلا اعتماد: يصبح لدى الاتصالات الإدارية للطباعة. */
-function outgoing_release_to_communications(int $corrId): void
+/**
+ * الصادر الذي أنهى المراحل المفعّلة (أو بلا مراجعة/اعتماد): لدى الاتصالات الإدارية للطباعة.
+ * الاتصالات مرحلة مستقلة — لا تعتمد على تفعيل المراجعة/الاعتماد.
+ */
+function outgoing_release_to_communications(int $corrId, bool $notify = true): void
 {
     if ($corrId <= 0) {
         return;
@@ -3154,13 +3226,18 @@ function outgoing_release_to_communications(int $corrId): void
         "UPDATE `tblcorrespondence`
          SET issue_approval_status = 'with_comms'
          WHERE id = ? AND type = 'outgoing'
-           AND (issue_approval_status IS NULL OR issue_approval_status = '')"
+           AND (
+                issue_approval_status IS NULL
+                OR issue_approval_status = ''
+                OR issue_approval_status IN ('pending_review','pending_copy','pending_sg','pending_deputy','pending_alternate','returned','approved')
+           )"
     )->execute([$corrId]);
-    outgoing_handoff_print_to_communications($corrId);
+    outgoing_handoff_print_to_communications($corrId, $notify);
 }
 
 /**
- * حالات عالقة في دورة المراجعة/الاعتماد/الاتصالات — تُصفَّر عند إيقاف المسار من الإعدادات.
+ * حالات عالقة في دورة المراجعة/الاعتماد — تُحوَّل للاتصالات عند إيقاف المراجعة/الاعتماد.
+ * with_comms ليست منها: مرحلة الاتصالات مستقلة ولا تُصفَّر.
  *
  * @return list<string>
  */
@@ -3172,14 +3249,13 @@ function outgoing_issue_flow_stale_statuses(): array
         'pending_sg',
         'pending_deputy',
         'pending_alternate',
-        'with_comms',
         'returned',
     ];
 }
 
 /**
  * أخرج معاملة عالقة في المراجعة/الاعتماد إذا أُوقف مسار الإعدادات،
- * لتبقى جاهزة للإرسال كما في الإصدار العادي بلا مسار.
+ * وأحلها إلى الاتصالات الإدارية (لا تُترك بلا مرحلة).
  */
 function outgoing_issue_flow_release_if_inactive(array $corr, ?array $actor = null): ?array
 {
@@ -3193,26 +3269,28 @@ function outgoing_issue_flow_release_if_inactive(array $corr, ?array $actor = nu
         return null;
     }
     $s = outgoing_approval_status_of($corr);
-    if (!in_array($s, outgoing_issue_flow_stale_statuses(), true)) {
+    if ($s === 'with_comms' || $s === 'approved') {
         return null;
     }
     $id = (int) ($corr['id'] ?? 0);
     if ($id < 1) {
         return null;
     }
+    // عالقة في مراجعة/اعتماد، أو جاهزة بلا حالة → الاتصالات
+    if ($s !== '' && !in_array($s, outgoing_issue_flow_stale_statuses(), true)) {
+        return null;
+    }
+    if (in_array((string) ($corr['status'] ?? ''), ['sent', 'delivered', 'closed'], true)) {
+        return null;
+    }
     $actor = $actor ?? (function_exists('current_user') ? current_user() : null);
     $uid = (int) ($actor['id'] ?? ($corr['created_by'] ?? 0));
-    db()->prepare(
-        "UPDATE `tblcorrespondence`
-         SET issue_approval_status = NULL,
-             issue_approval_assignee_id = NULL
-         WHERE id = ? AND type = 'outgoing'"
-    )->execute([$id]);
+    outgoing_release_to_communications($id, false);
     log_activity(
         $uid > 0 ? $uid : null,
         $id,
         'issue_approval',
-        __('issue_appr.released_flow_off')
+        __('issue_appr.released_flow_off_to_comms')
     );
 
     return function_exists('get_correspondence') ? get_correspondence($id) : null;
@@ -3237,7 +3315,9 @@ function outgoing_batch_issue_flow_release_if_inactive(int $batchId, ?array $use
     return $n;
 }
 
-/** صفّر كل المعاملات العالقة في دورة الصادر بعد إيقاف مسار الإعدادات. */
+/**
+ * حوّل العالق في المراجعة/الاعتماد — والجاهز بلا حالة — إلى الاتصالات بعد إيقاف المسار.
+ */
 function outgoing_issue_flow_release_all_if_inactive(?array $user = null): int
 {
     if (outgoing_issue_flow_active()) {
@@ -3249,7 +3329,12 @@ function outgoing_issue_flow_release_all_if_inactive(?array $user = null): int
     $stmt = db()->prepare(
         "SELECT * FROM `tblcorrespondence`
          WHERE type = 'outgoing' AND status <> 'cancelled'
-           AND issue_approval_status IN ($ph)
+           AND IFNULL(status,'') NOT IN ('sent','delivered','closed')
+           AND (
+                issue_approval_status IN ($ph)
+                OR issue_approval_status IS NULL
+                OR issue_approval_status = ''
+           )
          ORDER BY id"
     );
     $stmt->execute($statuses);
@@ -3262,6 +3347,52 @@ function outgoing_issue_flow_release_all_if_inactive(?array $user = null): int
     }
 
     return $n;
+}
+
+/** إحالة كل خطابات الدفعة الجاهزة إلى الاتصالات (بلا مراجعة/اعتماد). */
+function outgoing_batch_release_to_communications(int $batchId, array $user): int
+{
+    if ($batchId <= 0 || outgoing_issue_flow_active()) {
+        return 0;
+    }
+    $items = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : [];
+    $done = [];
+    foreach ($items as $corr) {
+        if (function_exists('outgoing_prep_is_open') && outgoing_prep_is_open($corr)) {
+            continue;
+        }
+        if (correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        $st = outgoing_approval_status_of($corr);
+        if ($st !== '' && $st !== 'with_comms' && $st !== 'approved') {
+            continue;
+        }
+        $id = (int) ($corr['id'] ?? 0);
+        if ($id < 1) {
+            continue;
+        }
+        try {
+            outgoing_release_to_communications($id, false);
+            $fresh = get_correspondence($id);
+            if ($fresh) {
+                $done[] = $fresh;
+            }
+        } catch (Throwable $e) {
+            error_log('DMS batch release to comms #' . $id . ': ' . $e->getMessage());
+        }
+    }
+    if ($done !== [] && function_exists('outgoing_batch_notify_cycle')) {
+        try {
+            outgoing_batch_notify_cycle($batchId, $done, $user, 'request');
+        } catch (Throwable $e) {
+            error_log('DMS batch release to comms notify: ' . $e->getMessage());
+        }
+    }
+
+    return count($done);
 }
 
 function outgoing_approval_decide(int $corrId, array $user, bool $approve, string $note = '', bool $notify = true): void
@@ -4094,6 +4225,7 @@ function outgoing_batch_notify_cycle(int $batchId, array $items, array $actor, s
     $sample = $items[0];
     $reviewers = [];
     $approvers = [];
+    $dispatchers = [];
     foreach ($items as $corr) {
         $st = function_exists('outgoing_approval_status_of') ? outgoing_approval_status_of($corr) : '';
         if ($event === 'request') {
@@ -4104,6 +4236,13 @@ function outgoing_batch_notify_cycle(int $batchId, array $items, array $actor, s
             } elseif (in_array($st, ['pending_sg', 'pending_deputy', 'pending_alternate'], true)) {
                 foreach (outgoing_batch_item_approval_recipients($corr) as $uid) {
                     outgoing_batch_digest_add($approvers, $uid);
+                }
+            } elseif (in_array($st, ['with_comms', 'approved'], true)) {
+                $route = outgoing_dispatch_route([]);
+                foreach (array_map('intval', $route['notify'] ?? []) as $uid) {
+                    if ($uid > 0) {
+                        outgoing_batch_digest_add($dispatchers, $uid);
+                    }
                 }
             }
         } elseif ($event === 'review_pass') {
@@ -4131,6 +4270,14 @@ function outgoing_batch_notify_cycle(int $batchId, array $items, array $actor, s
             'issue_appr.notify_batch_request_body',
             'issue_appr.email_batch_request_intro',
             true, 'issue_appr_batch_req_', $note
+        );
+        outgoing_batch_send_digest(
+            $batchId, $dispatchers, $sample, $actor,
+            'outgoing_issue_approval',
+            'issue_appr.notify_batch_print_title',
+            'issue_appr.notify_batch_print_body',
+            'issue_appr.email_batch_print_intro',
+            true, 'issue_appr_batch_print_', $note
         );
         return;
     }

@@ -256,7 +256,7 @@ if (
         </div>
         <div class="col-md-6 col-xl-4">
             <div class="corr-field-card">
-                <div class="corr-field-card-title"><i class="bi bi-shield-lock me-1"></i><?= e(__('corr.group_priority')) ?></div>
+                <div class="corr-field-card-title" id="corr-priority"><i class="bi bi-shield-lock me-1"></i><?= e(__('corr.group_priority')) ?></div>
                 <div class="row g-2 corr-field-card-body">
                     <div class="col-6">
                         <label class="form-label" for="priority"><?= e(__('corr.priority')) ?></label>

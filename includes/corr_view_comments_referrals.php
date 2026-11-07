@@ -1,6 +1,6 @@
         <?php if (!$isOutgoing): ?>
         <?php if (empty($inHeld)): ?>
-        <div class="card-panel mb-3">
+        <div class="card-panel mb-3" id="corr-comments">
             <div class="card-header"><i class="bi bi-chat-left-text me-1"></i><?= e(__('corr.comments')) ?></div>
             <div class="card-body p-4">
                 <?php if (empty($comments)): ?>
@@ -39,7 +39,7 @@
         </div>
         <?php endif; ?>
 
-        <div class="card-panel mb-3">
+        <div class="card-panel mb-3" id="corr-referrals">
             <div class="card-header"><i class="bi bi-share me-1"></i><?= e(__('corr.referrals')) ?></div>
             <div class="card-body p-4">
                 <?php if ($canRefer && $inHeld): ?>

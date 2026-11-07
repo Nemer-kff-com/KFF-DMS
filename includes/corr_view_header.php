@@ -308,7 +308,7 @@ $hasSecondaryActions = $secondaryActions !== [];
                 ?>
                 <ul class="dropdown-menu batch-print-menu">
                     <?php if ($hasLetterPrint): ?>
-                    <li><?php $printItem($printLetterUrl, 'bi-file-text', __('bulk.print_letter'), ''); ?></li>
+                    <li><?php $printItem($printLetterUrl, 'bi-file-earmark-font', __('bulk.print_letter'), ''); ?></li>
                     <?php endif; ?>
                     <?php if ($canPrintForm): ?>
                     <li><?php $printItem($printFormUrl, $printFormIcon, $printFormLabel, $printBlockedTip); ?></li>

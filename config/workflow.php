@@ -764,15 +764,15 @@ function correspondence_report_extras(string $whereSql, array $params): array
         $empty['rsvp_total'] = $empty['rsvp_attending'] + $empty['rsvp_declined'] + $empty['rsvp_pending'];
 
         $stmt = $pdo->prepare(
-            "SELECT d.name, d.name_en,
+            "SELECT d.id, d.name, d.name_en, d.title_prefix, d.directed_from,
                     SUM(c.type = 'incoming') AS incoming_cnt,
                     SUM(c.type = 'outgoing') AS outgoing_cnt,
                     SUM(c.type = 'internal') AS internal_cnt,
                     COUNT(*) AS cnt
              FROM `tblcorrespondence` c
-             LEFT JOIN `tbldepartments` d ON d.id = c.department_id
+             LEFT JOIN `tbldepartments` d ON d.id = IFNULL(c.issuing_department_id, c.department_id)
              WHERE $whereSql
-             GROUP BY c.department_id, d.name, d.name_en
+             GROUP BY IFNULL(c.issuing_department_id, c.department_id), d.id, d.name, d.name_en, d.title_prefix, d.directed_from
              ORDER BY cnt DESC"
         );
         $stmt->execute($params);

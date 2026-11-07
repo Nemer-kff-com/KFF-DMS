@@ -108,8 +108,12 @@ $lookupModalSaveUrl = base_url('api/lookup_save.php');
     newType: <?= json_encode(__('lookups.new_type'), JSON_UNESCAPED_UNICODE) ?>,
     newCatalog: <?= json_encode(__('lookups.new_catalog'), JSON_UNESCAPED_UNICODE) ?>,
     newAttachment: <?= json_encode(__('lookups.new_attachment_type'), JSON_UNESCAPED_UNICODE) ?>,
+    newHonorific: <?= json_encode(__('lookups.new_honorific'), JSON_UNESCAPED_UNICODE) ?>,
+    honorificPhrase: <?= json_encode(__('lookups.honorific_phrase'), JSON_UNESCAPED_UNICODE) ?>,
+    nameAr: <?= json_encode(__('lookups.name_ar'), JSON_UNESCAPED_UNICODE) ?>,
     edit: <?= json_encode(__('lookups.edit'), JSON_UNESCAPED_UNICODE) ?>
   };
+  var nameArLabel = document.getElementById('lookup_modal_name_ar_label');
 
   function setError(msg) {
     if (!errBox) return;
@@ -163,7 +167,7 @@ $lookupModalSaveUrl = base_url('api/lookup_save.php');
     if (activeInp) activeInp.checked = opts.is_active === undefined ? true : String(opts.is_active) !== '0';
     setError('');
 
-    var needsCode = kind !== 'categories' && kind.indexOf('catalog_') !== 0;
+    var needsCode = kind !== 'categories' && kind !== 'honorifics' && kind.indexOf('catalog_') !== 0;
     if (codeWrap) codeWrap.classList.toggle('d-none', !needsCode);
     if (needsCode && codeInp) {
       var lockCode = isEdit;
@@ -174,6 +178,9 @@ $lookupModalSaveUrl = base_url('api/lookup_save.php');
     var nameEnRequired = (kind === 'priorities' || kind === 'confidentiality' || kind === 'statuses' || kind === 'attachment_types');
     if (nameEn) nameEn.required = nameEnRequired;
     if (nameEnReq) nameEnReq.classList.toggle('d-none', !nameEnRequired);
+    if (nameArLabel) {
+      nameArLabel.textContent = (kind === 'honorifics' ? i18n.honorificPhrase : i18n.nameAr) + ' *';
+    }
 
     if (activeWrap) activeWrap.classList.toggle('d-none', !isEdit && !isCatalog);
     if (!isEdit && activeInp) activeInp.checked = true;
@@ -184,12 +191,13 @@ $lookupModalSaveUrl = base_url('api/lookup_save.php');
       else if (kind === 'confidentiality') titleText.textContent = i18n.newConf;
       else if (kind === 'statuses') titleText.textContent = i18n.newStatus;
       else if (kind === 'attachment_types') titleText.textContent = i18n.newAttachment;
+      else if (kind === 'honorifics') titleText.textContent = i18n.newHonorific;
       else if (isCatalog) titleText.textContent = i18n.newCatalog;
       else titleText.textContent = i18n.newType;
       if (iconEl) iconEl.className = 'bi bi-plus-circle me-1';
       if (saveLabel) saveLabel.textContent = i18n.create;
     } else {
-      if (titleText) titleText.textContent = i18n.edit + (opts.code ? ' — ' + opts.code : '');
+      if (titleText) titleText.textContent = i18n.edit + (opts.code ? ' — ' + opts.code : (opts.name_ar ? ' — ' + opts.name_ar : ''));
       if (iconEl) iconEl.className = 'bi bi-pencil-square me-1';
       if (saveLabel) saveLabel.textContent = i18n.update;
     }

@@ -1,6 +1,6 @@
 <?php
 /**
- * المساعدة — مرجع مدير النظام من مجلد doc/
+ * مرجع الإدارة — مساعدة مدير النظام من مجلد doc/
  */
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/help_docs.php';
@@ -8,38 +8,42 @@ require_once __DIR__ . '/../config/help_docs.php';
 $user = require_login();
 if (!function_exists('dms_user_is_system_admin') || !dms_user_is_system_admin($user)) {
     flash('danger', __('auth.forbidden'));
-    redirect(base_url('index.php'));
+    redirect(base_url('help/index.php'));
 }
 
 $docId = trim((string) ($_GET['doc'] ?? ''));
-$meta = $docId !== '' ? dms_help_doc_resolve($docId) : null;
+$meta = $docId !== '' ? dms_help_doc_resolve($docId, 'admin') : null;
 $catalog = dms_help_docs_catalog();
+$helpIndexUrl = base_url('admin/help.php');
 
 if ($docId !== '' && !$meta) {
     flash('danger', __('help.doc_not_found'));
-    redirect(base_url('admin/help.php'));
+    redirect($helpIndexUrl);
 }
 
-$pageTitle = $meta ? dms_help_doc_title($meta) : __('help.title');
+$pageTitle = $meta ? dms_help_doc_title($meta) : __('help.admin_title');
 $htmlBody = '';
 if ($meta) {
     $raw = (string) file_get_contents($meta['path']);
-    $htmlBody = dms_help_markdown_to_html($raw, (string) $meta['id']);
+    $htmlBody = dms_help_markdown_to_html($raw, (string) $meta['id'], 'admin');
 }
 
 require __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header page-narrow">
     <div>
-        <h1 class="page-title"><?= e($meta ? dms_help_doc_title($meta) : __('help.title')) ?></h1>
-        <p class="page-sub"><?= e($meta ? dms_help_doc_summary($meta) : __('help.subtitle')) ?></p>
+        <h1 class="page-title"><?= e($meta ? dms_help_doc_title($meta) : __('help.admin_title')) ?></h1>
+        <p class="page-sub"><?= e($meta ? dms_help_doc_summary($meta) : __('help.admin_subtitle')) ?></p>
     </div>
     <div class="page-header-actions no-print">
+        <a class="btn btn-outline-secondary" href="<?= e(base_url('help/index.php')) ?>">
+            <i class="bi bi-people me-1"></i><?= e(__('help.user_title')) ?>
+        </a>
         <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
             <i class="bi bi-printer me-1"></i><?= e(__('help.print')) ?>
         </button>
         <?php if ($meta): ?>
-            <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/help.php')) ?>">
+            <a class="btn btn-outline-secondary" href="<?= e($helpIndexUrl) ?>">
                 <i class="bi bi-grid me-1"></i><?= e(__('help.index')) ?>
             </a>
         <?php endif; ?>
@@ -49,9 +53,9 @@ require __DIR__ . '/../includes/header.php';
 <div class="page-narrow help-page">
     <?php if ($meta): ?>
         <nav class="help-breadcrumb no-print" aria-label="breadcrumb">
-            <a href="<?= e(base_url('admin/help.php')) ?>"><?= e(__('help.title')) ?></a>
+            <a href="<?= e($helpIndexUrl) ?>"><?= e(__('help.admin_title')) ?></a>
             <span class="help-breadcrumb-sep">/</span>
-            <span><?= e(function_exists('dms_is_rtl') && !dms_is_rtl() ? (string) ($meta['group_en'] ?? '') : (string) ($meta['group_ar'] ?? '')) ?></span>
+            <span><?= e(dms_help_doc_group_title(['group_ar' => $meta['group_ar'] ?? '', 'group_en' => $meta['group_en'] ?? ''])) ?></span>
             <span class="help-breadcrumb-sep">/</span>
             <span class="text-muted"><?= e(dms_help_doc_title($meta)) ?></span>
         </nav>
@@ -61,13 +65,13 @@ require __DIR__ . '/../includes/header.php';
             </div>
         </article>
         <div class="help-doc-footer no-print">
-            <?= dms_back_icon(base_url('admin/help.php'), __('help.back_index')) ?>
+            <?= dms_back_icon($helpIndexUrl, __('help.back_index')) ?>
             <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
                 <i class="bi bi-printer me-1"></i><?= e(__('help.print')) ?>
             </button>
         </div>
     <?php else: ?>
-        <p class="help-intro"><?= e(__('help.intro')) ?></p>
+        <p class="help-intro"><?= e(__('help.admin_intro')) ?></p>
         <div class="help-catalog">
             <?php foreach ($catalog as $group): ?>
                 <section class="help-group card-panel">
@@ -77,7 +81,7 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="help-doc-grid">
                         <?php foreach ($group['docs'] as $doc): ?>
-                            <a class="help-doc-card" href="<?= e(base_url('admin/help.php?doc=' . rawurlencode((string) $doc['id']))) ?>">
+                            <a class="help-doc-card" href="<?= e($helpIndexUrl . '?doc=' . rawurlencode((string) $doc['id'])) ?>">
                                 <span class="help-doc-card-title"><?= e(dms_help_doc_title($doc)) ?></span>
                                 <span class="help-doc-card-summary"><?= e(dms_help_doc_summary($doc)) ?></span>
                                 <span class="help-doc-card-go"><i class="bi <?= e((function_exists('dms_is_rtl') && dms_is_rtl()) ? 'bi-arrow-left' : 'bi-arrow-right') ?>"></i></span>

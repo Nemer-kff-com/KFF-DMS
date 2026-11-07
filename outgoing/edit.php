@@ -90,6 +90,7 @@ require __DIR__ . '/../includes/header.php';
         <div class="card-body">
             <?php require __DIR__ . '/../includes/corr_form_error.php'; ?>
             <form method="post" enctype="multipart/form-data" class="admin-form"
+                  data-outgoing-single="1"
                   data-corr-id="<?= (int) $id ?>"
                   data-corr-ref="<?= e((string) ($corr['ref_number'] ?? '')) ?>">
                 <?= csrf_field() ?>

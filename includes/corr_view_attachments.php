@@ -64,7 +64,7 @@ $renderDocRow = static function (array $doc, bool $allowDelete) use ($corr, $use
     <?php
 };
 ?>
-        <div class="card-panel mb-3">
+        <div class="card-panel mb-3" id="corr-attachments">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-paperclip me-1"></i><?= e(__('corr.attachments')) ?></span>
                 <span class="badge text-bg-light text-dark"><?= count($documents) ?></span>

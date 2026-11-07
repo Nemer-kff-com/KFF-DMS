@@ -47,13 +47,13 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($canPrintCircular && circular_is_electronic($item) && circular_has_letter($item)): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/letter.php?id='.$id)) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span><?= e(__('circular.print_letter')) ?></span>
+                        <i class="bi bi-file-earmark-font" aria-hidden="true"></i><span><?= e(__('circular.print_letter')) ?></span>
                     </a>
                 </li>
                 <?php if (trim((string) ($item['letter_body'] ?? '')) !== '' && trim((string) ($item['letter_body_en'] ?? '')) !== ''): ?>
                 <li>
                     <a class="dropdown-item" href="<?= e(base_url('circulars/letter.php?id='.$id.'&lang=en')) ?>" target="_blank" rel="noopener">
-                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span><?= e(__('circular.print_letter_en')) ?></span>
+                        <i class="bi bi-file-earmark-font" aria-hidden="true"></i><span><?= e(__('circular.print_letter_en')) ?></span>
                     </a>
                 </li>
                 <?php endif; ?>
@@ -180,7 +180,7 @@ require __DIR__ . '/../includes/header.php';
         ?>
         <div class="card-panel mb-3">
             <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <span><i class="bi bi-file-earmark-text me-1"></i><?= e(__('circular.letter_section')) ?></span>
+                <span><i class="bi bi-file-earmark-font me-1"></i><?= e(__('circular.letter_section')) ?></span>
                 <?php if ($canPrintCircular && circular_has_letter($item)): ?>
                     <a class="btn btn-sm btn-outline-secondary" href="<?= e(base_url('circulars/letter.php?id='.$id)) ?>" target="_blank" rel="noopener">
                         <i class="bi bi-printer me-1"></i><?= e(__('circular.print_letter')) ?>

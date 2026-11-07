@@ -12,7 +12,9 @@ $sendUi = dms_perm_ui('outgoing.send', $user);
 if (($corr['type'] ?? '') !== 'outgoing' || empty($canEdit) || !empty($isCancelled) || $sendUi === 'hide') {
     return;
 }
-if (!function_exists('correspondence_intend_electronic') || !correspondence_intend_electronic($corr)) {
+$sendElectronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
+// بطاقة الإرسال للمسار الإلكتروني فقط (بريد/واتساب). الورقي بعد الإصدار → التسليم والحالة.
+if (!$sendElectronic) {
     return;
 }
 if (function_exists('outgoing_prep_is_superseded') && outgoing_prep_is_superseded($corr)) {
@@ -20,7 +22,9 @@ if (function_exists('outgoing_prep_is_superseded') && outgoing_prep_is_supersede
 }
 $sendBlockedTip = $sendUi === 'deny'
     ? __('perm.denied_tip')
-    : ((function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) ? __('issue_appr.print_blocked_short') : '');
+    : (function_exists('outgoing_user_issue_block_reason')
+        ? outgoing_user_issue_block_reason($user, $corr)
+        : ((function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) ? __('issue_appr.print_blocked_short') : ''));
 $sendTipOpen = $sendBlockedTip !== ''
     ? '<span class="d-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="' . e($sendBlockedTip) . '">'
     : '';
@@ -70,12 +74,11 @@ $emailTone = $sendStatusTone($last['email'] ?? null);
 
 $waTone = $sendStatusTone($last['whatsapp'] ?? null);
 
-$preferEmail = function_exists('correspondence_intend_electronic')
-    && correspondence_intend_electronic($corr);
+$preferEmail = $sendElectronic;
 
 ?>
 
-<div class="card-panel mb-3 no-print corr-send-panel<?= $preferEmail ? ' is-electronic' : '' ?>">
+<div class="card-panel mb-3 no-print corr-send-panel<?= $preferEmail ? ' is-electronic' : '' ?>" id="corr-send">
 
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
 
@@ -140,6 +143,15 @@ $preferEmail = function_exists('correspondence_intend_electronic')
 
                     <?php endif; ?>
 
+                    <?php if ($sendEmail !== ''): ?>
+                        <a class="btn btn-outline-secondary w-100 mb-2<?= $emailReady ? '' : ' disabled' ?>"
+                           href="<?= e(base_url('outgoing/email_preview_view.php?id=' . (int) $corr['id'])) ?>"
+                           target="_blank" rel="noopener"
+                           <?= $emailReady ? '' : 'aria-disabled="true" tabindex="-1"' ?>>
+                            <i class="bi bi-eye me-1"></i><?= e(__('send.email_preview')) ?>
+                        </a>
+                    <?php endif; ?>
+
                     <form method="post" action="<?= e(base_url('outgoing/send.php')) ?>" data-confirm="<?= e(__('send.confirm_email')) ?>" class="corr-send-form">
 
                         <?= csrf_field() ?>
@@ -148,7 +160,7 @@ $preferEmail = function_exists('correspondence_intend_electronic')
 
                         <input type="hidden" name="channel" value="email">
 
-                        <?= $sendTipOpen ?><button class="btn btn-kff w-100 corr-send-btn" type="submit" <?= ($sendBlockedTip === '' && $sendEmail !== '' && $emailReady) ? '' : 'disabled' ?>>
+                        <?= $sendTipOpen ?><button class="btn btn-kff w-100 corr-send-btn" type="submit" <?= ($sendBlockedTip === '' && $sendElectronic && $sendEmail !== '' && $emailReady) ? '' : 'disabled' ?>>
 
                             <i class="bi bi-envelope me-1"></i><?= e(__('send.do_email')) ?>
 
@@ -156,7 +168,11 @@ $preferEmail = function_exists('correspondence_intend_electronic')
 
                     </form>
 
-                    <?php if (!$emailReady): ?>
+                    <?php if (!$sendElectronic): ?>
+
+                        <div class="corr-send-note"><?= e(__('send.skip_not_electronic')) ?></div>
+
+                    <?php elseif (!$emailReady): ?>
 
                         <div class="corr-send-note"><?= e(__('send.need_email_settings')) ?></div>
 
@@ -239,5 +255,4 @@ $preferEmail = function_exists('correspondence_intend_electronic')
     </div>
 
 </div>
-
 

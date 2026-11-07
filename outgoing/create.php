@@ -46,7 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif (in_array($savedStatus, ['pending_sg', 'pending_deputy', 'pending_alternate'], true)) {
                 $flashMsg = __('corr.saved_out_to_approver');
             } elseif (in_array($savedStatus, ['with_comms', 'approved'], true)
-                || (function_exists('corr_issue_first_destination') && corr_issue_first_destination('outgoing') === 'none')) {
+                || (function_exists('corr_issue_first_destination')
+                    && in_array(corr_issue_first_destination('outgoing'), ['comms', 'none'], true))) {
                 $flashMsg = __('corr.saved_out_to_comms');
             }
         }
@@ -103,7 +104,7 @@ require __DIR__ . '/../includes/header.php';
                 <?= e(__('out_prep.create_hint')) ?>
             </div>
             <?php endif; ?>
-            <form method="post" enctype="multipart/form-data" class="admin-form">
+            <form method="post" enctype="multipart/form-data" class="admin-form" data-outgoing-single="1">
                 <?= csrf_field() ?>
                 <?php require __DIR__ . '/../includes/corr_form_fields.php'; ?>
                 <?php

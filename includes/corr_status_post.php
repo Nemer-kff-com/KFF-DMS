@@ -19,15 +19,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 verify_csrf();
 $id = (int) ($_POST['id'] ?? 0);
 $status = $_POST['status'] ?? '';
+$returnBatch = (int) ($_POST['return_batch'] ?? 0);
 try {
     $corr = get_correspondence($id);
     if (!$corr || ($corr['type'] ?? '') !== $corrType) {
+        throw new RuntimeException(__('corr.invalid_request'));
+    }
+    if ($returnBatch > 0 && (int) ($corr['batch_id'] ?? 0) !== $returnBatch) {
         throw new RuntimeException(__('corr.invalid_request'));
     }
     update_correspondence_status($id, $status, $user);
     flash('success', __('corr.status_updated'));
 } catch (Throwable $e) {
     flash('danger', $e->getMessage());
+}
+if ($returnBatch > 0) {
+    redirect(base_url($corrType . '/batch.php?id=' . $returnBatch));
 }
 $q = (string) ($statusRedirectQuery ?? '');
 redirect(base_url($corrType . '/view.php?id=' . $id . $q));

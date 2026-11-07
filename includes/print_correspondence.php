@@ -63,6 +63,9 @@ $directionTableId = 'printDirection';
                 <?= dms_back_icon() ?>
             </div>
         </div>
+        <div class="letter-print-switches">
+            <?php render_print_from_dept_only_control(); ?>
+        </div>
     </div>
 </div>
 
@@ -109,6 +112,66 @@ $directionTableId = 'printDirection';
         var next = currentOrder() === 'to' ? 'from' : 'to';
         applyOrder(next);
         try { localStorage.setItem(STORE_KEY, next); } catch (e) { /* تخزين محلي معطّل */ }
+    });
+})();
+
+/* اسم القسم فقط في «موجهة من» — يُحفظ للمرات القادمة */
+(function () {
+    var STORE_KEY = 'dms.print.fromDeptOnly';
+    var chk = document.getElementById('fromDeptOnlyChk');
+    var stateEl = document.querySelector('[data-from-dept-state]');
+    var cells = Array.prototype.slice.call(document.querySelectorAll('.print-direction td[data-dept-only]'));
+    var stateOn = <?= json_encode(__('print.from_dept_only_on'), JSON_UNESCAPED_UNICODE) ?>;
+    var stateOff = <?= json_encode(__('print.from_dept_only_off'), JSON_UNESCAPED_UNICODE) ?>;
+    if (!chk) { return; }
+    if (!cells.length) {
+        chk.disabled = true;
+        return;
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function apply(on) {
+        cells.forEach(function (cell) {
+            if (!cell.getAttribute('data-full-html')) {
+                cell.setAttribute('data-full-html', cell.innerHTML);
+            }
+            if (on) {
+                var name = cell.getAttribute('data-dept-only') || '';
+                var org = cell.getAttribute('data-org-only') || '';
+                var html = '<div class="print-dir-stack">';
+                if (name !== '') {
+                    html += '<div class="print-dir-name">' + escapeHtml(name) + '</div>';
+                }
+                if (org !== '' && org !== name) {
+                    html += '<div class="print-dir-org">' + escapeHtml(org) + '</div>';
+                }
+                html += '</div>';
+                cell.innerHTML = html;
+            } else {
+                cell.innerHTML = cell.getAttribute('data-full-html') || '';
+            }
+        });
+        chk.checked = !!on;
+        if (stateEl) {
+            stateEl.textContent = on ? stateOn : stateOff;
+        }
+    }
+
+    var saved = null;
+    try { saved = localStorage.getItem(STORE_KEY); } catch (e) { /* تخزين محلي معطّل */ }
+    apply(saved === '1');
+
+    chk.addEventListener('change', function () {
+        var on = !!chk.checked;
+        apply(on);
+        try { localStorage.setItem(STORE_KEY, on ? '1' : '0'); } catch (e) { /* تخزين محلي معطّل */ }
     });
 })();
 </script>

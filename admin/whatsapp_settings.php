@@ -5,6 +5,18 @@ require_once __DIR__ . '/../config/whatsapp_settings.php';
 $user = require_permission('admin.settings');
 $pageTitle = __('nav.whatsapp_settings');
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_whatsapp_active'])) {
+    verify_csrf();
+    $enable = (string) ($_POST['toggle_whatsapp_active'] ?? '') === '1';
+    try {
+        dms_set_whatsapp_active($enable, user_actor_name($user));
+        flash('success', $enable ? __('wa.master_enabled_ok') : __('wa.master_disabled_ok'));
+    } catch (Throwable $e) {
+        flash('danger', $e->getMessage());
+    }
+    redirect(base_url('admin/whatsapp_settings.php'));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_settings'])) {
     verify_csrf();
     try {
@@ -55,7 +67,39 @@ $settingsHubActive = 'whatsapp';
 require __DIR__ . '/../includes/settings_hub_nav.php';
 ?>
 
+<?php $waMasterOn = !empty($form['is_active']); ?>
 <div class="wa-settings-page page-narrow">
+    <div class="card-panel wa-master-switch mb-4 <?= $waMasterOn ? 'is-on' : 'is-off' ?>">
+        <div class="wa-master-switch-body">
+            <div class="wa-master-switch-info">
+                <div class="wa-master-switch-title">
+                    <i class="bi bi-whatsapp" aria-hidden="true"></i>
+                    <span><?= e(__('wa.master_title')) ?></span>
+                </div>
+                <p class="wa-master-switch-hint mb-0"><?= e(__('wa.master_hint')) ?></p>
+                <div class="wa-master-switch-state">
+                    <span class="badge <?= $waMasterOn ? 'text-bg-success' : 'text-bg-secondary' ?>">
+                        <?= e($waMasterOn ? __('wa.master_on') : __('wa.master_off')) ?>
+                    </span>
+                </div>
+            </div>
+            <form method="post" class="wa-master-switch-form mb-0">
+                <?= csrf_field() ?>
+                <?php if ($waMasterOn): ?>
+                    <button type="submit" name="toggle_whatsapp_active" value="0" class="btn btn-outline-danger btn-lg"
+                            data-confirm="<?= e(__('wa.master_disable_confirm')) ?>">
+                        <i class="bi bi-pause-circle me-1" aria-hidden="true"></i><?= e(__('wa.master_disable')) ?>
+                    </button>
+                <?php else: ?>
+                    <button type="submit" name="toggle_whatsapp_active" value="1" class="btn btn-success btn-lg"
+                            data-confirm="<?= e(__('wa.master_enable_confirm')) ?>">
+                        <i class="bi bi-play-circle me-1" aria-hidden="true"></i><?= e(__('wa.master_enable')) ?>
+                    </button>
+                <?php endif; ?>
+            </form>
+        </div>
+    </div>
+
     <div class="security-warning">
         <h5 class="text-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i> <?= e(__('wa.security_title')) ?></h5>
         <p class="mb-2"><?= e(__('wa.security_body')) ?></p>
@@ -71,6 +115,7 @@ require __DIR__ . '/../includes/settings_hub_nav.php';
         <div class="col-xl-8">
             <form method="post" id="waSettingsForm" class="admin-form" autocomplete="off">
                 <?= csrf_field() ?>
+                <input type="hidden" name="is_active" value="<?= $waMasterOn ? '1' : '0' ?>">
 
                 <div class="card-panel mb-4">
                     <div class="card-header">
@@ -106,12 +151,6 @@ require __DIR__ . '/../includes/settings_hub_nav.php';
                                 <label class="form-label" for="default_cc"><?= e(__('wa.default_cc')) ?></label>
                                 <input class="form-control" type="text" id="default_cc" name="default_cc" value="<?= e($form['default_cc'] ?? '966') ?>">
                                 <div class="form-text"><?= e(__('wa.default_cc_hint')) ?></div>
-                            </div>
-                            <div class="col-md-6 d-flex align-items-end">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" <?= !empty($form['is_active']) ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="is_active"><?= e(__('wa.enable')) ?></label>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -255,7 +294,7 @@ require __DIR__ . '/../includes/settings_hub_nav.php';
                 </div>
 
                 <div class="card-panel mb-4">
-                    <div class="card-header"><i class="bi bi-file-earmark-text me-1"></i><?= e(__('wa.templates')) ?></div>
+                    <div class="card-header"><i class="bi bi-file-earmark-font me-1"></i><?= e(__('wa.templates')) ?></div>
                     <div class="card-body">
                         <p class="admin-form-hint mb-3">
                             <span data-provider-help="twilio"><?= e(__('wa.templates_twilio')) ?></span>

@@ -599,11 +599,18 @@ function bindLetterTokenToolbar(root) {
     bar.setAttribute('data-bound', '1');
     var undoStack = [];
     var undoBtn = bar.querySelector('[data-letter-undo]');
+    var targetId = bar.getAttribute('data-insert-target') || '';
+    var targetTa = targetId ? document.getElementById(targetId) : null;
+    var typingSnapshot = null;
+    var typingTimer = null;
     function setUndoEnabled() {
       if (!undoBtn) {
         return;
       }
-      undoBtn.disabled = undoStack.length === 0;
+      var empty = undoStack.length === 0;
+      undoBtn.disabled = false;
+      undoBtn.setAttribute('aria-disabled', empty ? 'true' : 'false');
+      undoBtn.classList.toggle('is-disabled', empty);
     }
     function hideTip(btn) {
       if (window.bootstrap && bootstrap.Tooltip) {
@@ -619,20 +626,103 @@ function bindLetterTokenToolbar(root) {
         .replace(/\{\/font\}/gi, '')
         .replace(/\{ls:[0-9]+\}/gi, '')
         .replace(/\{\/ls\}/gi, '')
-        .replace(/\{\/?(?:b|u|big|center|right|left|justify|ul)\}/gi, '');
+        .replace(/\{indent:[0-9]+\}/gi, '')
+        .replace(/\{\/indent\}/gi, '')
+        .replace(/\{\/?(?:b|u|i|big|center|right|left|justify|ul)\}/gi, '');
     }
-    function pushUndo(ta) {
-      undoStack.push({
-        value: ta.value,
+    function selectionOf(ta) {
+      return {
         start: typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length,
         end: typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length
-      });
+      };
+    }
+    function pushUndoState(state) {
+      if (!state) {
+        return;
+      }
+      var last = undoStack.length ? undoStack[undoStack.length - 1] : null;
+      if (last && last.value === state.value && last.start === state.start && last.end === state.end) {
+        return;
+      }
+      undoStack.push(state);
       if (undoStack.length > 40) {
         undoStack.shift();
       }
       setUndoEnabled();
     }
+    function pushUndo(ta) {
+      if (!ta) {
+        return;
+      }
+      var sel = selectionOf(ta);
+      pushUndoState({ value: ta.value, start: sel.start, end: sel.end });
+    }
+    function clearTypingSnapshot() {
+      typingSnapshot = null;
+      if (typingTimer) {
+        clearTimeout(typingTimer);
+        typingTimer = null;
+      }
+    }
+    function applyUndo() {
+      var taUndo = document.getElementById(bar.getAttribute('data-insert-target') || '');
+      clearTypingSnapshot();
+      var prev = undoStack.pop();
+      if (taUndo && prev) {
+        taUndo.focus();
+        taUndo.value = prev.value;
+        try {
+          taUndo.setSelectionRange(prev.start, prev.end);
+        } catch (err) { /* تجاهل */ }
+        taUndo.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      setUndoEnabled();
+    }
+    function wrapFamilyOf(wrapOpen) {
+      var open = String(wrapOpen || '');
+      if (/^\{indent:\d+\}$/i.test(open)) {
+        return 'indent';
+      }
+      if (/^\{ls:\d+\}$/i.test(open)) {
+        return 'ls';
+      }
+      if (/^\{font:[a-z0-9_]+\}$/i.test(open)) {
+        return 'font';
+      }
+      if (/^\{(left|right|center|justify)\}$/i.test(open)) {
+        return 'align';
+      }
+      if (/^\{(b|u|i|big)\}$/i.test(open)) {
+        return open.replace(/[{}]/g, '').toLowerCase();
+      }
+      return '';
+    }
+    function stripWrapFamily(chunk, family) {
+      var text = String(chunk || '');
+      if (!family) {
+        return text;
+      }
+      if (family === 'indent') {
+        return text.replace(/\{indent:\d+\}/gi, '').replace(/\{\/indent\}/gi, '');
+      }
+      if (family === 'ls') {
+        return text.replace(/\{ls:\d+\}/gi, '').replace(/\{\/ls\}/gi, '');
+      }
+      if (family === 'font') {
+        return text.replace(/\{font:[a-z0-9_]+\}/gi, '').replace(/\{\/font\}/gi, '');
+      }
+      if (family === 'align') {
+        return text.replace(/\{\/?(?:left|right|center|justify)\}/gi, '');
+      }
+      if (family === 'b' || family === 'u' || family === 'i' || family === 'big') {
+        return text
+          .replace(new RegExp('\\{' + family + '\\}', 'gi'), '')
+          .replace(new RegExp('\\{/' + family + '\\}', 'gi'), '');
+      }
+      return text;
+    }
     function applyWrap(ta, wrapOpen, wrapClose, asParagraph) {
+      clearTypingSnapshot();
       ta.focus();
       var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
       var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
@@ -655,20 +745,67 @@ function bindLetterTokenToolbar(root) {
           end = lineEnd;
         }
       }
-      var insert = wrapOpen + value.slice(start, end) + wrapClose;
-      undoStack.push({ value: value, start: origStart, end: origEnd });
-      if (undoStack.length > 40) {
-        undoStack.shift();
+      var family = wrapFamilyOf(wrapOpen);
+      var selected = value.slice(start, end);
+      // الحدث الأخير يستبدل السابق لنفس النوع (بدل {indent:9}{indent:5}…{/indent}{/indent})
+      var cleaned = stripWrapFamily(selected, family).replace(/^\s+|\s+$/g, '');
+      if (cleaned === '' && selected.replace(/\{\/?[^{}]+\}/g, '').trim() === '') {
+        cleaned = '';
       }
+      // إن فُرّغ المحتوى بعد إزالة الوسوم فقط، أبقِ النص الداخلي الخام
+      if (cleaned === '' && selected !== '') {
+        cleaned = selected.replace(/^\s+|\s+$/g, '');
+        cleaned = stripWrapFamily(cleaned, family).replace(/^\s+|\s+$/g, '');
+      }
+      var insert = wrapOpen + cleaned + wrapClose;
+      pushUndoState({ value: value, start: origStart, end: origEnd });
       ta.value = value.slice(0, start) + insert + value.slice(end);
       try {
-        ta.setSelectionRange(start + wrapOpen.length, start + wrapOpen.length + (end - start));
+        ta.setSelectionRange(start + wrapOpen.length, start + wrapOpen.length + cleaned.length);
       } catch (err) { /* تجاهل */ }
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       setUndoEnabled();
     }
-    var targetId = bar.getAttribute('data-insert-target') || '';
-    var targetTa = targetId ? document.getElementById(targetId) : null;
+    if (targetTa && targetTa.getAttribute('data-letter-undo-bound') !== '1') {
+      targetTa.setAttribute('data-letter-undo-bound', '1');
+      targetTa.addEventListener('keydown', function (e) {
+        var key = (e.key || '').toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'z') {
+          if (undoStack.length) {
+            e.preventDefault();
+            applyUndo();
+          }
+          return;
+        }
+        if (!(e.ctrlKey || e.metaKey || e.altKey) && (key.length === 1 || key === 'backspace' || key === 'delete' || key === 'enter')) {
+          if (!typingSnapshot) {
+            var sel = selectionOf(targetTa);
+            typingSnapshot = { value: targetTa.value, start: sel.start, end: sel.end };
+          }
+        }
+      });
+      targetTa.addEventListener('input', function () {
+        if (!typingSnapshot) {
+          return;
+        }
+        if (typingTimer) {
+          clearTimeout(typingTimer);
+        }
+        typingTimer = setTimeout(function () {
+          if (typingSnapshot && typingSnapshot.value !== targetTa.value) {
+            pushUndoState(typingSnapshot);
+          }
+          typingSnapshot = null;
+          typingTimer = null;
+        }, 450);
+      });
+      targetTa.addEventListener('blur', function () {
+        if (typingSnapshot && typingSnapshot.value !== targetTa.value) {
+          pushUndoState(typingSnapshot);
+        }
+        clearTypingSnapshot();
+      });
+    }
     var lsSel = bar.querySelector('[data-letter-ls]');
     if (lsSel) {
       lsSel.addEventListener('change', function () {
@@ -685,21 +822,32 @@ function bindLetterTokenToolbar(root) {
         hideTip(lsSel.closest('.letter-token-btn') || lsSel);
       });
     }
+    var indentSel = bar.querySelector('[data-letter-indent]');
+    if (indentSel) {
+      indentSel.addEventListener('change', function () {
+        var code = (indentSel.value || '').replace(/[^0-9]/g, '');
+        indentSel.value = '';
+        if (!code) {
+          return;
+        }
+        var taIndent = document.getElementById(bar.getAttribute('data-insert-target') || '');
+        if (!taIndent) {
+          return;
+        }
+        applyWrap(taIndent, '{indent:' + code + '}', '{/indent}', false);
+        hideTip(indentSel.closest('.letter-token-btn') || indentSel);
+      });
+    }
     setUndoEnabled();
     bar.addEventListener('click', function (e) {
       var undoHit = e.target.closest('[data-letter-undo]');
       if (undoHit && bar.contains(undoHit)) {
-        var taUndo = document.getElementById(bar.getAttribute('data-insert-target') || '');
-        var prev = undoStack.pop();
-        if (taUndo && prev) {
-          taUndo.focus();
-          taUndo.value = prev.value;
-          try {
-            taUndo.setSelectionRange(prev.start, prev.end);
-          } catch (err) { /* تجاهل */ }
-          taUndo.dispatchEvent(new Event('input', { bubbles: true }));
+        e.preventDefault();
+        if (undoHit.getAttribute('aria-disabled') === 'true') {
+          hideTip(undoHit);
+          return;
         }
-        setUndoEnabled();
+        applyUndo();
         hideTip(undoHit);
         return;
       }
@@ -716,6 +864,7 @@ function bindLetterTokenToolbar(root) {
           }
           var cleaned = stripLetterFormatting(src.slice(cStart, cEnd));
           if (cleaned !== src.slice(cStart, cEnd)) {
+            clearTypingSnapshot();
             pushUndo(taClear);
             taClear.value = src.slice(0, cStart) + cleaned + src.slice(cEnd);
             try {
@@ -749,24 +898,21 @@ function bindLetterTokenToolbar(root) {
         applyWrap(ta, wrapOpen, wrapClose, btn.getAttribute('data-wrap-para') === '1');
         hideTip(btn);
         return;
-      } else {
-        insert = btn.getAttribute('data-insert-nl') === '1'
-          ? '\n'
-          : (btn.getAttribute('data-insert-token') || '');
-        if (insert === '') {
-          return;
-        }
-        selStart = start + insert.length;
-        selEnd = selStart;
       }
-      undoStack.push({
+      insert = btn.getAttribute('data-insert-nl') === '1'
+        ? '\n'
+        : (btn.getAttribute('data-insert-token') || '');
+      if (insert === '') {
+        return;
+      }
+      selStart = start + insert.length;
+      selEnd = selStart;
+      clearTypingSnapshot();
+      pushUndoState({
         value: value,
         start: typeof ta.selectionStart === 'number' ? ta.selectionStart : start,
         end: typeof ta.selectionEnd === 'number' ? ta.selectionEnd : end
       });
-      if (undoStack.length > 40) {
-        undoStack.shift();
-      }
       ta.value = value.slice(0, start) + insert + value.slice(end);
       try {
         ta.setSelectionRange(selStart, selEnd);
@@ -808,6 +954,16 @@ function bindLetterPreview(root) {
       if (!ta) {
         return;
       }
+      function fieldPreviewCheck(formEl, name, defaultOn) {
+        var el = formEl ? formEl.querySelector('[name="' + name + '"]') : null;
+        if (!el) {
+          return defaultOn ? '1' : '';
+        }
+        if (el.type === 'checkbox') {
+          return el.checked ? '1' : '';
+        }
+        return el.value || '';
+      }
       if (btn.getAttribute('data-letter-preview-print') === '1') {
         var printUrl = btn.getAttribute('data-letter-preview-print-url') || '';
         var form = ta.closest('form') || document.querySelector('form.admin-form');
@@ -835,6 +991,45 @@ function bindLetterPreview(root) {
         addField('template_id', (tplSel && tplSel.value) || btn.getAttribute('data-template-id') || '');
         addField('department_id', (form.querySelector('[name="department_id"]') || {}).value || '');
         addField('issuing_department_id', (form.querySelector('[name="issuing_department_id"]') || {}).value || '');
+        addField('subject', (form.querySelector('[name="subject"]') || {}).value || '');
+        (function () {
+          var entityId = '';
+          var firstEntity = form.querySelector('input[name="entity_ids[]"]');
+          if (firstEntity && firstEntity.value) {
+            entityId = String(firstEntity.value);
+          } else {
+            var single = form.querySelector('[name="entity_id"]');
+            entityId = single && single.value ? String(single.value) : '';
+          }
+          addField('entity_id', entityId);
+          if (entityId) {
+            addField('entity_ids[]', entityId);
+          }
+        })();
+        addField('requires_rsvp', fieldPreviewCheck(form, 'requires_rsvp') || fieldPreviewCheck(form, 'rsvp_required'));
+        addField('rsvp_required', fieldPreviewCheck(form, 'rsvp_required') || fieldPreviewCheck(form, 'requires_rsvp'));
+        addField('rsvp_allow_remote', fieldPreviewCheck(form, 'rsvp_allow_remote', true));
+        (function () {
+          var linkUrlEl = form.querySelector('#letter_link_url') || form.querySelector('[name="letter_link_url"]');
+          var linkLabelEl = form.querySelector('#letter_link_label') || form.querySelector('[name="letter_link_label"]');
+          var linkUrl = linkUrlEl ? String(linkUrlEl.value || '') : '';
+          var linkLabel = linkLabelEl ? String(linkLabelEl.value || '') : '';
+          var linkEnable = fieldPreviewCheck(form, 'letter_link_enable');
+          if (linkUrl && !linkEnable) {
+            linkEnable = '1';
+          }
+          addField('letter_link_enable', linkEnable);
+          addField('letter_link_label', linkLabel);
+          addField('letter_link_url', linkUrl);
+        })();
+        addField('email_letter_attach', fieldPreviewCheck(form, 'email_letter_attach'));
+        addField('batch_id', (form.querySelector('[name="batch_id"]') || {}).value || '');
+        var corrIdAttr = form.getAttribute('data-corr-id') || '';
+        if (corrIdAttr) {
+          addField('correspondence_id', corrIdAttr);
+        }
+        addField('intend_electronic', '1');
+        addField('intend_paper', '1');
         document.body.appendChild(printForm);
         printForm.submit();
         printForm.remove();
@@ -865,18 +1060,48 @@ function bindLetterPreview(root) {
       if (csrf) {
         data.set('csrf_token', csrf.value);
       }
-      data.set('entity_id', fieldVal('entity_id'));
+      (function () {
+        var entityId = '';
+        var firstEntity = form ? form.querySelector('input[name="entity_ids[]"]') : null;
+        if (firstEntity && firstEntity.value) {
+          entityId = String(firstEntity.value);
+        } else {
+          entityId = fieldVal('entity_id');
+        }
+        data.set('entity_id', entityId);
+        if (entityId) {
+          data.append('entity_ids[]', entityId);
+        }
+      })();
       data.set('subject', fieldVal('subject'));
       data.set('corr_date', fieldVal('corr_date'));
       data.set('issuing_department_id', fieldVal('issuing_department_id'));
       data.set('department_id', fieldVal('department_id'));
       data.set('rsvp_required', fieldVal('rsvp_required') || fieldVal('requires_rsvp'));
+      data.set('requires_rsvp', fieldVal('requires_rsvp') || fieldVal('rsvp_required'));
+      data.set('rsvp_allow_remote', fieldVal('rsvp_allow_remote') || '1');
+      (function () {
+        var linkUrlEl = form ? (form.querySelector('#letter_link_url') || form.querySelector('[name="letter_link_url"]')) : null;
+        var linkLabelEl = form ? (form.querySelector('#letter_link_label') || form.querySelector('[name="letter_link_label"]')) : null;
+        var linkUrl = linkUrlEl ? String(linkUrlEl.value || '') : fieldVal('letter_link_url');
+        var linkLabel = linkLabelEl ? String(linkLabelEl.value || '') : fieldVal('letter_link_label');
+        var linkEnable = fieldVal('letter_link_enable');
+        if (linkUrl && !linkEnable) {
+          linkEnable = '1';
+        }
+        data.set('letter_link_enable', linkEnable);
+        data.set('letter_link_label', linkLabel);
+        data.set('letter_link_url', linkUrl);
+      })();
+      data.set('email_letter_attach', fieldVal('email_letter_attach'));
+      data.set('batch_id', fieldVal('batch_id'));
       data.set('intend_electronic', fieldVal('intend_electronic') || '1');
+      data.set('intend_paper', fieldVal('intend_paper') || '1');
       if (btn.getAttribute('data-letter-preview-omit-parties') === '1') {
         data.set('omit_parties', '1');
       }
       if (form && form.getAttribute('data-corr-id')) {
-        data.set('id', form.getAttribute('data-corr-id'));
+        data.set('correspondence_id', form.getAttribute('data-corr-id'));
       }
       if (form && form.getAttribute('data-corr-ref')) {
         data.set('ref_number', form.getAttribute('data-corr-ref'));

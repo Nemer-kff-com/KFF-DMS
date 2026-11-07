@@ -68,33 +68,45 @@ require __DIR__ . '/../includes/header.php';
     <div class="page-header-main">
         <h1 class="page-title"><?= e(__('corr.outgoing_list')) ?></h1>
         <p class="page-sub"><?= e(__('corr.outgoing_sub')) ?></p>
-        <div class="page-header-bulk">
-            <?php $bulkUi = dms_perm_ui('outgoing.bulk', $user); ?>
-            <?php $canViewBatches = function_exists('user_can_view_outgoing_batch_pages') && user_can_view_outgoing_batch_pages($user); ?>
-            <?php if ($bulkUi === 'allow'): ?>
-                <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('outgoing/bulk.php')) ?>">
-                    <i class="bi bi-people me-1"></i><?= e(__('corr.outgoing_bulk')) ?>
-                </a>
-                <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('outgoing/batches.php')) ?>">
-                    <i class="bi bi-collection me-1"></i><?= e(__('bulk.batches_title')) ?>
-                </a>
-            <?php else: ?>
-                <?php if ($bulkUi === 'deny'): ?>
-                    <?= dms_perm_denied_btn(__('corr.outgoing_bulk'), 'bi-people', 'btn-outline-secondary btn-sm') ?>
-                <?php endif; ?>
-                <?php if ($canViewBatches): ?>
-                    <a class="btn btn-outline-secondary btn-sm" href="<?= e(base_url('outgoing/batches.php')) ?>">
-                        <i class="bi bi-collection me-1"></i><?= e(__('bulk.batches_title')) ?>
-                    </a>
-                <?php elseif ($bulkUi === 'deny'): ?>
-                    <?= dms_perm_denied_btn(__('bulk.batches_title'), 'bi-collection', 'btn-outline-secondary btn-sm') ?>
-                <?php endif; ?>
-            <?php endif; ?>
-        </div>
     </div>
-    <?php $addBtn = dms_perm_add_btn('outgoing.create', base_url('outgoing/create.php'), __('corr.outgoing_new'), 'bi-plus-lg', $user); ?>
-    <?php if ($addBtn !== ''): ?>
+    <?php
+    $bulkUi = dms_perm_ui('outgoing.bulk', $user);
+    $canViewBatches = function_exists('user_can_view_outgoing_batch_pages') && user_can_view_outgoing_batch_pages($user);
+    $bulkNav = '';
+    if ($bulkUi === 'allow') {
+        $bulkNav .= btn_icon(__('corr.outgoing_bulk'), [
+            'href' => base_url('outgoing/bulk.php'),
+            'icon' => 'bi-people',
+            'class' => 'btn-outline-secondary',
+        ]);
+        $bulkNav .= btn_icon(__('bulk.batches_title'), [
+            'href' => base_url('outgoing/batches.php'),
+            'icon' => 'bi-collection',
+            'class' => 'btn-outline-secondary',
+        ]);
+    } else {
+        if ($bulkUi === 'deny') {
+            $bulkNav .= dms_perm_denied_icon_btn(__('corr.outgoing_bulk'), 'bi-people');
+        }
+        if ($canViewBatches) {
+            $bulkNav .= btn_icon(__('bulk.batches_title'), [
+                'href' => base_url('outgoing/batches.php'),
+                'icon' => 'bi-collection',
+                'class' => 'btn-outline-secondary',
+            ]);
+        } elseif ($bulkUi === 'deny') {
+            $bulkNav .= dms_perm_denied_icon_btn(__('bulk.batches_title'), 'bi-collection');
+        }
+    }
+    $addBtn = dms_perm_add_btn('outgoing.create', base_url('outgoing/create.php'), __('corr.outgoing_new'), 'bi-plus-lg', $user);
+    ?>
+    <?php if (trim($bulkNav . $addBtn) !== ''): ?>
         <div class="page-header-actions">
+            <?php if (trim($bulkNav) !== ''): ?>
+                <div class="page-header-bulk-actions" role="group" aria-label="<?= e(__('corr.outgoing_bulk')) ?>">
+                    <?= $bulkNav ?>
+                </div>
+            <?php endif; ?>
             <?= $addBtn ?>
         </div>
     <?php endif; ?>
@@ -262,9 +274,17 @@ require __DIR__ . '/../includes/header.php';
                     </td>
                     <td>
                         <?php if ($isBatchGroup): ?>
-                            <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/batch.php?id=' . (int) ($r['batch_id'] ?? 0))) ?>"><?= e(__('corr.batch_view')) ?></a>
+                            <?= btn_icon(__('corr.batch_view'), [
+                                'href' => base_url('outgoing/batch.php?id=' . (int) ($r['batch_id'] ?? 0)),
+                                'icon' => 'bi-eye',
+                                'class' => 'btn-outline-primary btn-sm',
+                            ]) ?>
                         <?php else: ?>
-                            <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url('outgoing/view.php?id='.(int)$r['id'])) ?>"><?= e(__('action.view')) ?></a>
+                            <?= btn_icon(__('action.view'), [
+                                'href' => base_url('outgoing/view.php?id=' . (int) $r['id']),
+                                'icon' => 'bi-eye',
+                                'class' => 'btn-outline-primary btn-sm',
+                            ]) ?>
                         <?php endif; ?>
                     </td>
                 </tr>

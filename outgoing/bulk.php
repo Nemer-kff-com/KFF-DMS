@@ -148,6 +148,38 @@ $prepOn = function_exists('outgoing_prep_enabled') && outgoing_prep_enabled();
 $letterTemplateId = (int) (is_array($editBatch) ? ($editBatch['letter_template_id'] ?? 0) : 0);
 $prepReturned = $corr && function_exists('outgoing_prep_was_returned') && outgoing_prep_was_returned($corr);
 $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') && outgoing_user_is_prep_signer($user, $corr);
+
+// وثائق الدفعة المحفوظة (من أول مستلم يملك مرفقات)
+$editDocuments = [];
+$editDocReturn = $editing ? ('outgoing/bulk.php?id=' . $editBatchId) : '';
+$dmsEditDocForms = '';
+$canDeleteEditDocs = $editing && user_can('outgoing.bulk', $user);
+$docsSourceCorr = is_array($corr) ? $corr : null;
+if ($editing && function_exists('get_documents')) {
+    foreach ($editRows as $editRow) {
+        if (!is_array($editRow) || (int) ($editRow['id'] ?? 0) <= 0) {
+            continue;
+        }
+        $rowDocs = [];
+        foreach (get_documents((int) $editRow['id']) as $editDoc) {
+            if (str_starts_with((string) ($editDoc['doc_kind'] ?? ''), 'close_')) {
+                continue;
+            }
+            $rowDocs[] = $editDoc;
+        }
+        if ($rowDocs !== []) {
+            $editDocuments = $rowDocs;
+            $docsSourceCorr = $editRow;
+            break;
+        }
+    }
+    if ($docsSourceCorr
+        && function_exists('outgoing_draft_files_locked')
+        && outgoing_draft_files_locked($docsSourceCorr)
+    ) {
+        $canDeleteEditDocs = false;
+    }
+}
 ?>
 <div class="page-header page-narrow">
     <div>
@@ -155,16 +187,22 @@ $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') 
         <p class="page-sub"><?= e($editing ? __('bulk.edit_sub') : __('bulk.subtitle')) ?></p>
     </div>
     <div class="page-header-actions">
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/batches.php')) ?>">
-            <i class="bi bi-collection me-1"></i><?= e(__('bulk.batches_title')) ?>
-        </a>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('admin/entity_groups.php')) ?>">
-            <i class="bi bi-people me-1"></i><?= e(__('nav.entity_groups')) ?>
-        </a>
+        <?= btn_icon(__('bulk.batches_title'), [
+            'href' => base_url('outgoing/batches.php'),
+            'icon' => 'bi-collection',
+            'class' => 'btn-outline-secondary',
+        ]) ?>
+        <?= btn_icon(__('nav.entity_groups'), [
+            'href' => base_url('admin/entity_groups.php'),
+            'icon' => 'bi-people',
+            'class' => 'btn-outline-secondary',
+        ]) ?>
         <?php if ($editing): ?>
-        <a class="btn btn-outline-secondary" href="<?= e(base_url('outgoing/batch.php?id=' . $editBatchId)) ?>">
-            <i class="bi bi-collection me-1"></i><?= e(__('corr.batch_view')) ?>
-        </a>
+            <?= btn_icon(__('corr.batch_view'), [
+                'href' => base_url('outgoing/batch.php?id=' . $editBatchId),
+                'icon' => 'bi-eye',
+                'class' => 'btn-outline-secondary',
+            ]) ?>
         <?php endif; ?>
         <?= dms_back_icon(base_url('outgoing/index.php')) ?>
     </div>
@@ -206,16 +244,24 @@ $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') 
                     'prep' => __('bulk.confirm_prep'),
                     'review' => __('bulk.confirm_review'),
                     'approval' => __('bulk.confirm_approver'),
+                    'comms', 'none' => __('bulk.confirm_comms'),
                     default => __('bulk.confirm_comms'),
                 };
             }
             ?>
-            <form method="post" enctype="multipart/form-data" class="admin-form"<?= $prepOn ? '' : ' data-confirm="' . e($bulkConfirm) . '"' ?>>
+            <form method="post" enctype="multipart/form-data" class="admin-form"<?= $prepOn ? '' : ' data-confirm="' . e($bulkConfirm) . '"' ?>
+                  <?php if ($editing && is_array($docsSourceCorr) && (int) ($docsSourceCorr['id'] ?? 0) > 0): ?>
+                  data-corr-id="<?= (int) $docsSourceCorr['id'] ?>"
+                  data-corr-ref="<?= e((string) ($docsSourceCorr['ref_number'] ?? '')) ?>"
+                  <?php elseif ($editing && is_array($corr) && (int) ($corr['id'] ?? 0) > 0): ?>
+                  data-corr-id="<?= (int) $corr['id'] ?>"
+                  data-corr-ref="<?= e((string) ($corr['ref_number'] ?? '')) ?>"
+                  <?php endif; ?>>
                 <?= csrf_field() ?>
                 <?php if ($editing): ?>
                 <input type="hidden" name="batch_id" value="<?= (int) $editBatchId ?>">
                 <?php endif; ?>
-                <input type="hidden" name="entity_id" id="entity_id" value="">
+                <input type="hidden" name="entity_id" id="entity_id" value="<?= !empty($selectedIds[0]) ? (int) $selectedIds[0] : '' ?>">
 
                 <div class="admin-form-section">
                     <div class="admin-form-section-title"><?= e(__('corr.section_basic')) ?></div>
@@ -330,8 +376,8 @@ $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') 
                     </div>
                 </div>
 
-                <div class="admin-form-section">
-                    <div class="row g-3">
+                <div class="admin-form-section outgoing-attach-options-section">
+                    <div class="row g-2">
                         <div class="col-lg-6">
                             <div class="corr-field-card h-100">
                                 <?php require __DIR__ . '/../includes/corr_attachments_card_title.php'; ?>
@@ -345,11 +391,53 @@ $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') 
                                     'label' => __('corr.attach'),
                                     'hint' => '',
                                     'browse' => __('file.browse'),
-                                    'placeholder' => __('file.placeholder'),
+                                    'placeholder' => $editDocuments ? __('file.placeholder_more') : __('file.placeholder'),
                                     'selected' => __('file.selected'),
                                 ];
                                 require __DIR__ . '/../includes/corr_attachments_upload_block.php';
                                 ?>
+                                <?php if ($editDocuments): ?>
+                                    <div class="corr-file-list mt-3">
+                                        <?php foreach ($editDocuments as $doc): ?>
+                                            <?php
+                                            $docId = (int) ($doc['id'] ?? 0);
+                                            $docName = (string) ($doc['file_name'] ?? '');
+                                            $isPdf = str_contains(strtolower((string) ($doc['file_type'] ?? '')), 'pdf')
+                                                || str_ends_with(strtolower($docName), '.pdf');
+                                            $canOpenDoc = empty($user)
+                                                || !is_array($docsSourceCorr)
+                                                || user_can_view_corr_document($docsSourceCorr, $doc, $user);
+                                            ?>
+                                            <div class="corr-file-row">
+                                                <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $isPdf ? '-pdf' : '' ?>"></i></div>
+                                                <div class="corr-file-meta">
+                                                    <?php if ($canOpenDoc && $docId > 0): ?>
+                                                        <a href="<?= e(file_download_url('document', $docId)) ?>" target="_blank"><?= e($docName) ?></a>
+                                                    <?php else: ?>
+                                                        <span class="text-muted"><?= e($docName) ?></span>
+                                                    <?php endif; ?>
+                                                    <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label($docName, (string) ($doc['file_type'] ?? ''))) ?></span>
+                                                </div>
+                                                <?php if ($canDeleteEditDocs && $docId > 0 && $editDocReturn !== ''): ?>
+                                                    <button class="btn btn-sm btn-outline-danger" type="submit"
+                                                            form="delete-doc-<?= $docId ?>"
+                                                            title="<?= e(__('action.delete')) ?>">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                    <?php
+                                                    $dmsEditDocForms .= '<form id="delete-doc-' . $docId . '" method="post" action="'
+                                                        . e(base_url('documents/delete.php')) . '" data-confirm="'
+                                                        . e(__('corr.delete_attach_confirm')) . '">'
+                                                        . csrf_field()
+                                                        . '<input type="hidden" name="id" value="' . $docId . '">'
+                                                        . '<input type="hidden" name="return" value="' . e($editDocReturn) . '">'
+                                                        . '</form>';
+                                                    ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -431,6 +519,7 @@ $prepSelf = $prepOn && $corr && function_exists('outgoing_user_is_prep_signer') 
                     </div>
                 </div>
             </form>
+            <?= $dmsEditDocForms ?>
         </div>
     </div>
 </div>

@@ -187,11 +187,14 @@ function dms_delivery_status_label(?array $row): string
         return __('send.never');
     }
     $status = (string) ($row['status'] ?? '');
+    // مسافات غير قابلة للكسر حتى يبقى «تم الإرسال — التاريخ — الوقت» سطراً واحداً
     $when = format_datetime($row['created_at'] ?? null);
+    $when = str_replace(' — ', "\u{00A0}—\u{00A0}", $when);
+    $sep = "\u{00A0}—\u{00A0}";
     return match ($status) {
-        'sent' => __('send.last_sent') . ' — ' . $when,
-        'failed' => __('send.last_failed') . ' — ' . $when,
-        'skipped' => __('send.last_skipped') . ' — ' . $when,
+        'sent' => __('send.last_sent') . $sep . $when,
+        'failed' => __('send.last_failed') . $sep . $when,
+        'skipped' => __('send.last_skipped') . $sep . $when,
         default => $when,
     };
 }
@@ -386,19 +389,12 @@ function dms_corr_email_bodies(array $corr): array
                 . 'font-size:14pt;font-weight:normal;color:#000">' . e($number) . '</span></div>';
         }
         $letterPrint = function_exists('letter_strip_link_qr_token') ? letter_strip_link_qr_token($letter) : $letter;
-        $html .= '<div style="margin:0 0 20px;line-height:1.65;font-size:14pt;font-family:' . $font . ';color:#000">'
+        $corr['_email_dir'] = $dir;
+        $corr['_email_lang'] = $lang;
+        $html .= '<div dir="' . $dir . '" style="margin:0 0 20px;line-height:1.65;font-size:14pt;font-family:' . $font
+            . ';color:#000;direction:' . $dir . ';text-align:' . $align . '">'
             . render_letter_body_html($letterPrint, true, $corr)
             . '</div>';
-        // أسفل النص: مكان الاجتماع كنص قابل للنقر (بدون QR في البريد)
-        if (function_exists('letter_link_qr_markup')) {
-            $corr['_email_font'] = $font;
-            $corr['_email_mso'] = $fontMso;
-            $corr['_email_dir'] = $lang === 'en' ? 'ltr' : 'rtl';
-            $linkBlock = letter_link_qr_markup(true, $corr);
-            if ($linkBlock !== '') {
-                $html .= $linkBlock;
-            }
-        }
     } else {
         $html .= '<div style="margin:0 0 18px;font-size:14pt;color:#000;font-weight:normal;font-family:' . $font . ';'
             . (function_exists('letter_email_mso_style') ? letter_email_mso_style($fontMso) : '')
@@ -411,6 +407,16 @@ function dms_corr_email_bodies(array $corr): array
             . '<p style="margin:0 0 18px;font-weight:700;font-size:16px;font-family:' . $font . ';color:#000">' . e($greet) . '</p>'
             . '<p style="margin:0 0 12px;font-family:' . $font . ';color:#000">' . e($t('send.email_intro')) . '</p>'
             . '<p style="margin:0 0 16px;font-weight:700;font-family:' . $font . ';color:#000">' . e($subject) . '</p>';
+    }
+    // مكان الاجتماع: دائماً أسفل النص (حتى لو كان نص الخطاب فارغاً في المعاينة)
+    if (function_exists('letter_link_qr_markup')) {
+        $corr['_email_font'] = $font;
+        $corr['_email_mso'] = $fontMso;
+        $corr['_email_dir'] = $lang === 'en' ? 'ltr' : 'rtl';
+        $linkBlock = letter_link_qr_markup(true, $corr);
+        if ($linkBlock !== '') {
+            $html .= $linkBlock;
+        }
     }
     if ($needsRsvp && $link !== '') {
         $askKey = function_exists('correspondence_rsvp_ask_key')
@@ -552,6 +558,88 @@ function dms_corr_email_message_view(array $corr): array
     ];
 }
 
+/**
+ * مرفقات البريد للمعاينة (أسماء + روابط فتح عند الطلب) + رابط الخطاب الرسمي إن كان سيُرفق.
+ *
+ * @return array{attachments:list<array{name:string,mime:string,kind:string,url:string,id:int}>,official_url:string,official_name:string}
+ */
+function dms_corr_email_preview_attachments(array $corr): array
+{
+    $attachments = [];
+    foreach (dms_corr_email_attachments($corr) as $doc) {
+        if (!is_array($doc)) {
+            continue;
+        }
+        $name = trim((string) ($doc['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $docId = (int) ($doc['id'] ?? 0);
+        $url = '';
+        if ($docId > 0 && function_exists('file_download_url')) {
+            $url = file_download_url('document', $docId);
+        }
+        $attachments[] = [
+            'name' => $name,
+            'mime' => trim((string) ($doc['mime'] ?? '')),
+            'kind' => 'document',
+            'url' => $url,
+            'id' => $docId,
+        ];
+    }
+
+    $officialUrl = '';
+    $officialName = '';
+    $redacted = function_exists('dms_corr_is_confidential_row') && dms_corr_is_confidential_row($corr)
+        && function_exists('dms_conf_external_notify_redacted') && dms_conf_external_notify_redacted();
+    $corrId = (int) ($corr['id'] ?? 0);
+    $hasLetter = trim(function_exists('correspondence_letter_text') ? correspondence_letter_text($corr) : '') !== '';
+    $attachOfficial = (int) ($corr['email_letter_attach'] ?? 0) === 1;
+    // إن وُجدت الدفعة وخيار المرفق عليها، اعتبره مفعّلاً للمعاينة/الإرسال
+    if (!$attachOfficial) {
+        $batchId = (int) ($corr['batch_id'] ?? 0);
+        if ($batchId > 0) {
+            try {
+                $bst = db()->prepare('SELECT email_letter_attach FROM `tbloutgoing_batches` WHERE id = ? LIMIT 1');
+                $bst->execute([$batchId]);
+                $attachOfficial = (int) $bst->fetchColumn() === 1;
+            } catch (Throwable $e) {
+                $attachOfficial = false;
+            }
+        }
+    }
+    if (!$redacted
+        && $corrId > 0
+        && $hasLetter
+        && $attachOfficial
+        && function_exists('correspondence_intend_electronic')
+        && correspondence_intend_electronic($corr)
+    ) {
+        $ref = function_exists('format_ref_number') ? format_ref_number($corr['ref_number'] ?? '') : (string) ($corr['ref_number'] ?? '');
+        $safe = trim((string) preg_replace('/[^\p{L}\p{N}\-_]+/u', '-', $ref), '-');
+        if ($safe === '') {
+            $safe = 'letter';
+        }
+        $officialName = $safe . '.pdf';
+        $officialUrl = function_exists('base_url')
+            ? base_url('outgoing/email_official_preview.php?id=' . $corrId . '&preview=1')
+            : ('email_official_preview.php?id=' . $corrId . '&preview=1');
+        array_unshift($attachments, [
+            'name' => $officialName,
+            'mime' => 'application/pdf',
+            'kind' => 'official_letter',
+            'url' => $officialUrl,
+            'id' => 0,
+        ]);
+    }
+
+    return [
+        'attachments' => $attachments,
+        'official_url' => $officialUrl,
+        'official_name' => $officialName,
+    ];
+}
+
 function dms_corr_email_preview(array $corr): array
 {
     $to = dms_corr_email_address($corr);
@@ -562,8 +650,9 @@ function dms_corr_email_preview(array $corr): array
         ];
     }
     $view = dms_corr_email_message_view($corr);
+    $attach = dms_corr_email_preview_attachments($corr);
 
-    return ['ok' => true] + $view;
+    return ['ok' => true] + $view + $attach;
 }
 
 function dms_corr_whatsapp_text(array $corr): string
@@ -651,33 +740,58 @@ function dms_corr_email_attachments(array $corr): array
     $closeKinds = function_exists('correspondence_close_doc_kind_values')
         ? array_fill_keys(correspondence_close_doc_kind_values(), true)
         : [];
-    $out = [];
-    foreach (get_documents($corrId) as $doc) {
-        $kind = trim((string) ($doc['doc_kind'] ?? ''));
-        if ($kind !== '' && isset($closeKinds[$kind])) {
-            continue;
+
+    $collectFromCorrId = static function (int $id) use ($closeKinds): array {
+        $out = [];
+        foreach (get_documents($id) as $doc) {
+            $kind = trim((string) ($doc['doc_kind'] ?? ''));
+            if ($kind !== '' && isset($closeKinds[$kind])) {
+                continue;
+            }
+            $relative = str_replace('\\', '/', trim((string) ($doc['file_path'] ?? '')));
+            if ($relative === '' || !function_exists('dms_is_safe_upload_path') || !dms_is_safe_upload_path($relative)) {
+                continue;
+            }
+            $full = function_exists('dms_storage_disk_path')
+                ? dms_storage_disk_path($relative)
+                : realpath(dirname(__DIR__) . '/' . $relative);
+            if ($full === false || $full === '' || !is_file($full)) {
+                continue;
+            }
+            $name = trim((string) ($doc['file_name'] ?? ''));
+            if ($name === '') {
+                $name = basename($full);
+            }
+            $out[] = [
+                'id' => (int) ($doc['id'] ?? 0),
+                'path' => $full,
+                'name' => $name,
+                'mime' => trim((string) ($doc['file_type'] ?? '')),
+                'relative' => $relative,
+            ];
         }
-        $relative = str_replace('\\', '/', trim((string) ($doc['file_path'] ?? '')));
-        if ($relative === '' || !function_exists('dms_is_safe_upload_path') || !dms_is_safe_upload_path($relative)) {
-            continue;
+        return $out;
+    };
+
+    $out = $collectFromCorrId($corrId);
+    // دفعة: إن لم تُنسخ الوثائق لهذا المستلم بعد، خذها من أي شقيق في الدفعة
+    if ($out === []) {
+        $batchId = (int) ($corr['batch_id'] ?? 0);
+        if ($batchId > 0 && function_exists('outgoing_batch_items_unscoped')) {
+            foreach (outgoing_batch_items_unscoped($batchId) as $item) {
+                $siblingId = (int) ($item['id'] ?? 0);
+                if ($siblingId <= 0 || $siblingId === $corrId) {
+                    continue;
+                }
+                if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($item)) {
+                    continue;
+                }
+                $out = $collectFromCorrId($siblingId);
+                if ($out !== []) {
+                    break;
+                }
+            }
         }
-        $full = function_exists('dms_storage_disk_path')
-            ? dms_storage_disk_path($relative)
-            : realpath(dirname(__DIR__) . '/' . $relative);
-        if ($full === false || $full === '' || !is_file($full)) {
-            continue;
-        }
-        $name = trim((string) ($doc['file_name'] ?? ''));
-        if ($name === '') {
-            $name = basename($full);
-        }
-        $out[] = [
-            'id' => (int) ($doc['id'] ?? 0),
-            'path' => $full,
-            'name' => $name,
-            'mime' => trim((string) ($doc['file_type'] ?? '')),
-            'relative' => $relative,
-        ];
     }
     return $out;
 }
@@ -926,7 +1040,8 @@ function dms_send_outgoing_channel(array $corr, string $channel, array $user, st
     }
     $electronic = function_exists('correspondence_intend_electronic') && correspondence_intend_electronic($corr);
     $paper = function_exists('correspondence_intend_paper') && correspondence_intend_paper($corr);
-    if (in_array($channel, ['email', 'whatsapp'], true) && !$electronic) {
+    // البريد مرتبط بالإلكتروني؛ واتساب يُسمح به مع أي جوال صالح (للتجربة أيضاً على الرقم الشخصي)
+    if ($channel === 'email' && !$electronic) {
         return [
             'ok' => false,
             'status' => 'skipped',
@@ -946,8 +1061,13 @@ function dms_send_outgoing_channel(array $corr, string $channel, array $user, st
             'provider' => '',
         ];
     }
-    if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
-        $msg = function_exists('outgoing_approval_block_reason') ? outgoing_approval_block_reason($corr) : __('issue_appr.blocked_pending');
+    if (function_exists('outgoing_user_may_issue')
+        ? !outgoing_user_may_issue($user, $corr)
+        : (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr))
+    ) {
+        $msg = function_exists('outgoing_user_issue_block_reason')
+            ? outgoing_user_issue_block_reason($user, $corr)
+            : (function_exists('outgoing_approval_block_reason') ? outgoing_approval_block_reason($corr) : __('issue_appr.blocked_pending'));
         return [
             'ok' => false,
             'status' => 'skipped',

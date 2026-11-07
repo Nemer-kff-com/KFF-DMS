@@ -38,8 +38,14 @@ function mail_draft_block_reason(array $corr): string
         return __('mail_draft.blocked_cancelled');
     }
     if (($corr['type'] ?? '') === 'outgoing') {
-        if (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr)) {
-            return __('issue_appr.print_blocked_short');
+        $actor = function_exists('current_user') ? current_user() : null;
+        if (function_exists('outgoing_user_may_issue')
+            ? !outgoing_user_may_issue(is_array($actor) ? $actor : null, $corr)
+            : (function_exists('outgoing_can_issue') && !outgoing_can_issue($corr))
+        ) {
+            return function_exists('outgoing_user_issue_block_reason')
+                ? outgoing_user_issue_block_reason(is_array($actor) ? $actor : null, $corr)
+                : __('issue_appr.print_blocked_short');
         }
         return '';
     }

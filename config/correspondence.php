@@ -482,7 +482,7 @@ function ensure_email_letter_attach_schema(): void
     }
 }
 
-/** حقول رابط اختياري في نص الخطاب (تسمية + رابط → {link_qr}). */
+/** حقول رابط اختياري أسفل نص الخطاب (تسمية + رابط). */
 function ensure_letter_link_schema(): void
 {
     static $done = false;
@@ -996,14 +996,14 @@ function save_correspondence(string $type, array $data, ?array $file, array $use
         }
     }
 
-    // صادر جديد ليس مسودة: يدخل المراجعة أو الاعتماد إن كان مفتاحهما مفعّلاً، وإلا يبقى جاهزاً للإرسال
+    // صادر جديد ليس مسودة: مراجعة/اعتماد إن وُجدت، وإلا إحالة للاتصالات الإدارية
     if (!$id && $type === 'outgoing' && empty($asOutgoingDraft)) {
         try {
-            if (function_exists('outgoing_issue_flow_active') && outgoing_issue_flow_active() && function_exists('outgoing_approval_request')) {
-                outgoing_approval_request($corrId, $user);
+            if (function_exists('outgoing_enter_next_path')) {
+                outgoing_enter_next_path($corrId, $user);
             }
         } catch (Throwable $apprEx) {
-            error_log('DMS outgoing approval auto-request: ' . $apprEx->getMessage());
+            error_log('DMS outgoing next path auto-enter: ' . $apprEx->getMessage());
         }
     }
 
@@ -1689,19 +1689,21 @@ function save_outgoing_batch(array $data, array $entityIds, array $user, ?array 
         throw $e;
     }
 
-    // بعد الالتزام: المسودة تنتظر صاحب الشأن. غيرها يدخل المراجعة أو الاعتماد، وإلا يبقى جاهزاً للإرسال.
+    // بعد الالتزام: المسودة تنتظر صاحب الشأن. غيرها: مراجعة/اعتماد أو الاتصالات (نفس المفرد).
     if ($asDraft) {
         return $batchId;
     }
-    if (function_exists('outgoing_issue_flow_active')
-        && outgoing_issue_flow_active()
-        && function_exists('outgoing_batch_request_approvals')
-    ) {
-        try {
+    try {
+        if (function_exists('outgoing_issue_flow_active')
+            && outgoing_issue_flow_active()
+            && function_exists('outgoing_batch_request_approvals')
+        ) {
             outgoing_batch_request_approvals($batchId, $user);
-        } catch (Throwable $apprEx) {
-            error_log('DMS bulk outgoing approval auto-request: ' . $apprEx->getMessage());
+        } elseif (function_exists('outgoing_batch_release_to_communications')) {
+            outgoing_batch_release_to_communications($batchId, $user);
         }
+    } catch (Throwable $apprEx) {
+        error_log('DMS bulk outgoing next path: ' . $apprEx->getMessage());
     }
 
     return $batchId;
@@ -2120,7 +2122,8 @@ function outgoing_batch_set_recipient_modes(int $batchId, array $modes): void
             if (!$corr || (int) ($corr['batch_id'] ?? 0) !== $batchId) {
                 continue;
             }
-            $block = outgoing_delivery_edit_block([], $corr);
+            $actor = function_exists('current_user') ? (current_user() ?? []) : [];
+            $block = outgoing_delivery_edit_block(is_array($actor) ? $actor : [], $corr);
             if ($block !== '') {
                 throw new RuntimeException($block);
             }

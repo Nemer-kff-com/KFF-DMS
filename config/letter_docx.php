@@ -108,7 +108,7 @@ function letter_docx_build(array $items): string
  * HTML خطاب رسمي للمرفق: مطابق لورقة طباعة الصادر
  * (شعار، ملصق رقم الصادر، نص الخطاب، تأكيد الحضور وQR، تذييل التواصل).
  */
-function letter_email_official_print_document(array $corr): string
+function letter_email_official_print_document(array $corr, bool $screenPreview = false): string
 {
     if (!function_exists('letter_email_inline_local_images')) {
         require_once __DIR__ . '/letter_email_snapshot.php';
@@ -117,6 +117,14 @@ function letter_email_official_print_document(array $corr): string
     $lang = $lang === 'en' ? 'en' : 'ar';
     $isEn = $lang === 'en';
     $dir = $isEn ? 'ltr' : 'rtl';
+    // ضمان رابط مكان الاجتماع ورمز QR صالحين في المعاينة
+    if (function_exists('letter_preview_ensure_letter_link')) {
+        $corr = letter_preview_ensure_letter_link($corr, $corr, (int) ($corr['batch_id'] ?? 0));
+    }
+    $token = strtolower(trim((string) ($corr['qr_token'] ?? '')));
+    if (!preg_match('/^[a-f0-9]{32}$/', $token)) {
+        $corr['qr_token'] = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    }
     $body = trim(function_exists('correspondence_letter_text') ? correspondence_letter_text($corr, $lang) : '');
     if ($body === '') {
         return '';
@@ -212,11 +220,15 @@ function letter_email_official_print_document(array $corr): string
         }
     }
     $inner = letter_email_inline_local_images($inner);
+    // في معاينة الشاشة: لا تُقصّ أسفل الخطاب (مكان الاجتماع + QR) بارتفاع A4 الثابت
+    $sheetHeight = $screenPreview
+        ? 'min-height:297mm;height:auto;overflow:visible;'
+        : 'min-height:297mm;height:297mm;overflow:visible;';
     $css = $faces
         . '@page{size:A4 portrait;margin:0;}'
-        . 'html,body{margin:0;padding:0;background:#fff;color:#000;width:210mm;min-height:297mm;}'
+        . 'html,body{margin:0;padding:0;background:#fff;color:#000;width:210mm;' . ($screenPreview ? 'min-height:297mm;height:auto;' : 'min-height:297mm;') . '}'
         . 'body{font-family:\'' . $family . '\',Tahoma,Arial,sans-serif;font-size:12pt;line-height:1.5;direction:' . $dir . ';-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-        . '.print-sheet{width:210mm;max-width:210mm;min-height:297mm;height:297mm;margin:0;padding:14mm 2.5cm 10mm 2.5cm;box-sizing:border-box;background:#fff;position:relative;overflow:visible;display:flex;flex-direction:column;}'
+        . '.print-sheet{width:210mm;max-width:210mm;' . $sheetHeight . 'margin:0;padding:14mm 2.5cm ' . ($screenPreview ? '18mm' : '10mm') . ' 2.5cm;box-sizing:border-box;background:#fff;position:relative;display:flex;flex-direction:column;}'
         . '.print-header{position:relative;padding-bottom:2mm;margin-bottom:4mm;min-height:32mm;border:0;flex:0 0 auto;}'
         . '.print-brand-top{text-align:center;padding:0 32mm;margin:0;border:0;}'
         . '.print-org-logo{max-height:118px;max-width:260px;object-fit:contain;}'
@@ -228,14 +240,18 @@ function letter_email_official_print_document(array $corr): string
         . '.letter-body,.letter-body *{font-size:12pt;line-height:1.5;color:#000 !important;}'
         . '.letter-align-center{text-align:center;}.letter-align-right{text-align:right;}'
         . '.letter-align-left{text-align:left;}.letter-align-justify{text-align:justify;text-align-last:start;}'
-        . '.letter-fmt-b{font-weight:700;}.letter-fmt-u{text-decoration:underline;}'
+        . '.letter-indent{margin:0 0 .35em;box-sizing:border-box;}'
+        . '.letter-indent-3{padding-inline-start:3cm;}.letter-indent-5{padding-inline-start:5cm;}'
+        . '.letter-indent-7{padding-inline-start:7cm;}.letter-indent-9{padding-inline-start:9cm;}'
+        . '.letter-indent-11{padding-inline-start:11cm;}.letter-indent-13{padding-inline-start:13cm;}'
+        . '.letter-fmt-b{font-weight:700;}.letter-fmt-i{font-style:italic;}.letter-fmt-u{text-decoration:underline;}'
         . '.letter-fmt-big{font-size:14.5pt;font-weight:600;}'
         . '.letter-ul{margin:.25em 0 .7em;padding-inline-start:1.35em;}'
         . '.letter-signature{margin:1.1em 0 .4em;display:inline-block;max-width:12rem;}'
         . '.letter-signature-img{max-height:48px;max-width:140px;height:auto;width:auto;display:block;margin:0 0 6px;}'
         . '.letter-signature-name{font-weight:700;line-height:1.35;}'
         . '.letter-signature-title{font-size:.92em;color:#445;line-height:1.35;}'
-        . '.letter-end-actions{margin-top:10mm;display:flex;flex-direction:column;align-items:stretch;gap:7mm;page-break-inside:avoid;}'
+        . '.letter-end-actions{margin-top:10mm;margin-bottom:4mm;display:flex;flex-direction:column;align-items:stretch;gap:7mm;page-break-inside:avoid;flex:0 0 auto;}'
         . '.letter-qr-row{display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;gap:.75rem 1.25rem;padding:0;border:0;background:transparent;page-break-inside:avoid;}'
         . '.letter-qr-text,.letter-link-qr-label,.letter-rsvp-note{flex:1 1 9cm;max-width:14cm;margin:0;color:#000 !important;font-family:inherit;font-size:inherit;font-weight:inherit;line-height:inherit;text-align:start;text-decoration:none;letter-spacing:0;word-spacing:normal;}'
         . '.letter-qr-code,.letter-rsvp-qr,.letter-link-qr-code{display:block;width:2.2cm;height:2.2cm;min-width:2.2cm;min-height:2.2cm;padding:0;box-sizing:border-box;flex-shrink:0;background:transparent;text-decoration:none;border:0;outline:0;}'

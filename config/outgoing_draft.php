@@ -1168,15 +1168,12 @@ function outgoing_prep_after_convert(int $id, array $user, array $corrBefore, bo
         return;
     }
     try {
-        if (function_exists('outgoing_issue_flow_active')
-            && outgoing_issue_flow_active()
-            && function_exists('outgoing_approval_request')
-        ) {
-            outgoing_approval_request($id, $user, $notify);
+        // موحّد مع المفرد/الجماعي: مراجعة/اعتماد إن وُجدت، وإلا الاتصالات الإدارية
+        if (function_exists('outgoing_enter_next_path')) {
+            outgoing_enter_next_path($id, $user, $notify);
         }
-        // بلا مسار مراجعة/اعتماد: يبقى جاهزاً للإرسال لمن لديه صلاحية الإرسال، دون حصر الاتصالات
     } catch (Throwable $e) {
-        error_log('DMS outgoing prep convert approval: ' . $e->getMessage());
+        error_log('DMS outgoing prep convert next path: ' . $e->getMessage());
     }
 }
 
@@ -1788,7 +1785,7 @@ function outgoing_batch_prep_convert(int $batchId, array $user, string $note = '
 
 /**
  * أخرج معاملة عالقة في المسودة إذا أُغلقت مرحلة المسودة في الإعدادات.
- * تُحوَّل إلى المسار الحالي: مراجعة/اعتماد إن وُجد، وإلا تبقى جاهزة للإرسال.
+ * تُحوَّل إلى المسار الحالي: مراجعة/اعتماد إن وُجد، وإلا إلى الاتصالات الإدارية.
  */
 function outgoing_prep_release_if_disabled(array $corr, ?array $actor = null): ?array
 {

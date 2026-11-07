@@ -1,0 +1,22 @@
+---
+description: Keep bulk and single outgoing letter UI/behavior in sync
+alwaysApply: true
+---
+
+# Outgoing letter parity (bulk + single)
+
+Any change to letter text editing, toolbar, preview, margins/indent, email letter body rendering, or letter-link fields must cover **both**:
+
+- الصادر الجماعي: `outgoing/bulk.php` (+ batch views as needed)
+- الصادر المفرد: `outgoing/create.php` and `outgoing/edit.php`
+
+Prefer shared code so they stay aligned:
+
+- `includes/corr_outgoing_letter_fields.php` (form section for both)
+- `config/letter_templates.php` (`render_letter_lang_editor`, toolbar, format/indent tags)
+- `config/correspondence_send.php` (email body)
+- letter CSS in `assets/css/app.css` / JS in `assets/js/app.js`
+
+Do **not** implement letter-editor or preview behavior only on bulk. If a bulk-only path is unavoidable, mirror it on single outgoing in the same change.
+
+When verifying, check at least one bulk page and one single create/edit path.

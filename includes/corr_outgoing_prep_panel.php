@@ -33,7 +33,7 @@ $prepPrevious = function_exists('outgoing_prep_previous_rows') ? outgoing_prep_p
             <p class="small text-muted mb-3"><?= e(__('out_prep.superseded_hint')) ?></p>
             <?php if ($prepLatestId > 0 && $prepLatestId !== (int) $corr['id']): ?>
                 <a class="btn btn-kff" href="<?= e(base_url('outgoing/view.php?id=' . $prepLatestId)) ?>">
-                    <i class="bi bi-file-earmark-text me-1"></i><?= e(__('out_prep.open_latest')) ?>
+                    <i class="bi bi-file-earmark-font me-1"></i><?= e(__('out_prep.open_latest')) ?>
                 </a>
             <?php endif; ?>
         <?php endif; ?>

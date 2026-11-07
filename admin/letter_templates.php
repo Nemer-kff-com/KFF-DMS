@@ -77,7 +77,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="card-panel">
         <div class="card-header">
             <div class="admin-editor-header">
-                <span class="admin-editor-icon"><i class="bi bi-file-earmark-text"></i></span>
+                <span class="admin-editor-icon"><i class="bi bi-file-earmark-font"></i></span>
                 <span><?= e($editing ? __('tpl.edit') : __('tpl.new')) ?></span>
             </div>
         </div>
@@ -148,7 +148,7 @@ require __DIR__ . '/../includes/header.php';
         <span class="badge text-bg-light text-dark"><?= count($rows) ?></span>
     </div>
     <?php if (!$rows): ?>
-        <div class="admin-empty"><i class="bi bi-file-earmark-text"></i><p><?= e(__('common.no_data')) ?></p></div>
+        <div class="admin-empty"><i class="bi bi-file-earmark-font"></i><p><?= e(__('common.no_data')) ?></p></div>
     <?php else: ?>
     <div class="table-responsive">
         <table class="table admin-table mb-0 align-middle">

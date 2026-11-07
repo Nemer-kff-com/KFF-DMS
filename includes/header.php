@@ -52,7 +52,12 @@ if (($pageTitle ?? '') === __('search.title')) {
     </style>
     <?php endif; ?>
 </head>
-<body>
+<?php
+$guideAnchor = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['guide_anchor'] ?? ''));
+$guideFull = ((string) ($_GET['guide_full'] ?? '')) === '1';
+$guideBodyClass = trim(($guideAnchor !== '' || $guideFull ? 'guide-shot' : '') . ($guideFull ? ' guide-shot-full' : ''));
+?>
+<body<?= $guideBodyClass !== '' ? ' class="' . e($guideBodyClass) . '"' : '' ?>>
 <?php
 $dmsMissingAssets = [];
 if ($user && (($user['role'] ?? '') === 'admin') && function_exists('dms_critical_assets_status')) {

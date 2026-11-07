@@ -33,12 +33,20 @@ try {
 
     $kind = (string) ($_POST['kind'] ?? '');
     $id = (int) ($_POST['id'] ?? 0);
-    $allowed = ['categories', 'priorities', 'confidentiality', 'statuses', 'archive_types', 'attachment_types'];
+    $allowed = ['categories', 'priorities', 'confidentiality', 'statuses', 'archive_types', 'attachment_types', 'honorifics'];
     $catalogDef = function_exists('archive_catalog_def') ? archive_catalog_def($kind) : null;
     if ($catalogDef) {
         $kind = 'catalog_' . $catalogDef['key'];
     } elseif (!in_array($kind, $allowed, true)) {
         throw new InvalidArgumentException(__('common.not_found'));
+    }
+    if ($kind === 'honorifics') {
+        if (!function_exists('dms_user_is_system_admin') || !dms_user_is_system_admin($user)) {
+            throw new InvalidArgumentException(__('auth.no_permission'));
+        }
+        if (function_exists('ensure_entity_honorifics_schema')) {
+            ensure_entity_honorifics_schema();
+        }
     }
 
     $sortOrder = (int) ($_POST['sort_order'] ?? 0);
@@ -202,6 +210,36 @@ try {
             }
             db()->prepare('INSERT INTO `tblarchive_doc_types` (code, name_ar, name_en, sort_order) VALUES (?,?,?,?)')
                 ->execute([$code, $nameAr, $nameEn !== '' ? $nameEn : $nameAr, $sortOrder]);
+            $id = (int) db()->lastInsertId();
+            $msg = __('lookups.created');
+        }
+    } elseif ($kind === 'honorifics') {
+        $nameAr = mb_substr($nameAr, 0, 100);
+        if ($id > 0) {
+            $row = admin_row('tblentity_honorifics', $id);
+            if (!$row) {
+                throw new InvalidArgumentException(__('common.not_found'));
+            }
+            if (admin_name_exists('tblentity_honorifics', 'name_ar', $nameAr, $id)) {
+                throw new InvalidArgumentException(__('common.duplicate_name'));
+            }
+            $oldPhrase = trim((string) ($row['name_ar'] ?? ''));
+            db()->prepare('UPDATE `tblentity_honorifics` SET name_ar=?, name_en=?, sort_order=?, is_active=? WHERE id=?')
+                ->execute([$nameAr, $nameEn !== '' ? $nameEn : null, $sortOrder, $isActive, $id]);
+            if ($oldPhrase !== '' && $oldPhrase !== $nameAr && function_exists('entity_honorific_remap_phrase')) {
+                entity_honorific_remap_phrase($oldPhrase, $nameAr);
+            }
+            $msg = __('lookups.updated');
+        } else {
+            if (admin_name_exists('tblentity_honorifics', 'name_ar', $nameAr)) {
+                throw new InvalidArgumentException(__('common.duplicate_name'));
+            }
+            if ($sortOrder <= 0) {
+                $sortOrder = (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM `tblentity_honorifics`')->fetchColumn();
+            }
+            db()->prepare(
+                'INSERT INTO `tblentity_honorifics` (name_ar, name_en, sort_order, is_active, is_system) VALUES (?,?,?,1,0)'
+            )->execute([$nameAr, $nameEn !== '' ? $nameEn : null, $sortOrder]);
             $id = (int) db()->lastInsertId();
             $msg = __('lookups.created');
         }

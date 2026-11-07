@@ -38,6 +38,10 @@ if (!$canManageAllEntities && !(function_exists('user_has_assigned_departments')
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_honorific_preset') {
     verify_csrf();
     header('Content-Type: application/json; charset=utf-8');
+    if (!function_exists('dms_user_is_system_admin') || !dms_user_is_system_admin($user)) {
+        echo json_encode(['ok' => false, 'message' => __('auth.no_permission')], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     $value = trim((string) ($_POST['value'] ?? ''));
     if ($value === '') {
         echo json_encode(['ok' => false, 'message' => __('entities.honorific_add_empty')], JSON_UNESCAPED_UNICODE);

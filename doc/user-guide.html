@@ -31,7 +31,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: 'GretaArabic', 'Greta Arabic', Arial, sans-serif;
+      font-family: 'GretaArabic', 'Greta Arabic', Arial, 'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif;
       background-color: var(--kff-bg);
       background-image:
         radial-gradient(ellipse at 15% 10%, rgba(249,241,235,.95), transparent 55%),
@@ -423,7 +423,6 @@
         <li><a href="#actions">يحتاج إجراء</a></li>
         <li><a href="#reports">التقارير</a></li>
         <li><a href="#circulars">التعاميم</a></li>
-        <li><a href="#archive">أرشيف الوثائق</a></li>
         <li><a href="#entities">جهات المراسلة</a></li>
         <li><a href="#groups">مجموعات الجهات</a></li>
         <li><a href="#templates">قوالب الخطاب</a></li>
@@ -501,8 +500,6 @@
           <tr><td>يحتاج إجراء</td><td>ما ينتظر خطوة منك/من قسمك</td></tr>
           <tr><td>الإحالات</td><td>المعاملات المحالة بين الأقسام</td></tr>
           <tr><td>التعاميم</td><td>التعاميم الداخلية</td></tr>
-          <tr><td>أرشيف الوثائق</td><td>وثائق أرشيفية مستقلة</td></tr>
-          <tr><td>مرفقات المعاملات</td><td>البحث في كل المرفقات المرفوعة</td></tr>
           <tr><td>جهات المراسلة</td><td>بيانات الجهات</td></tr>
           <tr><td>مجموعات الجهات</td><td>تجميع مستلمين متكررين</td></tr>
           <tr><td>قوالب الخطاب</td><td>نصوص جاهزة للإرسال/الطباعة</td></tr>
@@ -978,26 +975,8 @@
       <p class="note">التعميم مستقل عن مسار الصادر/الوارد/الداخلي. بعد الإصدار يُقفل الرقم والموضوع والجمهور عادة.</p>
     </section>
 
-    <section id="archive">
-      <h2>23) أرشيف الوثائق</h2>
-      <figure>
-        <img src="images/user-guide/15-archive.png" alt="أرشيف الوثائق">
-        <figcaption>إضافة وثيقة أرشيفية مستقلة</figcaption>
-      </figure>
-
-      <p>لحفظ وثائق تاريخية مستقلة عن حركة الصادر/الوارد اليومية.</p>
-      <ol>
-        <li><strong>أرشيف الوثائق</strong> ← <strong>وثيقة جديدة</strong>.</li>
-        <li>أدخل العنوان والنوع والتاريخ والجهة/الشخص ورقم مرجعي قديم وكلمات مفتاحية.</li>
-        <li>اختياري: ربط بمعاملة، السرية، القسم.</li>
-        <li>ارفع الملفات الممسوحة ثم احفظ.</li>
-        <li>لاحقاً: تعديل، رفع ملفات إضافية، بحث، طباعة.</li>
-      </ol>
-      <p class="note">أنواع شائعة: خطاب قديم، مراسلة، إيصال، عقد، قرار… القسم يرى نطاق قسمه. الحذف غالباً للأدوار العليا.</p>
-    </section>
-
     <section id="entities">
-      <h2>24) جهات المراسلة</h2>
+      <h2>23) جهات المراسلة</h2>
       <figure>
         <img src="images/user-guide/16-entities.png" alt="جهات المراسلة">
         <figcaption>بطاقة جهة مع معاينة «موجهة إلى»</figcaption>
@@ -1017,7 +996,7 @@
     </section>
 
     <section id="groups">
-      <h2>25) مجموعات الجهات</h2>
+      <h2>24) مجموعات الجهات</h2>
       <figure>
         <img src="images/user-guide/17-groups.png" alt="مجموعات الجهات">
         <figcaption>إنشاء مجموعة واختيار الأعضاء</figcaption>
@@ -1033,7 +1012,7 @@
     </section>
 
     <section id="templates">
-      <h2>26) قوالب الخطاب</h2>
+      <h2>25) قوالب الخطاب</h2>
       <figure>
         <img src="images/user-guide/18-templates.png" alt="قوالب الخطاب">
         <figcaption>نص القالب مع حقول المستلم</figcaption>
@@ -1049,7 +1028,7 @@
     </section>
 
     <section id="verify">
-      <h2>27) التحقق بـ QR (للمستلم / الزائر)</h2>
+      <h2>26) التحقق بـ QR (للمستلم / الزائر)</h2>
       <figure>
         <img src="images/user-guide/20-verify.png" alt="التحقق بـ QR">
         <figcaption>صفحة التحقق العامة بعد مسح الرمز</figcaption>
@@ -1064,7 +1043,7 @@
     </section>
 
     <section id="profile">
-      <h2>28) الملف الشخصي</h2>
+      <h2>27) الملف الشخصي</h2>
       <figure>
         <img src="images/user-guide/26-profile.png" alt="الملف الشخصي">
         <figcaption>تحديث الاسم والصورة وكلمة المرور</figcaption>
@@ -1078,7 +1057,7 @@
     </section>
 
     <section id="tips">
-      <h2>29) نصائح سريعة</h2>
+      <h2>28) نصائح سريعة</h2>
       <ul>
         <li>الدخول بالبريد الإلكتروني فقط.</li>
         <li>لا تشارك كلمة المرور؛ من جهاز مشترك اضغط <strong>خروج</strong>.</li>
