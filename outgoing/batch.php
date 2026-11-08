@@ -81,6 +81,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enable_rsvp'])) {
     redirect(base_url('outgoing/batch.php?id=' . $id));
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['batch_return_from_comms'])) {
+    verify_csrf();
+    try {
+        $n = function_exists('outgoing_batch_return_from_comms')
+            ? outgoing_batch_return_from_comms($id, $user, (string) ($_POST['note'] ?? ''))
+            : 0;
+        if ($n < 1) {
+            flash('warning', __('bulk.return_from_comms_none'));
+        } else {
+            flash('success', str_replace(':count', (string) $n, __('bulk.return_from_comms_ok')));
+        }
+    } catch (Throwable $e) {
+        flash('danger', $e->getMessage());
+    }
+    redirect(base_url('outgoing/batch.php?id=' . $id));
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['batch_continue_after_return'])) {
+    verify_csrf();
+    try {
+        if (!function_exists('outgoing_batch_returned_editable') || !outgoing_batch_returned_editable($user, $id)) {
+            throw new RuntimeException(__('auth.forbidden'));
+        }
+        $n = function_exists('outgoing_batch_continue_after_return')
+            ? outgoing_batch_continue_after_return($id, $user)
+            : 0;
+        $okMsg = function_exists('outgoing_issue_flow_active') && outgoing_issue_flow_active()
+            ? __('issue_appr.batch_requested_ok')
+            : __('bulk.resubmit_to_comms_ok');
+        if ($n < 1) {
+            flash('warning', __('bulk.saved'));
+        } else {
+            flash('success', str_replace(':count', (string) $n, $okMsg));
+        }
+    } catch (Throwable $e) {
+        flash('danger', $e->getMessage());
+    }
+    redirect(base_url('outgoing/batch.php?id=' . $id));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['recipient_delivery']) && is_array($_POST['recipient_delivery'])) {
     $deliveryAjax = (string) ($_POST['ajax'] ?? '') === '1';
     verify_csrf();
@@ -136,6 +176,12 @@ $batchInPrep = in_array($batchPrepPhase, ['draft', 'pending_signer'], true);
 $batchDraftEdit = $batchPrepPhase === 'draft'
     && function_exists('outgoing_batch_draft_editable')
     && outgoing_batch_draft_editable($user, $id);
+$batchReturnedEdit = function_exists('outgoing_batch_returned_editable')
+    && outgoing_batch_returned_editable($user, $id);
+$batchCanEdit = $batchDraftEdit || $batchReturnedEdit;
+$batchCanReturnFromComms = !$batchInPrep
+    && function_exists('outgoing_user_can_return_batch_from_comms')
+    && outgoing_user_can_return_batch_from_comms($user, $items);
 $batchPrepSample = null;
 foreach ($items as $prepRow) {
     if (($prepRow['type'] ?? '') === 'outgoing' && (!function_exists('correspondence_is_cancelled') || !correspondence_is_cancelled($prepRow))) {
@@ -198,7 +244,8 @@ $isBatchCreator = $batchCreatorId > 0 && $batchCreatorId === (int) ($user['id'] 
 // عمود التحديد + المحدد: لمن ينفّذ الإرسال/الطباعة فقط — لا للمنشئ المتابع (بدون canRunIssued)
 $canSelectRows = $batchCanIssue && $canRunIssued && ($canSend || $canOfficialPrint);
 $canBatchDispatch = $canSendMsg || $canOfficialPrint;
-$waReady = (dms_whatsapp_readiness()['state'] ?? '') === 'ready';
+$waOn = (int) (dms_get_whatsapp_settings()['is_active'] ?? 0) === 1;
+$waReady = $waOn && (dms_whatsapp_readiness()['state'] ?? '') === 'ready';
 $emailReady = false;
 $emailCount = 0;
 $mobileCount = 0;
@@ -326,12 +373,36 @@ $hasBatchSecondary = $batchSecondary !== [];
     </div>
     <div class="page-header-actions corr-view-actions">
         <div class="corr-actions-group corr-actions-primary">
-            <?php if ($batchDraftEdit): ?>
+            <?php if ($batchCanEdit): ?>
             <?= btn_icon(__('bulk.edit_link'), [
                 'href' => base_url('outgoing/bulk.php?id=' . $id),
                 'icon' => 'bi-pencil-square',
                 'class' => 'btn-kff',
             ]) ?>
+            <?php endif; ?>
+            <?php if ($batchReturnedEdit): ?>
+            <form method="post" class="mb-0 d-inline-flex" data-confirm="<?= e(__('bulk.confirm_resubmit_path')) ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="batch_id" value="<?= (int) $id ?>">
+                <?= btn_icon(__('bulk.continue_after_return'), [
+                    'icon' => 'bi-send-check',
+                    'class' => 'btn-kff',
+                    'type' => 'submit',
+                    'attrs' => 'name="batch_continue_after_return" value="1"',
+                ]) ?>
+            </form>
+            <?php endif; ?>
+            <?php if ($batchCanReturnFromComms): ?>
+            <form method="post" class="mb-0 d-inline-flex" data-confirm="<?= e(__('bulk.return_from_comms_confirm')) ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="batch_id" value="<?= (int) $id ?>">
+                <?= btn_icon(__('bulk.return_from_comms'), [
+                    'icon' => 'bi-arrow-counterclockwise',
+                    'class' => 'btn-outline-warning',
+                    'type' => 'submit',
+                    'attrs' => 'name="batch_return_from_comms" value="1"',
+                ]) ?>
+            </form>
             <?php endif; ?>
             <?php if ($batchPrepCanSubmit): ?>
             <form method="post" class="mb-0 d-inline-flex" data-confirm="<?= e($batchPrepSelf ? __('out_prep.confirm_submit_self') : __('out_prep.confirm_submit')) ?>">
@@ -463,14 +534,18 @@ $hasBatchSecondary = $batchSecondary !== [];
                         <i class="bi bi-envelope" aria-hidden="true"></i>
                     </button>
                 </span>
+                <?php if ($waOn): ?>
                 <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e($waTip) ?>">
                     <button class="btn btn-icon btn-success" type="submit" name="channel" value="whatsapp" data-batch-send data-need-ready="<?= $waBtnOk ? '1' : '0' ?>" data-confirm-template="<?= e(__('send.confirm_batch_wa')) ?>" <?= $waBtnOk ? '' : 'disabled' ?> aria-label="<?= e(__('send.batch_wa')) ?>">
                         <i class="bi bi-whatsapp" aria-hidden="true"></i>
                     </button>
                 </span>
+                <?php endif; ?>
                 <?php elseif ($batchElectronic && $sendMsgUi === 'deny'): ?>
                 <?= dms_perm_denied_wrap('<button type="button" class="btn btn-icon btn-kff" disabled aria-disabled="true" aria-label="' . e(__('send.batch_email')) . '"><i class="bi bi-envelope" aria-hidden="true"></i></button>', __('send.batch_email')) ?>
+                <?php if ($waOn): ?>
                 <?= dms_perm_denied_wrap('<button type="button" class="btn btn-icon btn-success" disabled aria-disabled="true" aria-label="' . e(__('send.batch_wa')) . '"><i class="bi bi-whatsapp" aria-hidden="true"></i></button>', __('send.batch_wa')) ?>
+                <?php endif; ?>
                 <?php endif; ?>
             </form>
         </div>
@@ -634,7 +709,9 @@ $showBatchSummary = $batchCanIssue || $isBatchCreator;
                 <span class="batch-summary-group-label"><?= e(__('bulk.recipients')) ?></span>
                 <div class="batch-chips">
                     <span class="batch-chip"><?= e(__('entities.email')) ?> <b><?= (int) $emailCount ?>/<?= (int) $batchTotal ?></b></span>
+                    <?php if ($waOn): ?>
                     <span class="batch-chip"><?= e(__('entities.mobile')) ?> <b><?= (int) $mobileCount ?>/<?= (int) $batchTotal ?></b></span>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="batch-summary-group" role="group" aria-label="<?= e(__('common.status')) ?>">
@@ -658,14 +735,34 @@ $showBatchSummary = $batchCanIssue || $isBatchCreator;
             </div>
             <?php endif; ?>
         </div>
-        <?php if ($canRunIssued && $canSendMsg && (!$emailReady || !$waReady)): ?>
+        <?php if ($canRunIssued && $canSendMsg && (!$emailReady || ($waOn && !$waReady))): ?>
         <div class="batch-summary-notes">
             <?php if (!$emailReady): ?><span><?= e(__('send.need_email_settings')) ?></span><?php endif; ?>
-            <?php if (!$waReady): ?><span><?= e(__('send.need_wa_settings')) ?></span><?php endif; ?>
+            <?php if ($waOn && !$waReady): ?><span><?= e(__('send.need_wa_settings')) ?></span><?php endif; ?>
         </div>
         <?php endif; ?>
     </div>
 </div>
+<?php
+if ($rsvpOn && $showBatchSummary && function_exists('correspondence_meeting_data')) {
+    $meetingData = correspondence_meeting_data($items[0] ?? [], $batch);
+    $meetingRemoteCount = (int) ($rsvpSummary['remote'] ?? 0);
+    $meetingRemotePending = 0;
+    foreach ($items as $meetRow) {
+        if (function_exists('correspondence_is_remote_attendee') && correspondence_is_remote_attendee($meetRow)
+            && trim((string) ($meetRow['meeting_link_sent_at'] ?? '')) === ''
+        ) {
+            $meetingRemotePending++;
+        }
+    }
+    $meetingInvitationSent = ((int) $anySent) > 0;
+    $meetingCanEdit = $canSendMsg && $canRunIssued;
+    $meetingCanSend = $meetingCanEdit;
+    $meetingBatchId = $id;
+    $meetingCorrId = 0;
+    require __DIR__ . '/../includes/corr_meeting_link_card.php';
+}
+?>
 <?php endif; ?>
 
 <?php if ($canBulkOps): ?>
@@ -703,8 +800,10 @@ foreach ($items as $receiptRow) {
                     <th class="text-center"><?= e(__('entities.email')) ?></th>
                     <?php if ($batchCanIssue && $canSendMsg): ?>
                     <th class="text-center batch-send-icon-col" title="<?= e(__('send.do_email')) ?>"><i class="bi bi-envelope"></i></th>
+                    <?php if ($waOn): ?>
                     <th class="text-center"><?= e(__('send.whatsapp')) ?></th>
                     <th class="text-center batch-send-icon-col" title="<?= e(__('send.do_wa')) ?>"><i class="bi bi-whatsapp"></i></th>
+                    <?php endif; ?>
                     <?php endif; ?>
                     <th><?= e(__('corr.status')) ?></th>
                     <?php if ($batchHasReceipt): ?>
@@ -811,6 +910,7 @@ foreach ($items as $receiptRow) {
                             </span>
                         <?php endif; ?>
                     </td>
+                    <?php if ($waOn): ?>
                     <td class="batch-channel-cell">
                         <?php if ($mobile !== ''): ?>
                         <div class="batch-channel-stack">
@@ -839,6 +939,7 @@ foreach ($items as $receiptRow) {
                             </span>
                         <?php endif; ?>
                     </td>
+                    <?php endif; ?>
                     <?php endif; ?>
                     <td><?= status_badge((string) ($r['status'] ?? ''), $r['cancel_kind'] ?? null) ?></td>
                     <?php if ($batchHasReceipt): ?>

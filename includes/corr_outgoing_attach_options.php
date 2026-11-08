@@ -93,11 +93,11 @@ if (!isset($dmsEditDocForms)) {
                                 <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $isPdf ? '-pdf' : '' ?>"></i></div>
                                 <div class="corr-file-meta">
                                     <?php if ($canOpenDoc): ?>
-                                        <a href="<?= e(file_download_url('document', $docId)) ?>" target="_blank"><?= e($docName) ?></a>
+                                        <a class="corr-file-name" dir="ltr" href="<?= e(file_download_url('document', $docId)) ?>" target="_blank"><?= e($docName) ?></a>
                                     <?php else: ?>
-                                        <span class="text-muted"><?= e($docName) ?></span>
+                                        <span class="corr-file-name text-muted" dir="ltr"><?= e($docName) ?></span>
                                     <?php endif; ?>
-                                    <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label($docName, (string) ($doc['file_type'] ?? ''))) ?></span>
+                                    <span class="dms-file-list-type" dir="ltr"><?= e(dms_upload_file_type_label($docName, (string) ($doc['file_type'] ?? ''))) ?></span>
                                 </div>
                                 <?php if ($canDeleteThis): ?>
                                     <button class="btn btn-sm btn-outline-danger" type="submit"

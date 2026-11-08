@@ -628,6 +628,13 @@ function bindLetterTokenToolbar(root) {
         .replace(/\{\/ls\}/gi, '')
         .replace(/\{indent:[0-9]+\}/gi, '')
         .replace(/\{\/indent\}/gi, '')
+        .replace(/\{spread:[0-9]+\}/gi, '')
+        .replace(/\{spread_sep\}/gi, ' ')
+        .replace(/\{\/spread\}/gi, '')
+        .replace(/\{sb:[0-9]+\}/gi, '')
+        .replace(/\{\/sb\}/gi, '')
+        .replace(/\{sa:[0-9]+\}/gi, '')
+        .replace(/\{\/sa\}/gi, '')
         .replace(/\{\/?(?:b|u|i|big|center|right|left|justify|ul)\}/gi, '');
     }
     function selectionOf(ta) {
@@ -683,6 +690,12 @@ function bindLetterTokenToolbar(root) {
       if (/^\{indent:\d+\}$/i.test(open)) {
         return 'indent';
       }
+      if (/^\{sb:\d+\}$/i.test(open)) {
+        return 'sb';
+      }
+      if (/^\{sa:\d+\}$/i.test(open)) {
+        return 'sa';
+      }
       if (/^\{ls:\d+\}$/i.test(open)) {
         return 'ls';
       }
@@ -704,6 +717,12 @@ function bindLetterTokenToolbar(root) {
       }
       if (family === 'indent') {
         return text.replace(/\{indent:\d+\}/gi, '').replace(/\{\/indent\}/gi, '');
+      }
+      if (family === 'sb') {
+        return text.replace(/\{sb:\d+\}/gi, '').replace(/\{\/sb\}/gi, '');
+      }
+      if (family === 'sa') {
+        return text.replace(/\{sa:\d+\}/gi, '').replace(/\{\/sa\}/gi, '');
       }
       if (family === 'ls') {
         return text.replace(/\{ls:\d+\}/gi, '').replace(/\{\/ls\}/gi, '');
@@ -729,7 +748,10 @@ function bindLetterTokenToolbar(root) {
       var value = ta.value;
       var origStart = start;
       var origEnd = end;
-      if (start === end) {
+      var family = wrapFamilyOf(wrapOpen);
+      // الإزاحة بلا تحديد: أدرج وسماً فارغاً عند المؤشر (نفس السطر، بلا سطر جديد)
+      var indentAtCaret = family === 'indent' && start === end;
+      if (start === end && !indentAtCaret) {
         if (asParagraph) {
           var paraStart = value.lastIndexOf('\n\n', start - 1);
           start = paraStart < 0 ? 0 : paraStart + 2;
@@ -745,7 +767,6 @@ function bindLetterTokenToolbar(root) {
           end = lineEnd;
         }
       }
-      var family = wrapFamilyOf(wrapOpen);
       var selected = value.slice(start, end);
       // الحدث الأخير يستبدل السابق لنفس النوع (بدل {indent:9}{indent:5}…{/indent}{/indent})
       var cleaned = stripWrapFamily(selected, family).replace(/^\s+|\s+$/g, '');
@@ -758,10 +779,33 @@ function bindLetterTokenToolbar(root) {
         cleaned = stripWrapFamily(cleaned, family).replace(/^\s+|\s+$/g, '');
       }
       var insert = wrapOpen + cleaned + wrapClose;
+      if (indentAtCaret) {
+        // أبقِ الإزاحة في نفس السطر؛ أضف مسافة قبل الوسم إن لزم دون سطر جديد
+        var needSpace = start > 0 && !/\s/.test(value.charAt(start - 1));
+        insert = (needSpace ? ' ' : '') + wrapOpen + wrapClose;
+      }
+      // سطر التحية إن حُدّد كاملاً: {title} {name} {indent:N}{honorific}{/indent}
+      if (family === 'indent' && !indentAtCaret) {
+        var greetingLine = cleaned.match(/^(.*?\{(?:title|name|title_prefix|directed_to)\}.*?)\s*\{honorific\}\s*$/i);
+        if (greetingLine && String(greetingLine[1] || '').replace(/\s+/g, '') !== '') {
+          var mainPart = String(greetingLine[1] || '').replace(/\s+$/g, '');
+          insert = mainPart + ' ' + wrapOpen + '{honorific}' + wrapClose;
+        }
+      }
       pushUndoState({ value: value, start: origStart, end: origEnd });
       ta.value = value.slice(0, start) + insert + value.slice(end);
       try {
-        ta.setSelectionRange(start + wrapOpen.length, start + wrapOpen.length + cleaned.length);
+        var openAt = insert.indexOf(wrapOpen);
+        var selFrom = start + (openAt >= 0 ? openAt + wrapOpen.length : 0);
+        var wrappedInner = openAt >= 0
+          ? insert.slice(openAt + wrapOpen.length, insert.length - wrapClose.length)
+          : cleaned;
+        // فارغ عند المؤشر: ضع المؤشر داخل الوسم لإدراج التكريم/الكلمة مباشرة
+        if (indentAtCaret || wrappedInner === '') {
+          ta.setSelectionRange(selFrom, selFrom);
+        } else {
+          ta.setSelectionRange(selFrom, selFrom + wrappedInner.length);
+        }
       } catch (err) { /* تجاهل */ }
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       setUndoEnabled();
@@ -838,6 +882,26 @@ function bindLetterTokenToolbar(root) {
         hideTip(indentSel.closest('.letter-token-btn') || indentSel);
       });
     }
+    function bindVspacePicker(sel, tag) {
+      if (!sel) {
+        return;
+      }
+      sel.addEventListener('change', function () {
+        var code = (sel.value || '').replace(/[^0-9]/g, '');
+        sel.value = '';
+        if (!code) {
+          return;
+        }
+        var ta = document.getElementById(bar.getAttribute('data-insert-target') || '');
+        if (!ta) {
+          return;
+        }
+        applyWrap(ta, '{' + tag + ':' + code + '}', '{/' + tag + '}', false);
+        hideTip(sel.closest('.letter-token-btn') || sel);
+      });
+    }
+    bindVspacePicker(bar.querySelector('[data-letter-sb]'), 'sb');
+    bindVspacePicker(bar.querySelector('[data-letter-sa]'), 'sa');
     setUndoEnabled();
     bar.addEventListener('click', function (e) {
       var undoHit = e.target.closest('[data-letter-undo]');
@@ -1781,12 +1845,15 @@ function bindCopyActions(root) {
         // مع قائمة الملفات: أفرغ المربع بعد الإضافة ليبدو جاهزاً لملف آخر
         if (!bag.length || (list && !autosubmit)) {
           label.textContent = placeholder;
+          label.removeAttribute('dir');
           if (main) main.classList.remove('is-filled');
         } else if (bag.length === 1) {
           label.textContent = bag[0].name || selectedTpl.replace(':count', '1');
+          label.setAttribute('dir', 'ltr');
           if (main) main.classList.add('is-filled');
         } else {
           label.textContent = selectedTpl.replace(':count', String(bag.length));
+          label.removeAttribute('dir');
           if (main) main.classList.add('is-filled');
         }
       }
@@ -1800,9 +1867,11 @@ function bindCopyActions(root) {
         li.className = 'dms-file-list-item';
         var name = document.createElement('span');
         name.className = 'dms-file-list-name';
+        name.setAttribute('dir', 'ltr');
         name.textContent = file.name;
         var typeBadge = document.createElement('span');
         typeBadge.className = 'dms-file-list-type';
+        typeBadge.setAttribute('dir', 'ltr');
         typeBadge.textContent = fileTypeLabel(file, wrap);
         var meta = document.createElement('span');
         meta.className = 'dms-file-list-meta';
@@ -2055,6 +2124,118 @@ function bindCopyActions(root) {
     document.querySelectorAll('[data-list-filters-card]').forEach(initCard);
   }
 
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+(function () {
+  function parseMeetingInvite(text) {
+    var out = { url: '', title: '', meeting_id: '', code: '' };
+    text = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!text) return out;
+    var urlM = text.match(/https?:\/\/[^\s<>"']+/i);
+    if (urlM) {
+      out.url = urlM[0].replace(/[.,);>]+$/, '');
+    }
+    var titleM = text.match(/(?:Topic|Subject|Meeting\s*title|عنوان الاجتماع|الموضوع)\s*[:：]\s*(.+)/i);
+    if (titleM) {
+      out.title = titleM[1].trim();
+    }
+    var idM = text.match(/(?:Meeting\s*ID|Meeting\s*number|Conference\s*ID|Zoom\s*ID|رقم الاجتماع|معرّف الاجتماع)\s*[:：]?\s*([0-9][0-9\s\-]{5,})/i);
+    var meetIdM = text.match(/(?:Meeting\s*ID|رقم الاجتماع|معرّف الاجتماع)\s*[:：]?\s*([a-z]{3}-[a-z]{4}-[a-z]{3})/i);
+    if (idM) {
+      out.meeting_id = idM[1].replace(/\s+/g, ' ').trim();
+    } else if (meetIdM) {
+      out.meeting_id = meetIdM[1].toLowerCase();
+    } else if (out.url) {
+      var fromUrl = out.url.match(/teams\.(?:microsoft|live)\.[^/]+\/meet\/(\d+)/i)
+        || out.url.match(/zoom\.[^/]+\/j\/(\d+)/i)
+        || out.url.match(/webex\.[^/]+\/.*\/(\d{9,})/i);
+      if (fromUrl) {
+        out.meeting_id = /teams\./i.test(out.url)
+          ? fromUrl[1].replace(/(\d{3})(?=\d)/g, '$1 ').trim()
+          : fromUrl[1];
+      } else {
+        var meet = out.url.match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/i);
+        if (meet) out.meeting_id = meet[1].toLowerCase();
+      }
+    }
+    var codeM = text.match(/(?:Passcode|Password|Pwd|PIN|رمز الدخول|رمز المرور|كلمة المرور)\s*[:：]?\s*(\S+)/i);
+    if (codeM) {
+      out.code = codeM[1].replace(/[.,;]+$/, '');
+    } else if (out.url) {
+      var pwd = out.url.match(/[?&](?:pwd|password|passcode)=([^&\s]+)/i);
+      if (pwd) {
+        try {
+          out.code = decodeURIComponent(pwd[1]);
+        } catch (e) {
+          out.code = pwd[1];
+        }
+      }
+    }
+    if (!out.title) {
+      if (/Microsoft\s+Teams/i.test(text) || /teams\.(microsoft|live)/i.test(out.url)) {
+        out.title = 'Microsoft Teams meeting';
+      } else if (/Zoom\s+Meeting/i.test(text) || /zoom\./i.test(out.url)) {
+        out.title = 'Zoom Meeting';
+      } else if (/Google\s+Meet/i.test(text) || /meet\.google/i.test(out.url)) {
+        out.title = 'Google Meet';
+      } else if (/Webex/i.test(text) || /webex/i.test(out.url)) {
+        out.title = 'Webex';
+      } else if (/jitsi|jit\.si/i.test(text + ' ' + out.url)) {
+        out.title = 'Jitsi Meet';
+      }
+    }
+    return out;
+  }
+
+  function applyParsed(form, parsed) {
+    var url = form.querySelector('#meeting_url');
+    var title = form.querySelector('#meeting_title');
+    var mid = form.querySelector('#meeting_id');
+    var code = form.querySelector('#meeting_code');
+    if (url && parsed.url) url.value = parsed.url;
+    if (title && parsed.title && !String(title.value || '').trim()) title.value = parsed.title;
+    if (mid && parsed.meeting_id) mid.value = parsed.meeting_id;
+    if (code && parsed.code) code.value = parsed.code;
+  }
+
+  function bind(form) {
+    if (!form || form.getAttribute('data-meeting-parse') === '1') return;
+    form.setAttribute('data-meeting-parse', '1');
+    var paste = form.querySelector('#meeting_paste');
+    if (!paste) return;
+    paste.addEventListener('input', function () {
+      applyParsed(form, parseMeetingInvite(paste.value));
+    });
+    paste.addEventListener('paste', function () {
+      setTimeout(function () {
+        applyParsed(form, parseMeetingInvite(paste.value));
+      }, 0);
+    });
+  }
+
+  function bindWhen(form) {
+    var dt = form.querySelector('.corr-meeting-when-dt');
+    if (!dt || dt.getAttribute('data-when-bound') === '1') return;
+    dt.setAttribute('data-when-bound', '1');
+    dt.addEventListener('click', function () {
+      if (dt.readOnly || dt.disabled || typeof dt.showPicker !== 'function') return;
+      try {
+        dt.showPicker();
+      } catch (e) {}
+    });
+  }
+
+  function boot() {
+    document.querySelectorAll('.corr-meeting-form').forEach(function (form) {
+      bind(form);
+      bindWhen(form);
+    });
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {

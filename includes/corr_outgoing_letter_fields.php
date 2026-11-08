@@ -1,7 +1,7 @@
 <?php
 /**
- * قسم نص الخطاب + قالب + معاينة البريد — للصادر الفردي (إنشاء/تعديل).
- * يتوقع اختيارياً: $corr, $user
+ * قسم نص الخطاب + قالب + معاينة البريد — للصادر الفردي (إنشاء/تعديل) والجماعي.
+ * يتوقع اختيارياً: $corr, $user, $editBatch, $letterTemplateId, $letterSectionAlways
  */
 if (!function_exists('letter_templates_list')) {
     require_once __DIR__ . '/../config/letter_templates.php';
@@ -20,6 +20,27 @@ $letterSectionAlways = !empty($letterSectionAlways);
 $letterSectionOpen = $letterSectionAlways
     || !empty($_POST['intend_electronic'])
     || (!empty($corr['intend_electronic']) && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST');
+
+$letterTplSelected = (int) ($_POST['letter_template_id'] ?? ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)));
+$letterTplHtml = '';
+if ($templates) {
+    ob_start();
+    ?>
+    <div class="outgoing-letter-tpl">
+        <label class="form-label mb-0" for="letter_template_id"><?= e(__('tpl.apply')) ?></label>
+        <select name="letter_template_id" id="letter_template_id" class="form-select form-select-sm" data-letter-templates>
+            <option value=""><?= e(__('common.none')) ?></option>
+            <?php foreach ($templates as $tpl): ?>
+                <option value="<?= (int) $tpl['id'] ?>"
+                        data-body="<?= e((string) ($tpl['body'] ?? '')) ?>"
+                        data-body-en="<?= e((string) ($tpl['body_en'] ?? '')) ?>"
+                        <?= $letterTplSelected === (int) $tpl['id'] ? 'selected' : '' ?>><?= e(letter_template_label($tpl)) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <?php
+    $letterTplHtml = (string) ob_get_clean();
+}
 ?>
 <div class="admin-form-section outgoing-letter-section<?= $letterSectionOpen ? '' : ' d-none' ?>" id="outgoing-letter-section"
      <?= $letterSectionAlways ? 'data-letter-always="1"' : 'data-depends-on="intend_electronic"' ?>>
@@ -27,28 +48,12 @@ $letterSectionOpen = $letterSectionAlways
         <div class="admin-form-section-title mb-0">
             <span><?= e(__('bulk.letter_body')) ?></span>
         </div>
-        <?php if ($templates): ?>
-        <div class="outgoing-letter-tpl">
-            <label class="form-label mb-0" for="letter_template_id"><?= e(__('tpl.apply')) ?></label>
-            <select name="letter_template_id" id="letter_template_id" class="form-select form-select-sm" data-letter-templates>
-                <option value=""><?= e(__('common.none')) ?></option>
-                <?php
-                $letterTplSelected = (int) ($_POST['letter_template_id'] ?? ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)));
-                foreach ($templates as $tpl): ?>
-                    <option value="<?= (int) $tpl['id'] ?>"
-                            data-body="<?= e((string) ($tpl['body'] ?? '')) ?>"
-                            data-body-en="<?= e((string) ($tpl['body_en'] ?? '')) ?>"
-                            <?= $letterTplSelected === (int) $tpl['id'] ? 'selected' : '' ?>><?= e(letter_template_label($tpl)) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
     </div>
     <?php render_letter_lang_editor('letter_body', 'letter_body_en', $letterAr, $letterEn, 12, false, [], [], '', letter_signer_insert_tokens(), [
         'template_id' => (int) ($letterTemplateId ?? (is_array($corr ?? null) ? ($corr['letter_template_id'] ?? 0) : 0)),
         'ar' => 'letter_body',
         'en' => 'letter_body_en',
-    ]); ?>
+    ], $letterTplHtml); ?>
     <?php
     $batchLink = is_array($editBatch ?? null) ? $editBatch : [];
     $corrLink = is_array($corr ?? null) ? $corr : [];

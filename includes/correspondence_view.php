@@ -587,6 +587,24 @@ $closeDetailsUrl = base_url('correspondence/close.php?id=' . (int) $corr['id']);
 
         <?php if ($canIssueActions): ?>
         <?php require __DIR__ . '/corr_view_rsvp.php'; ?>
+        <?php
+        if ($isOutgoing && !empty($rsvpRequired) && function_exists('correspondence_meeting_data')) {
+            $meetingData = correspondence_meeting_data($corr);
+            $isRemoteAtt = function_exists('correspondence_is_remote_attendee') && correspondence_is_remote_attendee($corr);
+            $meetingRemoteCount = $isRemoteAtt ? 1 : 0;
+            $meetingRemotePending = $isRemoteAtt && trim((string) ($corr['meeting_link_sent_at'] ?? '')) === '' ? 1 : 0;
+            $meetLast = function_exists('dms_corr_last_deliveries') ? dms_corr_last_deliveries((int) $corr['id']) : [];
+            $meetingInvitationSent = (($meetLast['email']['status'] ?? '') === 'sent')
+                || (($meetLast['whatsapp']['status'] ?? '') === 'sent')
+                || (($meetLast['delivery']['status'] ?? '') === 'sent')
+                || in_array((string) ($corr['status'] ?? ''), ['sent', 'delivered'], true);
+            $meetingCanEdit = !empty($canMutateIssued) && user_can('outgoing.send', $user);
+            $meetingCanSend = $meetingCanEdit;
+            $meetingBatchId = (int) ($corr['batch_id'] ?? 0);
+            $meetingCorrId = (int) ($corr['id'] ?? 0);
+            require __DIR__ . '/corr_meeting_link_card.php';
+        }
+        ?>
         <?php endif; ?>
 
         <?php require __DIR__ . '/corr_send_panel.php'; ?>

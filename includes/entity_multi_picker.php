@@ -4,7 +4,8 @@
  * يتطلب: $selectedPayloads (list)
  * اختياري: $inputName, $pickerId, $groups, $groupMembers, $preGroup,
  *          $hideGroupSelect (bool), $omitGroupHidden (bool), $showSelectedNames (bool),
- *          $pickerTitle, $pickLabel, $editLabel, $emptyText, $hintText
+ *          $pickerTitle, $pickLabel, $editLabel, $emptyText, $hintText,
+ *          $lockRecipients (bool: لا إضافة/حذف — التسليم فقط)
  */
 $selectedPayloads = is_array($selectedPayloads ?? null) ? $selectedPayloads : [];
 $inputName = $inputName ?? 'entity_ids[]';
@@ -12,7 +13,8 @@ $pickerId = $pickerId ?? 'bulk-recipients';
 $groups = is_array($groups ?? null) ? $groups : [];
 $groupMembers = is_array($groupMembers ?? null) ? $groupMembers : [];
 $preGroup = (int) ($preGroup ?? 0);
-$hideGroupSelect = !empty($hideGroupSelect);
+$lockRecipients = !empty($lockRecipients);
+$hideGroupSelect = !empty($hideGroupSelect) || $lockRecipients;
 $omitGroupHidden = !empty($omitGroupHidden);
 $showSelectedNames = !empty($showSelectedNames);
 $pickerTitle = (string) ($pickerTitle ?? __('bulk.picker_title'));
@@ -123,9 +125,11 @@ $modalId = $pickerId . '-modal';
                 <div class="bulk-picker-chosen" data-bulk-chosen hidden>
                     <div class="bulk-picker-chosen-head">
                         <span data-bulk-chosen-label></span>
+                        <?php if (!$lockRecipients): ?>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk-clear-draft>
                             <?= e(__('bulk.picker_clear_draft')) ?>
                         </button>
+                        <?php endif; ?>
                         <?php if ($showDeliveryMode): ?>
                         <label class="bulk-delivery-apply mb-0">
                             <input type="checkbox" class="form-check-input" data-bulk-apply-all>
@@ -283,6 +287,8 @@ $modalId = $pickerId . '-modal';
     if (!item || !item.id) return;
     var key = keyOf(item.id);
     if (!hasDraft(key)) draftOrder.push(key);
+    if (lockRecipients && !hasDraft(key) && !selected[key]) return;
+    if (!hasDraft(key)) draftOrder.push(key);
     item = withDelivery(item, draft[key] || selected[key]);
     draft[key] = item;
     if (!skipRender) {
@@ -293,6 +299,7 @@ $modalId = $pickerId . '-modal';
     }
   }
   function removeDraft(id) {
+    if (lockRecipients) return;
     var key = keyOf(id);
     if (!hasDraft(key)) return;
     delete draft[key];
@@ -303,11 +310,15 @@ $modalId = $pickerId . '-modal';
     else markRows();
   }
   function toggleDraft(item) {
+    if (lockRecipients) {
+      if (hasDraft(item.id)) return;
+      return;
+    }
     if (hasDraft(item.id)) removeDraft(item.id);
     else addDraft(item);
   }
   function clearDraft() {
-    draft = {};
+    if (lockRecipients) return;
     draftOrder = [];
     draftGroup = '';
     if (groupSel) groupSel.value = '';

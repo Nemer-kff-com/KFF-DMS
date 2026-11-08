@@ -1751,6 +1751,46 @@ function outgoing_batch_draft_editable(array $user, int $batchId): bool
     return true;
 }
 
+/**
+ * تعديل جماعي بعد إعادة الدفعة للمنشئ: كل الصفوف النشطة returned.
+ */
+function outgoing_batch_returned_editable(array $user, int $batchId): bool
+{
+    if (!user_can('outgoing.bulk', $user) && !user_can('outgoing.edit', $user)) {
+        return false;
+    }
+    if (!function_exists('outgoing_approval_status_of')) {
+        return false;
+    }
+    $rows = outgoing_batch_draft_rows($batchId);
+    if ($rows === []) {
+        return false;
+    }
+    $admin = ($user['role'] ?? '') === 'admin';
+    $uid = (int) ($user['id'] ?? 0);
+    $any = false;
+    foreach ($rows as $row) {
+        if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($row)) {
+            continue;
+        }
+        $any = true;
+        if (outgoing_approval_status_of($row) !== 'returned') {
+            return false;
+        }
+        if (!$admin && (int) ($row['created_by'] ?? 0) !== $uid) {
+            return false;
+        }
+    }
+
+    return $any;
+}
+
+function outgoing_batch_editable(array $user, int $batchId): bool
+{
+    return outgoing_batch_draft_editable($user, $batchId)
+        || outgoing_batch_returned_editable($user, $batchId);
+}
+
 function outgoing_batch_delete_draft_row(int $id): void
 {
     if ($id <= 0) {
@@ -1773,7 +1813,44 @@ function outgoing_batch_delete_draft_row(int $id): void
 }
 
 /**
- * تعديل مسودة صادر جماعي: الخطاب والحقول المشتركة وإضافة المستلمين وحذف من لم يُمنح رقماً.
+ * سحب مستلم من دفعة مُعادة للمنشئ: إلغاء المعاملة مع الإبقاء على الرقم والسجل.
+ */
+function outgoing_batch_withdraw_returned_row(int $id, array $user): void
+{
+    if ($id <= 0) {
+        return;
+    }
+    if (function_exists('ensure_correspondence_cancel_schema')) {
+        ensure_correspondence_cancel_schema();
+    }
+    $reason = __('bulk.returned_remove_reason');
+    $stmt = db()->prepare(
+        "UPDATE `tblcorrespondence`
+         SET status = 'cancelled',
+             cancel_kind = 'withdrawn',
+             cancel_reason = ?,
+             cancelled_at = NOW(),
+             cancelled_by = ?,
+             issue_approval_assignee_id = NULL
+         WHERE id = ? AND type = 'outgoing' AND status <> 'cancelled'
+           AND issue_approval_status = 'returned'"
+    );
+    $stmt->execute([$reason, (int) ($user['id'] ?? 0), $id]);
+    if ($stmt->rowCount() > 0 && function_exists('log_activity')) {
+        log_activity(
+            (int) ($user['id'] ?? 0) ?: null,
+            $id,
+            'cancel',
+            (function_exists('correspondence_cancel_kind_label')
+                ? correspondence_cancel_kind_label('withdrawn')
+                : 'withdrawn') . ' — ' . $reason
+        );
+    }
+}
+
+/**
+ * تعديل مسودة صادر جماعي أو دفعة مُعادة للمنشئ.
+ * في returned: يُسمح بإضافة جهات (رقم جديد) وحذفها (إلغاء مع بقاء الرقم).
  */
 function update_outgoing_batch(int $batchId, array $data, array $entityIds, array $user, ?array $attachment = null): void
 {
@@ -1782,7 +1859,9 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
     if (function_exists('ensure_corr_rsvp_schema')) {
         ensure_corr_rsvp_schema();
     }
-    if (!outgoing_batch_draft_editable($user, $batchId)) {
+    $draftEdit = outgoing_batch_draft_editable($user, $batchId);
+    $returnedEdit = !$draftEdit && outgoing_batch_returned_editable($user, $batchId);
+    if (!$draftEdit && !$returnedEdit) {
         throw new RuntimeException(__('bulk.edit_locked'));
     }
     $existingRows = outgoing_batch_draft_rows($batchId);
@@ -1911,12 +1990,15 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
 
         $snapCols = correspondence_snapshot_column_names();
         $snapSet = implode(', ', array_map(static fn(string $col): string => $col . ' = ?', $snapCols));
+        $updateWhere = $returnedEdit
+            ? "WHERE id = ? AND batch_id = ? AND type = 'outgoing' AND issue_approval_status = 'returned' AND status <> 'cancelled'"
+            : "WHERE id = ? AND batch_id = ? AND type = 'outgoing' AND outgoing_prep_status = 'draft'";
         $updateKept = $pdo->prepare(
             "UPDATE `tblcorrespondence`
              SET subject = ?, {$snapSet}, corr_date = ?, reply_due = ?, priority = ?, confidentiality = ?,
                  category_id = ?, notes = ?, letter_body = ?, letter_body_en = ?, department_id = ?,
                  issuing_department_id = ?, rsvp_required = ?, rsvp_allow_remote = ?, intend_electronic = ?, intend_paper = ?, email_letter_attach = ?
-             WHERE id = ? AND batch_id = ? AND type = 'outgoing' AND outgoing_prep_status = 'draft'"
+             {$updateWhere}"
         );
         foreach ($kept as $entityId => $entity) {
             $row = $byEntity[$entityId];
@@ -1967,8 +2049,8 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
              snap_title_prefix, snap_person_name, snap_job_title, snap_honorific, snap_org_name,
              snap_from_prefix, snap_from_person, snap_from_job, snap_from_org, snap_from_signature,
              external_ref, corr_date, reply_due,
-             status, priority, confidentiality, category_id, notes, letter_body, letter_body_en, qr_token, linked_id, batch_id, department_id, issuing_department_id, created_by, rsvp_required, rsvp_allow_remote, intend_electronic, intend_paper, email_letter_attach, outgoing_prep_status)
-            VALUES ('outgoing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')"
+             status, priority, confidentiality, category_id, notes, letter_body, letter_body_en, qr_token, linked_id, batch_id, department_id, issuing_department_id, created_by, rsvp_required, rsvp_allow_remote, intend_electronic, intend_paper, email_letter_attach, outgoing_prep_status, issue_approval_status)
+            VALUES ('outgoing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
         $newIds = [];
         $docStmt = $pdo->prepare(
@@ -1979,6 +2061,11 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
             $docStmt->execute([$seedId]);
             $seedDocs = $docStmt->fetchAll() ?: [];
         }
+        $returnedRefs = [];
+        if ($returnedEdit && $added !== []) {
+            $returnedRefs = next_ref_numbers('outgoing', count($added), $deptId);
+        }
+        $refIdx = 0;
         foreach ($added as $entityId => $entity) {
             $party = entity_recipient_name($entity);
             $snapVals = correspondence_snapshot_bind_values(correspondence_resolve_save_snapshot(
@@ -1996,8 +2083,21 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
             }
             $mode = outgoing_recipient_delivery_mode($mode, (string) ($entity['email'] ?? ''));
             [$electronic, $paper] = correspondence_delivery_flags($mode);
+            if ($returnedEdit) {
+                $ref = (string) ($returnedRefs[$refIdx] ?? '');
+                $refIdx++;
+                if ($ref === '') {
+                    throw new RuntimeException(__('bulk.invalid'));
+                }
+                $prepStatus = null;
+                $issueStatus = 'returned';
+            } else {
+                $ref = outgoing_prep_placeholder_ref();
+                $prepStatus = 'draft';
+                $issueStatus = null;
+            }
             $insert->execute(array_merge(
-                [outgoing_prep_placeholder_ref(), $subject, $party, $entityId],
+                [$ref, $subject, $party, $entityId],
                 $snapVals,
                 [
                     $corrDate,
@@ -2018,10 +2118,19 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
                     $electronic,
                     $paper,
                     $emailLetterAttach,
+                    $prepStatus,
+                    $issueStatus,
                 ]
             ));
             $corrId = (int) $pdo->lastInsertId();
-            outgoing_prep_bind_id_ref($corrId);
+            if (!$returnedEdit) {
+                outgoing_prep_bind_id_ref($corrId);
+            } elseif (function_exists('outgoing_ensure_draft_files_stamped')) {
+                $fresh = get_correspondence($corrId);
+                if (is_array($fresh)) {
+                    outgoing_ensure_draft_files_stamped($fresh);
+                }
+            }
             $newIds[] = $corrId;
             foreach ($seedDocs as $doc) {
                 if (function_exists('clone_document_to_correspondence')) {
@@ -2034,7 +2143,14 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
                      SELECT ?, attachment_type_id, quantity FROM `tblcorr_attachments` WHERE correspondence_id = ?"
                 )->execute([$corrId, $seedId]);
             }
-            log_activity((int) $user['id'], $corrId, 'create', 'إضافة مستلم إلى مسودة صادر جماعي OD-' . $corrId);
+            log_activity(
+                (int) $user['id'],
+                $corrId,
+                'create',
+                $returnedEdit
+                    ? __('bulk.returned_add_log') . ' ' . $ref
+                    : 'إضافة مستلم إلى مسودة صادر جماعي OD-' . $corrId
+            );
         }
 
         $finalIds = [];
@@ -2076,19 +2192,33 @@ function update_outgoing_batch(int $batchId, array $data, array $entityIds, arra
             }
         }
 
-        foreach ($removeRows as $row) {
-            outgoing_batch_delete_draft_row((int) $row['id']);
+        if ($returnedEdit) {
+            foreach ($removeRows as $row) {
+                outgoing_batch_withdraw_returned_row((int) $row['id'], $user);
+            }
+        } else {
+            foreach ($removeRows as $row) {
+                outgoing_batch_delete_draft_row((int) $row['id']);
+            }
         }
+        $linkWhere = $returnedEdit
+            ? "WHERE batch_id = ? AND type = 'outgoing' AND issue_approval_status = 'returned' AND status <> 'cancelled'"
+            : "WHERE batch_id = ? AND type = 'outgoing' AND outgoing_prep_status = 'draft'";
         $pdo->prepare(
             "UPDATE `tblcorrespondence`
              SET letter_link_label = ?, letter_link_url = ?
-             WHERE batch_id = ? AND type = 'outgoing' AND outgoing_prep_status = 'draft'"
+             {$linkWhere}"
         )->execute([$letterLinkLabel, $letterLinkUrl, $batchId]);
-        if (function_exists('outgoing_batch_assign_draft_refs')) {
+        if (!$returnedEdit && function_exists('outgoing_batch_assign_draft_refs')) {
             outgoing_batch_assign_draft_refs($batchId);
         }
         foreach ($kept as $entityId => $entity) {
-            log_activity((int) $user['id'], (int) $byEntity[$entityId]['id'], 'update', 'تعديل مسودة صادر جماعي');
+            log_activity(
+                (int) $user['id'],
+                (int) $byEntity[$entityId]['id'],
+                'update',
+                $returnedEdit ? __('bulk.returned_edit_log') : 'تعديل مسودة صادر جماعي'
+            );
         }
         if ($pdo->inTransaction()) {
             $pdo->commit();

@@ -3243,13 +3243,14 @@ function outgoing_release_to_communications(int $corrId, bool $notify = true): v
  */
 function outgoing_issue_flow_stale_statuses(): array
 {
+    // لا تُدرَج returned: إعادة المنشئ للتعديل (من مراجع أو من الاتصالات)
+    // يجب أن تبقى حتى يعدّل ثم يعيد طلب المسار / الإحالة للاتصالات.
     return [
         'pending_review',
         'pending_copy',
         'pending_sg',
         'pending_deputy',
         'pending_alternate',
-        'returned',
     ];
 }
 
@@ -3349,6 +3350,101 @@ function outgoing_issue_flow_release_all_if_inactive(?array $user = null): int
     return $n;
 }
 
+/**
+ * هل يجوز إعادة الدفعة من الاتصالات للمنشئ للتعديل؟
+ *
+ * @param list<array<string,mixed>> $items
+ */
+function outgoing_user_can_return_batch_from_comms(array $user, array $items): bool
+{
+    if ($items === []) {
+        return false;
+    }
+    $isAdmin = function_exists('appr_user_is_admin')
+        ? appr_user_is_admin($user)
+        : ((string) ($user['role'] ?? '') === 'admin');
+    if ($isAdmin) {
+        return true;
+    }
+    foreach ($items as $corr) {
+        if (($corr['type'] ?? '') !== 'outgoing' || correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        $st = outgoing_approval_status_of($corr);
+        if (!in_array($st, ['with_comms', 'approved'], true)) {
+            continue;
+        }
+        if (outgoing_user_can_dispatch($user, $corr)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * إعادة الدفعة من الاتصالات إلى المنشئ (returned) للتعديل ثم إكمال المسار.
+ * الأرقام وسجل الإرسال/التسليم تبقى.
+ */
+function outgoing_batch_return_from_comms(int $batchId, array $user, string $note = ''): int
+{
+    if ($batchId <= 0) {
+        return 0;
+    }
+    $note = trim($note);
+    $items = function_exists('outgoing_batch_items_unscoped')
+        ? outgoing_batch_items_unscoped($batchId)
+        : (function_exists('outgoing_batch_items') ? outgoing_batch_items($batchId, $user) : []);
+    if ($items === [] || !outgoing_user_can_return_batch_from_comms($user, $items)) {
+        throw new RuntimeException(__('auth.forbidden'));
+    }
+
+    $uid = (int) ($user['id'] ?? 0);
+    $done = [];
+    $stmt = db()->prepare(
+        "UPDATE `tblcorrespondence` SET
+            issue_approval_status = 'returned',
+            issue_approval_assignee_id = NULL,
+            issue_approval_escalated_at = NULL,
+            issue_approval_reassigned_at = NULL
+         WHERE id = ? AND type = 'outgoing'
+           AND issue_approval_status IN ('with_comms', 'approved')"
+    );
+    foreach ($items as $corr) {
+        if (($corr['type'] ?? '') !== 'outgoing' || correspondence_is_cancelled($corr)) {
+            continue;
+        }
+        if (!in_array(outgoing_approval_status_of($corr), ['with_comms', 'approved'], true)) {
+            continue;
+        }
+        $id = (int) ($corr['id'] ?? 0);
+        if ($id < 1) {
+            continue;
+        }
+        $stmt->execute([$id]);
+        if ($stmt->rowCount() < 1) {
+            continue;
+        }
+        $desc = __('bulk.return_from_comms_log') . ($note !== '' ? ': ' . $note : '');
+        if (function_exists('log_activity')) {
+            log_activity($uid > 0 ? $uid : null, $id, 'issue_batch_return_comms', $desc);
+        }
+        $fresh = get_correspondence($id);
+        if ($fresh) {
+            $done[] = $fresh;
+        }
+    }
+    if ($done !== [] && function_exists('outgoing_batch_notify_cycle')) {
+        try {
+            outgoing_batch_notify_cycle($batchId, $done, $user, 'review_return', $note);
+        } catch (Throwable $e) {
+            error_log('DMS batch return from comms notify: ' . $e->getMessage());
+        }
+    }
+
+    return count($done);
+}
+
 /** إحالة كل خطابات الدفعة الجاهزة إلى الاتصالات (بلا مراجعة/اعتماد). */
 function outgoing_batch_release_to_communications(int $batchId, array $user): int
 {
@@ -3367,7 +3463,7 @@ function outgoing_batch_release_to_communications(int $batchId, array $user): in
             continue;
         }
         $st = outgoing_approval_status_of($corr);
-        if ($st !== '' && $st !== 'with_comms' && $st !== 'approved') {
+        if ($st !== '' && $st !== 'with_comms' && $st !== 'approved' && $st !== 'returned') {
             continue;
         }
         $id = (int) ($corr['id'] ?? 0);
@@ -3393,6 +3489,21 @@ function outgoing_batch_release_to_communications(int $batchId, array $user): in
     }
 
     return count($done);
+}
+
+/**
+ * بعد تعديل الدفعة المُعادة للمنشئ: أعد طلب المسار إن كان مفعّلاً، وإلا أحِل للاتصالات.
+ */
+function outgoing_batch_continue_after_return(int $batchId, array $user): int
+{
+    if ($batchId <= 0) {
+        return 0;
+    }
+    if (outgoing_issue_flow_active() && function_exists('outgoing_batch_request_approvals')) {
+        return outgoing_batch_request_approvals($batchId, $user);
+    }
+
+    return outgoing_batch_release_to_communications($batchId, $user);
 }
 
 function outgoing_approval_decide(int $corrId, array $user, bool $approve, string $note = '', bool $notify = true): void

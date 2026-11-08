@@ -144,6 +144,9 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </form>
+            <?php if (!empty($dmsEditDocForms)) {
+                echo $dmsEditDocForms;
+            } ?>
         </div>
     </div>
 </div>

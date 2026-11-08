@@ -19,22 +19,34 @@ $editBatch = $editBatchId > 0 && function_exists('get_outgoing_batch') ? get_out
 $editRows = [];
 $editing = false;
 if ($editBatchId > 0) {
-    if (!$editBatch || !function_exists('outgoing_batch_draft_editable') || !outgoing_batch_draft_editable($user, $editBatchId)) {
+    $canEditBatch = $editBatch && function_exists('outgoing_batch_editable') && outgoing_batch_editable($user, $editBatchId);
+    if (!$canEditBatch) {
         flash('danger', __('bulk.edit_locked'));
         redirect(base_url($editBatch ? 'outgoing/batch.php?id=' . $editBatchId : 'outgoing/batches.php'));
     }
     $editing = true;
     $editRows = outgoing_batch_draft_rows($editBatchId);
 }
+$editingReturned = $editing
+    && function_exists('outgoing_batch_returned_editable')
+    && outgoing_batch_returned_editable($user, $editBatchId);
 $pageTitle = $editing ? __('bulk.edit_title') : __('bulk.title');
 $editSource = $editRows[0] ?? [];
 $editDelivery = [];
+$returnedSentEntityIds = [];
 foreach ($editRows as $editRow) {
     $editEntityId = (int) ($editRow['entity_id'] ?? 0);
     if ($editEntityId > 0 && function_exists('correspondence_delivery_mode')) {
         $editDelivery[$editEntityId] = correspondence_delivery_mode($editRow);
     }
+    if ($editingReturned
+        && $editEntityId > 0
+        && in_array((string) ($editRow['status'] ?? ''), ['sent', 'delivered'], true)
+    ) {
+        $returnedSentEntityIds[] = $editEntityId;
+    }
 }
+$returnedSentEntityIds = array_values(array_unique($returnedSentEntityIds));
 $preGroup = (int) ($_GET['group'] ?? $_POST['entity_group_id'] ?? 0);
 $selectedIds = array_map('intval', $_POST['entity_ids'] ?? []);
 if ($editing && $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -96,13 +108,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     $postedBatchId = (int) ($_POST['batch_id'] ?? 0);
     try {
-        $sendPrep = !empty($_POST['out_prep_submit'])
+        $wasReturnedEdit = $postedBatchId > 0
+            && function_exists('outgoing_batch_returned_editable')
+            && outgoing_batch_returned_editable($user, $postedBatchId);
+        $sendPrep = !$wasReturnedEdit
+            && !empty($_POST['out_prep_submit'])
             && function_exists('outgoing_prep_enabled')
             && outgoing_prep_enabled()
             && function_exists('outgoing_batch_prep_submit');
+        $resubmitPath = $wasReturnedEdit && !empty($_POST['out_resubmit_path']);
         if ($postedBatchId > 0) {
             update_outgoing_batch($postedBatchId, $_POST, $_POST['entity_ids'] ?? [], $user, $_FILES['attachments'] ?? $_FILES['attachment'] ?? null);
             $batchId = $postedBatchId;
+            if ($resubmitPath && function_exists('outgoing_batch_continue_after_return')) {
+                $n = outgoing_batch_continue_after_return($batchId, $user);
+                $okMsg = function_exists('outgoing_issue_flow_active') && outgoing_issue_flow_active()
+                    ? __('issue_appr.batch_requested_ok')
+                    : __('bulk.resubmit_to_comms_ok');
+                flash('success', $n > 0
+                    ? str_replace(':count', (string) $n, $okMsg)
+                    : __('bulk.saved'));
+                redirect(base_url('outgoing/batch.php?id=' . $batchId));
+            }
             if ($sendPrep) {
                 $result = outgoing_batch_prep_submit($batchId, $user);
                 flash('success', $result === 'converted' ? __('bulk.converted') : __('bulk.submitted'));
@@ -184,7 +211,7 @@ if ($editing && function_exists('get_documents')) {
 <div class="page-header page-narrow">
     <div>
         <h1 class="page-title"><?= e($editing ? __('bulk.edit_title') : __('bulk.title')) ?></h1>
-        <p class="page-sub"><?= e($editing ? __('bulk.edit_sub') : __('bulk.subtitle')) ?></p>
+        <p class="page-sub"><?= e($editingReturned ? __('bulk.edit_sub_returned') : ($editing ? __('bulk.edit_sub') : __('bulk.subtitle'))) ?></p>
     </div>
     <div class="page-header-actions">
         <?= btn_icon(__('bulk.batches_title'), [
@@ -218,19 +245,25 @@ if ($editing && function_exists('get_documents')) {
         </div>
         <div class="card-body">
             <?php require __DIR__ . '/../includes/corr_form_error.php'; ?>
-            <?php if ($prepOn): ?>
+            <?php if ($editingReturned): ?>
+                <div class="alert alert-warning py-2 small no-print">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>
+                    <?= e(__('bulk.returned_edit_hint')) ?>
+                    <div class="mt-1"><?= e(__('bulk.returned_recipients_hint')) ?></div>
+                </div>
+            <?php elseif ($prepOn): ?>
                 <div class="alert alert-info py-2 small no-print">
                     <i class="bi bi-pencil-square me-1"></i>
                     <?= e($editing ? __('bulk.prep_hint') : __('out_prep.create_hint')) ?>
                 </div>
             <?php endif; ?>
-            <?php if ($prepReturned): ?>
+            <?php if ($prepReturned && !$editingReturned): ?>
                 <div class="alert alert-warning py-2 small no-print">
                     <div class="fw-semibold"><?= e(__('out_prep.returned_note')) ?></div>
                     <div class="mt-1"><?= e(trim((string) ($corr['outgoing_prep_note'] ?? ''))) ?></div>
                 </div>
             <?php endif; ?>
-            <?php if (!$prepOn && function_exists('outgoing_approval_is_configured') && outgoing_approval_is_configured()): ?>
+            <?php if (!$editingReturned && !$prepOn && function_exists('outgoing_approval_is_configured') && outgoing_approval_is_configured()): ?>
                 <div class="alert alert-info py-2 small no-print">
                     <i class="bi bi-shield-check me-1"></i>
                     <?= e(function_exists('outgoing_appr_text') ? outgoing_appr_text('issue_appr.batch_create_hint') : __('issue_appr.batch_create_hint')) ?>
@@ -249,7 +282,7 @@ if ($editing && function_exists('get_documents')) {
                 };
             }
             ?>
-            <form method="post" enctype="multipart/form-data" class="admin-form"<?= $prepOn ? '' : ' data-confirm="' . e($bulkConfirm) . '"' ?>
+            <form method="post" enctype="multipart/form-data" class="admin-form"<?= ($prepOn || $editingReturned) ? '' : ' data-confirm="' . e($bulkConfirm) . '"' ?>
                   <?php if ($editing && is_array($docsSourceCorr) && (int) ($docsSourceCorr['id'] ?? 0) > 0): ?>
                   data-corr-id="<?= (int) $docsSourceCorr['id'] ?>"
                   data-corr-ref="<?= e((string) ($docsSourceCorr['ref_number'] ?? '')) ?>"
@@ -286,6 +319,8 @@ if ($editing && function_exists('get_documents')) {
                                     $inputName = 'entity_ids[]';
                                     $pickerId = 'bulk-recipients';
                                     $showDeliveryMode = true;
+                                    $lockRecipients = false;
+                                    $hintText = $editingReturned ? __('bulk.returned_recipients_hint') : '';
                                     require __DIR__ . '/../includes/entity_multi_picker.php';
                                     ?>
                                 </div>
@@ -412,11 +447,11 @@ if ($editing && function_exists('get_documents')) {
                                                 <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $isPdf ? '-pdf' : '' ?>"></i></div>
                                                 <div class="corr-file-meta">
                                                     <?php if ($canOpenDoc && $docId > 0): ?>
-                                                        <a href="<?= e(file_download_url('document', $docId)) ?>" target="_blank"><?= e($docName) ?></a>
+                                                        <a class="corr-file-name" dir="ltr" href="<?= e(file_download_url('document', $docId)) ?>" target="_blank"><?= e($docName) ?></a>
                                                     <?php else: ?>
-                                                        <span class="text-muted"><?= e($docName) ?></span>
+                                                        <span class="corr-file-name text-muted" dir="ltr"><?= e($docName) ?></span>
                                                     <?php endif; ?>
-                                                    <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label($docName, (string) ($doc['file_type'] ?? ''))) ?></span>
+                                                    <span class="dms-file-list-type" dir="ltr"><?= e(dms_upload_file_type_label($docName, (string) ($doc['file_type'] ?? ''))) ?></span>
                                                 </div>
                                                 <?php if ($canDeleteEditDocs && $docId > 0 && $editDocReturn !== ''): ?>
                                                     <button class="btn btn-sm btn-outline-danger" type="submit"
@@ -499,7 +534,20 @@ if ($editing && function_exists('get_documents')) {
 
                 <div class="corr-issue-decide">
                     <div class="corr-decide-actions">
-                    <?php if ($prepOn): ?>
+                    <?php if ($editingReturned): ?>
+                    <button class="btn btn-kff" type="submit" name="out_resubmit_path" value="1" data-keep-label
+                            data-confirm="<?= e(__('bulk.confirm_resubmit_path')) ?>"
+                            data-confirm-base="<?= e(__('bulk.confirm_resubmit_path')) ?>"
+                            data-confirm-sent="<?= e(__('bulk.confirm_remove_sent')) ?>">
+                        <i class="bi bi-send-check me-1"></i><?= e(__('bulk.save_and_resubmit')) ?>
+                    </button>
+                    <button class="btn btn-outline-secondary" type="submit" data-keep-label
+                            data-confirm="<?= e(__('bulk.confirm_save')) ?>"
+                            data-confirm-base="<?= e(__('bulk.confirm_save')) ?>"
+                            data-confirm-sent="<?= e(__('bulk.confirm_remove_sent')) ?>">
+                        <i class="bi bi-check2 me-1"></i><?= e(__('action.save_changes')) ?>
+                    </button>
+                    <?php elseif ($prepOn): ?>
                     <button class="btn btn-kff" type="submit" name="out_prep_submit" value="1" data-keep-label
                             data-confirm="<?= e($prepSelf ? __('out_prep.confirm_submit_self') : __('out_prep.confirm_submit')) ?>">
                         <i class="bi bi-send me-1"></i><?= e($prepSelf
@@ -528,6 +576,7 @@ if ($editing && function_exists('get_documents')) {
   var form = document.querySelector('form.admin-form');
   var entityId = document.getElementById('entity_id');
   var inputsEl = document.querySelector('[data-bulk-inputs]');
+  var sentEntityIds = <?= json_encode($returnedSentEntityIds, JSON_UNESCAPED_UNICODE) ?>;
   function syncPreviewEntity() {
     if (!entityId || !inputsEl) return;
     var first = inputsEl.querySelector('input[name="entity_ids[]"]');
@@ -551,6 +600,38 @@ if ($editing && function_exists('get_documents')) {
   if (rsvpBox) {
     rsvpBox.addEventListener('change', syncRsvpMode);
     syncRsvpMode();
+  }
+  function removedSentCount() {
+    if (!form || !Array.isArray(sentEntityIds) || !sentEntityIds.length) return 0;
+    var kept = {};
+    form.querySelectorAll('input[name="entity_ids[]"]').forEach(function (input) {
+      var id = parseInt(input.value, 10);
+      if (id > 0) kept[String(id)] = true;
+    });
+    var n = 0;
+    sentEntityIds.forEach(function (id) {
+      if (!kept[String(id)]) n++;
+    });
+    return n;
+  }
+  function syncSentConfirm(btn) {
+    if (!btn || !btn.getAttribute) return;
+    var base = btn.getAttribute('data-confirm-base') || btn.getAttribute('data-confirm') || '';
+    var sentTpl = btn.getAttribute('data-confirm-sent') || '';
+    var n = removedSentCount();
+    if (n > 0 && sentTpl) {
+      btn.setAttribute('data-confirm', sentTpl.replace(/:count/g, String(n)));
+    } else if (base) {
+      btn.setAttribute('data-confirm', base);
+    }
+  }
+  if (form && sentEntityIds.length) {
+    form.querySelectorAll('button[type="submit"][data-confirm-sent]').forEach(function (btn) {
+      btn.addEventListener('click', function () { syncSentConfirm(btn); }, true);
+    });
+    form.addEventListener('submit', function (e) {
+      if (e.submitter) syncSentConfirm(e.submitter);
+    }, true);
   }
   if (form && !form.dataset.invalidBound) {
     form.dataset.invalidBound = '1';

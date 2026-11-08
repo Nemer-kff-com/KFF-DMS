@@ -192,6 +192,64 @@ function dms_storage_disk_path(string $storedPath): string
     return str_replace('/', DIRECTORY_SEPARATOR, $primary);
 }
 
+function dms_storage_legacy_uploads_root(): string
+{
+    return rtrim(str_replace('\\', '/', dirname(__DIR__)), '/') . '/assets/uploads';
+}
+
+function dms_storage_is_under_root(string $fullPath, string $root): bool
+{
+    $norm = static function (string $p): string {
+        $real = realpath($p);
+        $s = str_replace('\\', '/', $real !== false ? $real : $p);
+
+        return rtrim($s, '/');
+    };
+    $full = $norm($fullPath);
+    $rootN = $norm($root);
+    if ($full === '' || $rootN === '') {
+        return false;
+    }
+
+    return strcasecmp($full, $rootN) === 0
+        || str_starts_with(strtolower($full), strtolower($rootN . '/'));
+}
+
+function dms_storage_path_is_allowed_disk(string $fullPath): bool
+{
+    return $fullPath !== ''
+        && (
+            dms_storage_is_under_root($fullPath, dms_storage_root())
+            || dms_storage_is_under_root($fullPath, dms_storage_legacy_uploads_root())
+        );
+}
+
+/** حذف ملف معاملة من التخزين الحالي والمسار القديم إن وُجد. */
+function dms_delete_stored_upload(string $storedPath): bool
+{
+    $rel = dms_storage_relative($storedPath);
+    if ($rel === '' || str_contains($rel, '..')) {
+        return false;
+    }
+    $candidates = array_unique(array_filter([
+        dms_storage_disk_path($rel),
+        str_replace('/', DIRECTORY_SEPARATOR, dms_storage_root() . '/' . $rel),
+        str_replace('/', DIRECTORY_SEPARATOR, dms_storage_legacy_uploads_root() . '/' . $rel),
+    ]));
+    $deleted = false;
+    foreach ($candidates as $path) {
+        if ($path === '' || !is_file($path) || !dms_storage_path_is_allowed_disk($path)) {
+            continue;
+        }
+        @chmod($path, 0666);
+        if (@unlink($path) || !is_file($path)) {
+            $deleted = true;
+        }
+    }
+
+    return $deleted;
+}
+
 /** قيمة تُحفظ في القاعدة لملف معاملة. */
 function dms_storage_db_path(string $relativeInsideStorage): string
 {

@@ -100,8 +100,10 @@ $fileType = (string) ($doc['file_type'] ?? '');
 $uploadedAt = (string) ($doc['uploaded_at'] ?? '');
 if ($batchId > 0
     && function_exists('outgoing_batch_items_unscoped')
-    && function_exists('outgoing_batch_draft_editable')
-    && outgoing_batch_draft_editable($user, $batchId)
+    && (
+        (function_exists('outgoing_batch_editable') && outgoing_batch_editable($user, $batchId))
+        || (function_exists('outgoing_batch_draft_editable') && outgoing_batch_draft_editable($user, $batchId))
+    )
 ) {
     foreach (outgoing_batch_items_unscoped($batchId) as $item) {
         $siblingCorrId = (int) ($item['id'] ?? 0);
@@ -141,33 +143,7 @@ if ($batchId > 0
     }
 }
 $deleteIds = array_values(array_unique(array_merge([$id], $batchSiblingIds)));
-$placeholders = implode(',', array_fill(0, count($deleteIds), '?'));
-$pathStmt = db()->prepare("SELECT DISTINCT file_path FROM `tbldocuments` WHERE id IN ($placeholders)");
-$pathStmt->execute($deleteIds);
-$pathsToRemove = [];
-foreach ($pathStmt->fetchAll() as $pathRow) {
-    $rel = (string) ($pathRow['file_path'] ?? '');
-    if ($rel === '') {
-        continue;
-    }
-    $sharedPath = db()->prepare(
-        "SELECT COUNT(*) FROM `tbldocuments` WHERE file_path = ? AND id NOT IN ($placeholders)"
-    );
-    $sharedPath->execute(array_merge([$rel], $deleteIds));
-    if ((int) $sharedPath->fetchColumn() === 0) {
-        $pathsToRemove[] = $rel;
-    }
-}
-foreach ($pathsToRemove as $rel) {
-    if (!dms_is_safe_upload_path($rel)) {
-        continue;
-    }
-    $path = dms_storage_disk_path($rel);
-    if ($path !== '' && is_file($path)) {
-        @unlink($path);
-    }
-}
-db()->prepare("DELETE FROM `tbldocuments` WHERE id IN ($placeholders)")->execute($deleteIds);
+delete_correspondence_documents($deleteIds);
 log_activity((int) $user['id'], (int) $doc['correspondence_id'], 'delete_doc', 'حذف مرفق: ' . $doc['file_name']);
 flash('success', __('documents.deleted'));
 redirect(base_url($return));

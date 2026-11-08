@@ -245,11 +245,11 @@ require __DIR__ . '/../includes/header.php';
                             <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $closeIsPdf ? '-pdf' : '' ?>"></i></div>
                             <div class="corr-file-meta">
                                 <?php if (user_can_view_corr_document($corr, $doc, $user)): ?>
-                                <a href="<?= e(file_download_url('document', (int) $doc['id'])) ?>" target="_blank"><?= e($closeDocName) ?></a>
+                                <a class="corr-file-name" dir="ltr" href="<?= e(file_download_url('document', (int) $doc['id'])) ?>" target="_blank"><?= e($closeDocName) ?></a>
                                 <?php else: ?>
-                                <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('conf.file_locked')) ?>"><i class="bi bi-lock-fill me-1"></i><?= e($closeDocName) ?></span>
+                                <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('conf.file_locked')) ?>"><i class="bi bi-lock-fill me-1"></i><span class="corr-file-name" dir="ltr"><?= e($closeDocName) ?></span></span>
                                 <?php endif; ?>
-                                <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label($closeDocName, (string) ($doc['file_type'] ?? ''))) ?></span>
+                                <span class="dms-file-list-type" dir="ltr"><?= e(dms_upload_file_type_label($closeDocName, (string) ($doc['file_type'] ?? ''))) ?></span>
                                 <div class="small text-muted"><?= e(format_datetime($doc['uploaded_at'] ?? null)) ?></div>
                             </div>
                             <?php if ($canDeleteCloseDoc): ?>

@@ -1097,9 +1097,13 @@ function delete_circular_file(int $fileId): ?array
     if (!$file) {
         return null;
     }
-    $path = dms_storage_disk_path((string) $file['file_path']);
-    if ($path !== '' && is_file($path)) {
-        @unlink($path);
+    if (function_exists('dms_delete_stored_upload')) {
+        dms_delete_stored_upload((string) $file['file_path']);
+    } else {
+        $path = dms_storage_disk_path((string) $file['file_path']);
+        if ($path !== '' && is_file($path)) {
+            @unlink($path);
+        }
     }
     db()->prepare('DELETE FROM `tblcircular_files` WHERE id = ?')->execute([$fileId]);
     return $file;
@@ -1110,6 +1114,10 @@ function delete_circular(int $id): bool
     ensure_circulars_schema();
     $files = get_circular_files($id);
     foreach ($files as $f) {
+        if (function_exists('dms_delete_stored_upload')) {
+            dms_delete_stored_upload((string) $f['file_path']);
+            continue;
+        }
         $path = dms_storage_disk_path((string) $f['file_path']);
         if ($path !== '' && is_file($path)) {
             @unlink($path);

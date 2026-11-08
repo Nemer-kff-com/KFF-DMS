@@ -1206,3 +1206,212 @@ function dms_send_flash_from_batch(array $summary): void
         flash('danger', $msg);
     }
 }
+
+function dms_meeting_display_title(array $meeting, array $corr = []): string
+{
+    $title = trim((string) ($meeting['title'] ?? ''));
+    $generic = [
+        'رابط الاجتماع',
+        'Meeting link',
+        'عنوان الاجتماع',
+        'Meeting title',
+        'اختياري',
+        'Optional',
+    ];
+    if (function_exists('__')) {
+        $generic[] = (string) __('meeting.title');
+        $generic[] = (string) __('meeting.event_title');
+        $generic[] = (string) __('meeting.event_title_ph');
+    }
+    $generic = array_values(array_unique(array_filter($generic, static fn($s) => $s !== '')));
+    if ($title !== '' && !in_array($title, $generic, true)) {
+        return $title;
+    }
+    $url = trim((string) ($meeting['url'] ?? ''));
+    if ($url !== '' && function_exists('correspondence_meeting_platform')) {
+        $platform = correspondence_meeting_platform($url);
+        if ($platform !== 'other' && function_exists('correspondence_meeting_platform_label')) {
+            return correspondence_meeting_platform_label($url);
+        }
+    }
+    return trim((string) ($corr['subject'] ?? ''));
+}
+
+function dms_meeting_link_body(array $corr, array $meeting, string $lang = 'ar'): array
+{
+    $url = trim((string) ($meeting['url'] ?? ''));
+    $title = dms_meeting_display_title($meeting, $corr);
+    $when = '';
+    $at = trim((string) ($meeting['at'] ?? ''));
+    if ($at !== '' && !str_starts_with($at, '0000') && function_exists('format_datetime')) {
+        $when = format_datetime($at);
+    }
+    $meetingId = trim((string) ($meeting['meeting_id'] ?? ''));
+    $code = trim((string) ($meeting['code'] ?? ''));
+    $name = function_exists('dms_corr_honored_name') ? dms_corr_honored_name($corr) : '';
+    $en = $lang === 'en';
+    $joinLabel = $en ? 'Join meeting' : 'الانضمام للاجتماع';
+    $intro = $en
+        ? 'Remote meeting join details:'
+        : 'بيانات الانضمام للاجتماع عن بعد:';
+    $rows = [];
+    if ($title !== '') {
+        $rows[] = [$en ? 'Meeting' : 'الاجتماع', $title];
+    }
+    if ($when !== '') {
+        $rows[] = [$en ? 'Date and time' : 'الموعد', $when];
+    }
+    if ($meetingId !== '') {
+        $rows[] = [$en ? 'Meeting ID' : 'رقم الاجتماع', $meetingId];
+    }
+    if ($code !== '') {
+        $rows[] = [$en ? 'Passcode' : 'رمز الدخول', $code];
+    }
+    $lines = [];
+    if ($name !== '') {
+        $lines[] = $name;
+        $lines[] = '';
+    }
+    $lines[] = $intro;
+    if ($url !== '') {
+        $lines[] = $url;
+        $lines[] = '';
+    }
+    foreach ($rows as $row) {
+        $lines[] = $row[0] . ': ' . $row[1];
+    }
+    $text = implode("\n", $lines);
+    $esc = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+    $dir = $en ? 'ltr' : 'rtl';
+    $html = '<div style="font-family:Arial,Tahoma,sans-serif;font-size:15px;line-height:1.7;color:#1f2a37;max-width:36rem" dir="' . $dir . '">';
+    if ($name !== '') {
+        $html .= '<p style="margin:0 0 14px;font-weight:700">' . $esc($name) . '</p>';
+    }
+    $html .= '<p style="margin:0 0 14px">' . $esc($intro) . '</p>';
+    if ($url !== '') {
+        $html .= '<p style="margin:0 0 16px">'
+            . '<a href="' . $esc($url) . '" style="display:inline-block;padding:10px 18px;background:#0B5130;color:#fff;text-decoration:none;border-radius:6px;font-weight:700">'
+            . $esc($joinLabel) . '</a></p>';
+    }
+    if ($rows !== []) {
+        $html .= '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin:0 0 12px;border:1px solid #d7dde6;border-radius:8px">';
+        foreach ($rows as $i => $row) {
+            $bg = $i % 2 === 0 ? '#f7f8fa' : '#fff';
+            $ltr = ($row[0] === 'رقم الاجتماع' || $row[0] === 'Meeting ID' || $row[0] === 'رمز الدخول' || $row[0] === 'Passcode' || $row[0] === 'الموعد' || $row[0] === 'Date and time');
+            $html .= '<tr>'
+                . '<td style="padding:8px 12px;background:' . $bg . ';color:#5a6577;font-size:13px;font-weight:700;white-space:nowrap;width:34%">' . $esc($row[0]) . '</td>'
+                . '<td style="padding:8px 12px;background:' . $bg . ';color:#1f2a37"' . ($ltr ? ' dir="ltr"' : '') . '>' . $esc($row[1]) . '</td>'
+                . '</tr>';
+        }
+        $html .= '</table>';
+    }
+    if ($url !== '') {
+        $html .= '<p style="margin:0;font-size:13px;color:#5a6577" dir="ltr"><a href="' . $esc($url) . '" style="color:#3B4F6E;word-break:break-all">' . $esc($url) . '</a></p>';
+    }
+    $html .= '</div>';
+    $subjectTitle = $title !== '' ? $title : trim((string) ($corr['subject'] ?? ''));
+    $subject = $en
+        ? ('Meeting link' . ($subjectTitle !== '' ? ': ' . $subjectTitle : ''))
+        : ('رابط الاجتماع' . ($subjectTitle !== '' && $subjectTitle !== 'رابط الاجتماع' ? ': ' . $subjectTitle : ''));
+
+    return ['subject' => $subject, 'html' => $html, 'text' => $text];
+}
+
+function dms_send_meeting_link_to_corr(array $corr, array $user, bool $resend = false): array
+{
+    $id = (int) ($corr['id'] ?? 0);
+    $empty = ['ok' => false, 'status' => 'skipped', 'channel' => '', 'error' => ''];
+    if ($id < 1 || ($corr['type'] ?? '') !== 'outgoing') {
+        return $empty + ['error' => __('corr.not_found')];
+    }
+    if (function_exists('correspondence_is_cancelled') && correspondence_is_cancelled($corr)) {
+        return $empty + ['error' => __('cancel.locked')];
+    }
+    if (!function_exists('correspondence_is_remote_attendee') || !correspondence_is_remote_attendee($corr)) {
+        return $empty + ['error' => __('meeting.send_need_remote')];
+    }
+    if (!$resend && trim((string) ($corr['meeting_link_sent_at'] ?? '')) !== '') {
+        return $empty + ['error' => __('meeting.already_sent'), 'status' => 'skipped'];
+    }
+    $meeting = correspondence_meeting_data($corr);
+    if (!correspondence_meeting_has_url($meeting)) {
+        return $empty + ['error' => __('meeting.send_need_url')];
+    }
+    $lang = function_exists('correspondence_letter_channel_lang')
+        ? correspondence_letter_channel_lang($corr)
+        : 'ar';
+    $bodies = dms_meeting_link_body($corr, $meeting, $lang);
+    $email = dms_corr_email_address($corr);
+    $mobile = dms_corr_mobile_number($corr);
+    $channel = '';
+    $ok = false;
+    $error = '';
+    if ($email !== '') {
+        $channel = 'email';
+        $dir = $lang === 'en' ? 'ltr' : 'rtl';
+        $html = '<!DOCTYPE html><html lang="' . htmlspecialchars($lang, ENT_QUOTES, 'UTF-8') . '" dir="' . $dir . '">'
+            . '<head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;font-size:14pt;line-height:1.5;padding:16px;">'
+            . $bodies['html'] . '</body></html>';
+        $mailErr = null;
+        $mailDeptId = (int) ($corr['department_id'] ?? $corr['issuing_department_id'] ?? $user['department_id'] ?? 0);
+        $ok = dms_send_mail($email, $bodies['subject'], $html, $bodies['text'], $mailErr, false, $mailDeptId > 0 ? $mailDeptId : null);
+        $error = $ok ? '' : (string) $mailErr;
+        if ($id) {
+            dms_corr_log_delivery($id, 'email', $email, $ok ? 'sent' : 'failed', $error, 'smtp', $user);
+        }
+    }
+    if (!$ok && $mobile !== '') {
+        $channel = 'whatsapp';
+        $send = function_exists('dms_whatsapp_send_text')
+            ? dms_whatsapp_send_text($mobile, $bodies['text'])
+            : ['ok' => false, 'error' => __('send.need_wa_settings')];
+        $ok = !empty($send['ok']);
+        $error = $ok ? '' : trim((string) ($send['error'] ?? __('send.wa_fail')));
+        $provider = (string) (dms_get_whatsapp_settings()['provider'] ?? 'twilio');
+        if ($id) {
+            dms_corr_log_delivery($id, 'whatsapp', $mobile, $ok ? 'sent' : 'failed', $error, $provider, $user);
+        }
+    }
+    if ($channel === '') {
+        return $empty + ['error' => __('meeting.need_contact')];
+    }
+    if ($ok) {
+        db()->prepare(
+            'UPDATE `tblcorrespondence` SET meeting_link_sent_at = NOW(), meeting_link_sent_channel = ? WHERE id = ?'
+        )->execute([$channel, $id]);
+        log_activity((int) ($user['id'] ?? 0), $id, 'send_meeting_link', $channel);
+    }
+
+    return [
+        'ok' => $ok,
+        'status' => $ok ? 'sent' : 'failed',
+        'channel' => $channel,
+        'error' => $error,
+    ];
+}
+
+/**
+ * @param list<array> $items
+ * @return array{sent:int,failed:int,skipped:int,total:int}
+ */
+function dms_send_meeting_links_for_items(array $items, array $user, bool $resend = false): array
+{
+    $summary = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0];
+    foreach ($items as $row) {
+        if (!is_array($row) || (int) ($row['id'] ?? 0) < 1) {
+            continue;
+        }
+        $summary['total']++;
+        $result = dms_send_meeting_link_to_corr($row, $user, $resend);
+        $st = (string) ($result['status'] ?? 'skipped');
+        if ($st === 'sent') {
+            $summary['sent']++;
+        } elseif ($st === 'failed') {
+            $summary['failed']++;
+        } else {
+            $summary['skipped']++;
+        }
+    }
+
+    return $summary;
+}

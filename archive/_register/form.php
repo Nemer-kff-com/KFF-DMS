@@ -229,11 +229,11 @@ require __DIR__ . '/../../includes/header.php';
                                     <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $isPdf ? '-pdf' : '' ?>"></i></div>
                                     <div class="corr-file-meta">
                                         <?php if ($canOpenFile): ?>
-                                        <a href="<?= e(archive_register_url($kind, 'file', ['id' => $id, 'n' => (int) $i])) ?>" target="_blank" rel="noopener" dir="ltr"><?= e($fileName) ?></a>
+                                        <a class="corr-file-name" href="<?= e(archive_register_url($kind, 'file', ['id' => $id, 'n' => (int) $i])) ?>" target="_blank" rel="noopener" dir="ltr"><?= e($fileName) ?></a>
                                         <?php else: ?>
-                                        <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('conf.archive_file_locked')) ?>"><i class="bi bi-lock-fill me-1"></i><span dir="ltr"><?= e($fileName) ?></span></span>
+                                        <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="<?= e(__('conf.archive_file_locked')) ?>"><i class="bi bi-lock-fill me-1"></i><span class="corr-file-name" dir="ltr"><?= e($fileName) ?></span></span>
                                         <?php endif; ?>
-                                        <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label($fileName, '')) ?></span>
+                                        <span class="dms-file-list-type" dir="ltr"><?= e(dms_upload_file_type_label($fileName, '')) ?></span>
                                     </div>
                                     <button type="submit" form="archive-file-del-<?= (int) $i ?>" class="btn btn-sm btn-icon btn-outline-danger" title="<?= e(__('action.delete')) ?>" aria-label="<?= e(__('action.delete')) ?>">
                                         <i class="bi bi-trash"></i>

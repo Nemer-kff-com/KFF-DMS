@@ -6925,10 +6925,14 @@ function dms_is_safe_upload_path(string $relative): bool
     if ($rel === '' || str_contains($rel, '..')) {
         return false;
     }
-    $full = realpath(dms_storage_disk_path($rel));
+    $disk = dms_storage_disk_path($rel);
+    if ($disk !== '' && function_exists('dms_storage_path_is_allowed_disk')) {
+        return dms_storage_path_is_allowed_disk($disk);
+    }
+    $full = realpath($disk);
     $root = realpath(dms_storage_root());
     if ($full === false || $root === false) {
-        $candidate = str_replace('\\', '/', dms_storage_disk_path($rel));
+        $candidate = str_replace('\\', '/', $disk);
         $rootNorm = str_replace('\\', '/', dms_storage_root());
         return str_starts_with(strtolower($candidate), strtolower($rootNorm . '/'));
     }
@@ -7368,6 +7372,53 @@ function ensure_documents_doc_kind_schema(): void
     } catch (Throwable $e) {
         // تجاهل أثناء التثبيت
     }
+}
+
+/**
+ * حذف مرفقات معاملة من القاعدة ومن مجلد التخزين (صادر مفرد وجماعي).
+ * لا يُحذف ملف القرص إن بقي سجل آخر يشير إلى نفس المسار.
+ *
+ * @param list<int> $ids
+ */
+function delete_correspondence_documents(array $ids): int
+{
+    $ids = array_values(array_unique(array_filter(
+        array_map(static fn($id): int => (int) $id, $ids),
+        static fn(int $id): bool => $id > 0
+    )));
+    if ($ids === []) {
+        return 0;
+    }
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare("SELECT id, file_path FROM `tbldocuments` WHERE id IN ($placeholders)");
+    $stmt->execute($ids);
+    $rows = $stmt->fetchAll() ?: [];
+    $foundIds = [];
+    $paths = [];
+    foreach ($rows as $row) {
+        $foundIds[] = (int) ($row['id'] ?? 0);
+        $rel = trim((string) ($row['file_path'] ?? ''));
+        if ($rel !== '') {
+            $paths[$rel] = true;
+        }
+    }
+    $foundIds = array_values(array_filter($foundIds, static fn(int $id): bool => $id > 0));
+    if ($foundIds === []) {
+        return 0;
+    }
+    $foundPlaceholders = implode(',', array_fill(0, count($foundIds), '?'));
+    foreach (array_keys($paths) as $rel) {
+        $shared = db()->prepare(
+            "SELECT COUNT(*) FROM `tbldocuments` WHERE file_path = ? AND id NOT IN ($foundPlaceholders)"
+        );
+        $shared->execute(array_merge([$rel], $foundIds));
+        if ((int) $shared->fetchColumn() === 0 && function_exists('dms_delete_stored_upload')) {
+            dms_delete_stored_upload($rel);
+        }
+    }
+    db()->prepare("DELETE FROM `tbldocuments` WHERE id IN ($foundPlaceholders)")->execute($foundIds);
+
+    return count($foundIds);
 }
 
 function upload_document(array $file, int $corrId, int $userId, ?string $docKind = null): ?array
@@ -8454,9 +8505,356 @@ function ensure_corr_rsvp_schema(): void
         } elseif (!dms_db_column_exists('tblcorr_rsvp_log', 'mode')) {
             $pdo->exec('ALTER TABLE `tblcorr_rsvp_log` ADD COLUMN `mode` VARCHAR(20) NULL DEFAULT NULL AFTER `response`');
         }
+        if (function_exists('ensure_corr_meeting_schema')) {
+            ensure_corr_meeting_schema();
+        }
     } catch (Throwable $e) {
         error_log('DMS RSVP schema: ' . $e->getMessage());
     }
+}
+
+function ensure_corr_meeting_schema(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    try {
+        $pdo = db();
+        $batchCols = dms_db_column_map('tbloutgoing_batches');
+        if ($batchCols) {
+            $batchAdds = [];
+            if (empty($batchCols['meeting_url'])) {
+                $batchAdds[] = "ADD COLUMN `meeting_url` VARCHAR(500) NULL DEFAULT NULL COMMENT 'رابط اجتماع عن بعد لهذه الدفعة'";
+            }
+            if (empty($batchCols['meeting_title'])) {
+                $batchAdds[] = "ADD COLUMN `meeting_title` VARCHAR(200) NULL DEFAULT NULL COMMENT 'عنوان الاجتماع'";
+            }
+            if (empty($batchCols['meeting_at'])) {
+                $batchAdds[] = "ADD COLUMN `meeting_at` DATETIME NULL DEFAULT NULL COMMENT 'موعد الاجتماع'";
+            }
+            if (empty($batchCols['meeting_id'])) {
+                $batchAdds[] = "ADD COLUMN `meeting_id` VARCHAR(80) NULL DEFAULT NULL COMMENT 'رقم الاجتماع Teams/Zoom'";
+            }
+            if (empty($batchCols['meeting_code'])) {
+                $batchAdds[] = "ADD COLUMN `meeting_code` VARCHAR(80) NULL DEFAULT NULL COMMENT 'رمز دخول الاجتماع'";
+            }
+            if ($batchAdds) {
+                $pdo->exec('ALTER TABLE `tbloutgoing_batches` ' . implode(', ', $batchAdds));
+            }
+        }
+        $cols = dms_db_column_map('tblcorrespondence');
+        $alters = [];
+        if (empty($cols['meeting_url'])) {
+            $alters[] = "ADD COLUMN `meeting_url` VARCHAR(500) NULL DEFAULT NULL COMMENT 'رابط اجتماع الصادر المفرد'";
+        }
+        if (empty($cols['meeting_title'])) {
+            $alters[] = "ADD COLUMN `meeting_title` VARCHAR(200) NULL DEFAULT NULL COMMENT 'عنوان الاجتماع'";
+        }
+        if (empty($cols['meeting_at'])) {
+            $alters[] = "ADD COLUMN `meeting_at` DATETIME NULL DEFAULT NULL COMMENT 'موعد الاجتماع'";
+        }
+        if (empty($cols['meeting_id'])) {
+            $alters[] = "ADD COLUMN `meeting_id` VARCHAR(80) NULL DEFAULT NULL COMMENT 'رقم الاجتماع Teams/Zoom'";
+        }
+        if (empty($cols['meeting_code'])) {
+            $alters[] = "ADD COLUMN `meeting_code` VARCHAR(80) NULL DEFAULT NULL COMMENT 'رمز دخول الاجتماع'";
+        }
+        if (empty($cols['meeting_link_sent_at'])) {
+            $alters[] = "ADD COLUMN `meeting_link_sent_at` DATETIME NULL DEFAULT NULL COMMENT 'وقت إرسال رابط الاجتماع للمستلم'";
+        }
+        if (empty($cols['meeting_link_sent_channel'])) {
+            $alters[] = "ADD COLUMN `meeting_link_sent_channel` VARCHAR(20) NULL DEFAULT NULL COMMENT 'email|whatsapp'";
+        }
+        if ($alters) {
+            $pdo->exec('ALTER TABLE `tblcorrespondence` ' . implode(', ', $alters));
+        }
+    } catch (Throwable $e) {
+        error_log('DMS meeting schema: ' . $e->getMessage());
+    }
+}
+
+/** @return array{url:string,title:string,at:string,meeting_id:string,code:string,sent_at:string,sent_channel:string} */
+function correspondence_meeting_data(?array $corr = null, ?array $batch = null): array
+{
+    if (function_exists('ensure_corr_meeting_schema')) {
+        ensure_corr_meeting_schema();
+    }
+    $empty = ['url' => '', 'title' => '', 'at' => '', 'meeting_id' => '', 'code' => '', 'sent_at' => '', 'sent_channel' => ''];
+    $row = null;
+    $batchId = (int) ($batch['id'] ?? $corr['batch_id'] ?? 0);
+    if ($batchId > 0) {
+        if (is_array($batch) && array_key_exists('meeting_url', $batch)) {
+            $row = $batch;
+        } else {
+            try {
+                $st = db()->prepare(
+                    'SELECT meeting_url, meeting_title, meeting_at, meeting_id, meeting_code FROM `tbloutgoing_batches` WHERE id = ? LIMIT 1'
+                );
+                $st->execute([$batchId]);
+                $found = $st->fetch();
+                $row = is_array($found) ? $found : null;
+            } catch (Throwable $e) {
+                $row = null;
+            }
+        }
+    } elseif (is_array($corr)) {
+        $row = $corr;
+    }
+    if (!is_array($row)) {
+        return $empty;
+    }
+
+    return [
+        'url' => trim((string) ($row['meeting_url'] ?? '')),
+        'title' => trim((string) ($row['meeting_title'] ?? '')),
+        'at' => trim((string) ($row['meeting_at'] ?? '')),
+        'meeting_id' => trim((string) ($row['meeting_id'] ?? '')),
+        'code' => trim((string) ($row['meeting_code'] ?? '')),
+        'sent_at' => trim((string) ($corr['meeting_link_sent_at'] ?? '')),
+        'sent_channel' => trim((string) ($corr['meeting_link_sent_channel'] ?? '')),
+    ];
+}
+
+/**
+ * استخراج الرابط ورقم الاجتماع ورمز الدخول من أي دعوة (Teams / Zoom / Meet / Webex / رابط عام).
+ *
+ * @return array{url:string,title:string,meeting_id:string,code:string}
+ */
+function correspondence_parse_meeting_invite(string $text): array
+{
+    $out = ['url' => '', 'title' => '', 'meeting_id' => '', 'code' => ''];
+    $text = html_entity_decode(str_replace(["\r\n", "\r"], "\n", $text), ENT_QUOTES, 'UTF-8');
+    $text = trim($text);
+    if ($text === '') {
+        return $out;
+    }
+    if (preg_match('#https?://[^\s<>"\']+#i', $text, $m)) {
+        $out['url'] = rtrim($m[0], '.,);]>');
+    }
+    if (preg_match('/(?:Topic|Subject|Meeting\s*title|عنوان الاجتماع|الموضوع)\s*[:：]\s*(.+)/iu', $text, $m)) {
+        $out['title'] = trim($m[1]);
+    }
+    if (preg_match('/(?:Meeting\s*ID|Meeting\s*number|Conference\s*ID|Zoom\s*ID|معرّف الاجتماع|رقم الاجتماع)\s*[:：]?\s*([0-9][0-9\s\-]{5,})/iu', $text, $m)) {
+        $out['meeting_id'] = trim(preg_replace('/\s+/', ' ', $m[1]));
+    } elseif (preg_match('/(?:Meeting\s*ID|معرّف الاجتماع|رقم الاجتماع)\s*[:：]?\s*([a-z]{3}-[a-z]{4}-[a-z]{3})/iu', $text, $m)) {
+        $out['meeting_id'] = strtolower(trim($m[1]));
+    } elseif ($out['url'] !== '') {
+        if (preg_match('#teams\.(?:microsoft|live)\.[^/]+/meet/(\d+)#i', $out['url'], $m)
+            || preg_match('#zoom\.[^/]+/j/(\d+)#i', $out['url'], $m)
+            || preg_match('#webex\.[^/]+/.*/(\d{9,})#i', $out['url'], $m)
+        ) {
+            $id = $m[1];
+            $out['meeting_id'] = preg_match('#teams\.#i', $out['url'])
+                ? trim(chunk_split($id, 3, ' '))
+                : $id;
+        } elseif (preg_match('#meet\.google\.com/([a-z]{3}-[a-z]{4}-[a-z]{3})#i', $out['url'], $m)) {
+            $out['meeting_id'] = strtolower($m[1]);
+        }
+    }
+    if (preg_match('/(?:Passcode|Password|Pwd|PIN|رمز الدخول|رمز المرور|كلمة المرور)\s*[:：]?\s*(\S+)/iu', $text, $m)) {
+        $out['code'] = trim($m[1], " .,;");
+    } elseif ($out['url'] !== '' && preg_match('/[?&](?:pwd|password|passcode)=([^&\s]+)/i', $out['url'], $m)) {
+        $out['code'] = rawurldecode($m[1]);
+    }
+    if ($out['title'] === '') {
+        $platform = correspondence_meeting_platform($out['url'] !== '' ? $out['url'] : $text);
+        if ($platform === 'teams' || preg_match('/Microsoft\s+Teams/i', $text)) {
+            $out['title'] = 'Microsoft Teams meeting';
+        } elseif ($platform === 'zoom' || preg_match('/Zoom\s+Meeting/i', $text)) {
+            $out['title'] = 'Zoom Meeting';
+        } elseif ($platform === 'meet' || preg_match('/Google\s+Meet/i', $text)) {
+            $out['title'] = 'Google Meet';
+        } elseif ($platform === 'webex' || preg_match('/Webex/i', $text)) {
+            $out['title'] = 'Webex';
+        } elseif ($platform === 'jitsi') {
+            $out['title'] = 'Jitsi Meet';
+        }
+    }
+
+    return $out;
+}
+
+function correspondence_meeting_has_url(array $meeting): bool
+{
+    return trim((string) ($meeting['url'] ?? '')) !== '';
+}
+
+function correspondence_is_remote_attendee(array $corr): bool
+{
+    return (string) ($corr['rsvp_response'] ?? '') === 'attending'
+        && (string) ($corr['rsvp_mode'] ?? '') === 'remote'
+        && (!function_exists('correspondence_is_cancelled') || !correspondence_is_cancelled($corr));
+}
+
+function correspondence_normalize_meeting_input(array $data): array
+{
+    $url = trim((string) ($data['meeting_url'] ?? ''));
+    $title = trim((string) ($data['meeting_title'] ?? ''));
+    $datePart = trim((string) ($data['meeting_at_date'] ?? ''));
+    $timePart = trim((string) ($data['meeting_at_time'] ?? ''));
+    $atRaw = trim((string) ($data['meeting_at'] ?? ''));
+    if ($datePart !== '') {
+        $atRaw = $datePart . ' ' . ($timePart !== '' ? $timePart : '00:00');
+    }
+    $meetingId = trim((string) ($data['meeting_id'] ?? ''));
+    $meetingId = trim(preg_replace('/\s*(?:Passcode|Password|Pwd|PIN|رمز الدخول|رمز المرور).*$/iu', '', $meetingId));
+    $code = trim((string) ($data['meeting_code'] ?? ''));
+    $paste = trim((string) ($data['meeting_paste'] ?? ''));
+    $blobs = [];
+    if ($paste !== '') {
+        $blobs[] = $paste;
+    }
+    if ($url !== '') {
+        $blobs[] = $url;
+    }
+    foreach ($blobs as $blob) {
+        $parsed = correspondence_parse_meeting_invite($blob);
+        if ($url === '' || !preg_match('#^https?://#i', $url)) {
+            $url = $parsed['url'];
+        }
+        if ($title === '') {
+            $title = $parsed['title'];
+        }
+        if ($meetingId === '') {
+            $meetingId = $parsed['meeting_id'];
+        }
+        if ($code === '') {
+            $code = $parsed['code'];
+        }
+    }
+    if ($url !== '' && !preg_match('#^https?://#i', $url)) {
+        throw new InvalidArgumentException(__('meeting.url_invalid'));
+    }
+    $at = null;
+    if ($atRaw !== '') {
+        $atRaw = str_replace('T', ' ', $atRaw);
+        $ts = strtotime($atRaw);
+        if ($ts === false) {
+            throw new InvalidArgumentException(__('meeting.at_invalid'));
+        }
+        $at = date('Y-m-d H:i:s', $ts);
+    }
+    if (function_exists('mb_substr')) {
+        $url = $url !== '' ? mb_substr($url, 0, 500) : '';
+        $title = $title !== '' ? mb_substr($title, 0, 200) : '';
+        $meetingId = $meetingId !== '' ? mb_substr($meetingId, 0, 80) : '';
+        $code = $code !== '' ? mb_substr($code, 0, 80) : '';
+    } else {
+        $url = $url !== '' ? substr($url, 0, 500) : '';
+        $title = $title !== '' ? substr($title, 0, 200) : '';
+        $meetingId = $meetingId !== '' ? substr($meetingId, 0, 80) : '';
+        $code = $code !== '' ? substr($code, 0, 80) : '';
+    }
+
+    return [
+        'url' => $url,
+        'title' => $title,
+        'at' => $at,
+        'meeting_id' => $meetingId,
+        'code' => $code,
+    ];
+}
+
+function correspondence_save_meeting(?int $batchId, ?int $corrId, array $data): void
+{
+    ensure_corr_meeting_schema();
+    $norm = correspondence_normalize_meeting_input($data);
+    $url = $norm['url'] !== '' ? $norm['url'] : null;
+    $title = $norm['title'] !== '' ? $norm['title'] : null;
+    $meetingId = $norm['meeting_id'] !== '' ? $norm['meeting_id'] : null;
+    $code = $norm['code'] !== '' ? $norm['code'] : null;
+    if ($batchId && $batchId > 0) {
+        db()->prepare(
+            'UPDATE `tbloutgoing_batches` SET meeting_url = ?, meeting_title = ?, meeting_at = ?, meeting_id = ?, meeting_code = ? WHERE id = ?'
+        )->execute([$url, $title, $norm['at'], $meetingId, $code, $batchId]);
+
+        return;
+    }
+    if ($corrId && $corrId > 0) {
+        db()->prepare(
+            'UPDATE `tblcorrespondence` SET meeting_url = ?, meeting_title = ?, meeting_at = ?, meeting_id = ?, meeting_code = ? WHERE id = ? AND type = ?'
+        )->execute([$url, $title, $norm['at'], $meetingId, $code, $corrId, 'outgoing']);
+    }
+}
+
+function correspondence_meeting_platform(string $url): string
+{
+    $raw = strtolower(trim($url));
+    $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+    if ($host === '' && $raw !== '') {
+        if (str_contains($raw, 'teams')) {
+            return 'teams';
+        }
+        if (str_contains($raw, 'zoom')) {
+            return 'zoom';
+        }
+        if (str_contains($raw, 'google meet') || str_contains($raw, 'meet.google')) {
+            return 'meet';
+        }
+        if (str_contains($raw, 'webex')) {
+            return 'webex';
+        }
+        if (str_contains($raw, 'jitsi')) {
+            return 'jitsi';
+        }
+
+        return 'other';
+    }
+    if ($host === '') {
+        return 'other';
+    }
+    if (str_contains($host, 'teams.microsoft') || str_contains($host, 'teams.live')) {
+        return 'teams';
+    }
+    if (str_contains($host, 'zoom.')) {
+        return 'zoom';
+    }
+    if (str_contains($host, 'meet.google')) {
+        return 'meet';
+    }
+    if (str_contains($host, 'webex')) {
+        return 'webex';
+    }
+    if (str_contains($host, 'jit.si') || str_contains($host, 'jitsi')) {
+        return 'jitsi';
+    }
+    if (str_contains($host, 'whereby.')) {
+        return 'whereby';
+    }
+    if (str_contains($host, 'goto.com') || str_contains($host, 'gotomeeting')) {
+        return 'gotomeeting';
+    }
+
+    return 'other';
+}
+
+function correspondence_meeting_platform_label(string $url): string
+{
+    $platform = correspondence_meeting_platform($url);
+    $key = 'meeting.platform_' . $platform;
+
+    return function_exists('__') ? __($key) : $platform;
+}
+
+function correspondence_meeting_at_local(string $at): string
+{
+    $parts = correspondence_meeting_at_parts($at);
+
+    return $parts['date'] !== '' ? ($parts['date'] . 'T' . ($parts['time'] !== '' ? $parts['time'] : '00:00')) : '';
+}
+
+/** @return array{date:string,time:string} */
+function correspondence_meeting_at_parts(string $at): array
+{
+    $at = trim($at);
+    if ($at === '' || str_starts_with($at, '0000')) {
+        return ['date' => '', 'time' => ''];
+    }
+    $ts = strtotime($at);
+
+    return $ts ? ['date' => date('Y-m-d', $ts), 'time' => date('H:i', $ts)] : ['date' => '', 'time' => ''];
 }
 
 function correspondence_rsvp_required(array $corr): bool
@@ -8570,8 +8968,8 @@ function rsvp_response_label(?string $response, ?string $mode = null): string
     if ((string) $response === 'attending') {
         $label = __('rsvp.attending');
         $modeLabel = rsvp_mode_label($mode, true);
-
-        return $modeLabel !== '' ? $label . ' · ' . $modeLabel : $label;
+        // مسافات غير قابلة للكسر حتى يبقى «سيحضر · عن بعد» سطراً واحداً
+        return $modeLabel !== '' ? $label . "\u{00A0}·\u{00A0}" . $modeLabel : $label;
     }
 
     return match ((string) $response) {

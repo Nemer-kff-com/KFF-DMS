@@ -270,8 +270,9 @@ function letter_template_placeholder_tokens(): array
         ['token' => '{number}', 'label' => __('tpl.token_number'), 'tip' => __('tpl.token_number_tip'), 'icon' => 'bi-hash'],
         ['token' => '{title}', 'label' => __('tpl.token_title'), 'tip' => __('tpl.token_title_tip'), 'icon' => 'bi-award'],
         ['token' => '{name}', 'label' => __('tpl.token_name'), 'tip' => __('tpl.token_name_tip'), 'icon' => 'bi-person'],
-        ['token' => '{honorific}', 'label' => __('tpl.token_honorific'), 'tip' => __('tpl.token_honorific_tip'), 'icon' => 'bi-heart'],
+        ['token' => '{title} {name}', 'label' => __('tpl.token_title_name'), 'tip' => __('tpl.token_title_name_tip'), 'icon' => 'bi-person-vcard'],
         ['token' => '{honored_name}', 'label' => __('tpl.token_honored'), 'tip' => __('tpl.token_honored_tip'), 'icon' => 'bi-person-badge'],
+        ['token' => '{honorific}', 'label' => __('tpl.token_honorific'), 'tip' => __('tpl.token_honorific_tip'), 'icon' => 'bi-heart'],
         ['token' => '{job}', 'label' => __('tpl.token_job'), 'tip' => __('tpl.token_job_tip'), 'icon' => 'bi-briefcase'],
         ['token' => '{org}', 'label' => __('tpl.token_org'), 'tip' => __('tpl.token_org_tip'), 'icon' => 'bi-building'],
         ['token' => '{subject}', 'label' => __('tpl.token_subject'), 'tip' => __('tpl.token_subject_tip'), 'icon' => 'bi-chat-text'],
@@ -566,12 +567,12 @@ function letter_line_spacing_options(): array
 function letter_indent_options(): array
 {
     return [
-        '3' => ['label' => '3 سم', 'css' => '3cm'],
-        '5' => ['label' => '5 سم', 'css' => '5cm'],
-        '7' => ['label' => '7 سم', 'css' => '7cm'],
-        '9' => ['label' => '9 سم', 'css' => '9cm'],
-        '11' => ['label' => '11 سم', 'css' => '11cm'],
-        '13' => ['label' => '13 سم', 'css' => '13cm'],
+        '3' => ['label' => '3', 'css' => '3cm'],
+        '5' => ['label' => '5', 'css' => '5cm'],
+        '7' => ['label' => '7', 'css' => '7cm'],
+        '9' => ['label' => '9', 'css' => '9cm'],
+        '11' => ['label' => '11', 'css' => '11cm'],
+        '13' => ['label' => '13', 'css' => '13cm'],
     ];
 }
 
@@ -583,38 +584,165 @@ function letter_indent_normalize_code(string $code): string
     return isset($opts[$code]) ? $code : '';
 }
 
-function render_letter_line_spacing_picker(): void
+/** مسافة رأسية قبل/بعد السطر (سم) دون ضغط Enter. */
+function letter_vspace_options(): array
+{
+    return [
+        '1' => ['label' => '0.1', 'css' => '0.1cm'],
+        '2' => ['label' => '0.2', 'css' => '0.2cm'],
+        '3' => ['label' => '0.3', 'css' => '0.3cm'],
+        '4' => ['label' => '0.4', 'css' => '0.4cm'],
+        '5' => ['label' => '0.5', 'css' => '0.5cm'],
+        '10' => ['label' => '1', 'css' => '1cm'],
+        '15' => ['label' => '1.5', 'css' => '1.5cm'],
+        '20' => ['label' => '2', 'css' => '2cm'],
+        '30' => ['label' => '3', 'css' => '3cm'],
+    ];
+}
+
+function letter_vspace_normalize_code(string $code): string
+{
+    $code = preg_replace('/[^0-9]/', '', $code) ?? '';
+    $opts = letter_vspace_options();
+
+    return isset($opts[$code]) ? $code : '';
+}
+
+/** CSS مسافة قبل/بعد من نفس قائمة الخيارات (سنتيمتر مطابق للوسم). */
+function letter_vspace_css(): string
+{
+    $css = '.letter-vspace{display:block;box-sizing:border-box;margin:0;padding:0;}';
+    foreach (letter_vspace_options() as $code => $opt) {
+        $len = (string) ($opt['css'] ?? '');
+        if ($len === '') {
+            continue;
+        }
+        $css .= '.letter-vspace-sb-' . $code . '{padding-top:' . $len . ';}';
+        $css .= '.letter-vspace-sa-' . $code . '{padding-bottom:' . $len . ';}';
+    }
+
+    return $css;
+}
+
+/** نص التحية/التكريم من صف المعاملة أو الجهة. */
+function letter_row_honorific_text(array $row): string
+{
+    if (function_exists('correspondence_archived_party')
+        && in_array((string) ($row['type'] ?? ''), ['incoming', 'outgoing'], true)
+    ) {
+        $party = correspondence_archived_party($row);
+
+        return trim((string) ($party['honorific'] ?? ''));
+    }
+    if (function_exists('entity_honorific_value')) {
+        return trim((string) entity_honorific_value($row));
+    }
+
+    return trim((string) ($row['snap_honorific'] ?? $row['honorific'] ?? ''));
+}
+
+/**
+ * أنماط التحية → توزيع في سطر واحد (بدون كسر سطر):
+ * - {indent:N}{title} {name} {honorific}{/indent}
+ * - {title} {name} {indent:N}{honorific}{/indent}
+ */
+function letter_normalize_indent_honorific_spread(string $text, array $row = []): string
+{
+    $honorific = letter_row_honorific_text($row);
+    $honorificToken = '{honorific}';
+
+    // لقب/اسم ثم إزاحة التكريم فقط — يبقى سطراً واحداً عبر spread
+    $text = preg_replace_callback(
+        '/(\{(?:title|title_prefix|directed_to|name)\}(?:\s+\{(?:title|title_prefix|directed_to|name)\})*)\s*\{indent:(\d+)\}\s*\{honorific\}\s*\{\/indent\}/iu',
+        static function (array $m): string {
+            $code = letter_indent_normalize_code((string) $m[2]);
+            if ($code === '') {
+                return $m[0];
+            }
+
+            return '{spread:' . $code . '}' . trim((string) $m[1]) . '{spread_sep}{honorific}{/spread}';
+        },
+        $text
+    ) ?? $text;
+
+    return preg_replace_callback(
+        '/\{indent:(\d+)\}(.*?)\{\/indent\}/su',
+        static function (array $m) use ($honorific, $honorificToken): string {
+            $code = letter_indent_normalize_code((string) $m[1]);
+            $inner = (string) $m[2];
+            if ($code === '' || preg_match('/\{(?:indent|spread):/i', $inner)) {
+                return $m[0];
+            }
+            $main = '';
+            $end = '';
+            if ($honorific !== ''
+                && preg_match('/^(.*?)\s+' . preg_quote($honorific, '/') . '\s*$/su', $inner, $parts) === 1
+            ) {
+                $main = rtrim((string) $parts[1]);
+                $end = $honorific;
+            } elseif (preg_match('/^(.*?)\s+' . preg_quote($honorificToken, '/') . '\s*$/su', $inner, $parts) === 1) {
+                $main = rtrim((string) $parts[1]);
+                $end = $honorificToken;
+            }
+            if ($main === '' || $end === '') {
+                return $m[0];
+            }
+
+            return '{spread:' . $code . '}' . $main . '{spread_sep}' . $end . '{/spread}';
+        },
+        $text
+    ) ?? $text;
+}
+
+function render_letter_value_picker(string $icon, string $label, string $tip, string $dataAttr, array $options): void
 {
     ?>
-    <label class="letter-token-btn is-format is-font"
+    <label class="letter-token-btn is-format is-icon letter-value-picker"
            data-bs-toggle="tooltip" data-bs-placement="top"
-           title="<?= e(__('tpl.token_ls_tip')) ?>">
-        <i class="bi bi-distribute-vertical" aria-hidden="true"></i>
-        <select class="letter-font-select letter-ls-select" data-letter-ls dir="ltr" aria-label="<?= e(__('tpl.token_ls')) ?>">
-            <option value=""><?= e(__('tpl.token_ls')) ?></option>
-            <?php foreach (letter_line_spacing_options() as $code => $opt): ?>
-                <option value="<?= e($code) ?>"><?= e($opt['label']) ?></option>
+           title="<?= e($tip) ?>">
+        <i class="bi <?= e($icon) ?>" aria-hidden="true"></i>
+        <select class="letter-value-native" <?= $dataAttr ?> dir="ltr" aria-label="<?= e($label) ?>">
+            <option value=""><?= e($label) ?></option>
+            <?php foreach ($options as $code => $opt): ?>
+                <option value="<?= e((string) $code) ?>"><?= e((string) ($opt['label'] ?? $code)) ?></option>
             <?php endforeach; ?>
         </select>
     </label>
     <?php
 }
 
+function render_letter_line_spacing_picker(): void
+{
+    render_letter_value_picker(
+        'bi-distribute-vertical',
+        __('tpl.token_ls'),
+        __('tpl.token_ls_tip'),
+        'data-letter-ls',
+        letter_line_spacing_options()
+    );
+}
+
 function render_letter_indent_picker(): void
 {
-    ?>
-    <label class="letter-token-btn is-format is-font"
-           data-bs-toggle="tooltip" data-bs-placement="top"
-           title="<?= e(__('tpl.token_indent_tip')) ?>">
-        <i class="bi bi-text-indent-right" aria-hidden="true"></i>
-        <select class="letter-font-select letter-indent-select" data-letter-indent dir="ltr" aria-label="<?= e(__('tpl.token_indent')) ?>">
-            <option value=""><?= e(__('tpl.token_indent')) ?></option>
-            <?php foreach (letter_indent_options() as $code => $opt): ?>
-                <option value="<?= e($code) ?>"><?= e($opt['label']) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </label>
-    <?php
+    render_letter_value_picker(
+        'bi-text-indent-right',
+        __('tpl.token_indent'),
+        __('tpl.token_indent_tip'),
+        'data-letter-indent',
+        letter_indent_options()
+    );
+}
+
+function render_letter_vspace_picker(string $kind): void
+{
+    $kind = $kind === 'sb' ? 'sb' : 'sa';
+    render_letter_value_picker(
+        $kind === 'sb' ? 'bi-align-top' : 'bi-align-bottom',
+        __($kind === 'sb' ? 'tpl.token_space_before' : 'tpl.token_space_after'),
+        __($kind === 'sb' ? 'tpl.token_space_before_tip' : 'tpl.token_space_after_tip'),
+        $kind === 'sb' ? 'data-letter-sb' : 'data-letter-sa',
+        letter_vspace_options()
+    );
 }
 
 function letter_template_token_is_format(array $item): bool
@@ -766,6 +894,8 @@ function render_letter_placeholder_toolbar(string $textareaId, string $previewLa
                 <?php endforeach; ?>
                 <?php render_letter_line_spacing_picker(); ?>
                 <?php render_letter_indent_picker(); ?>
+                <?php render_letter_vspace_picker('sb'); ?>
+                <?php render_letter_vspace_picker('sa'); ?>
                 <button type="button" class="letter-token-btn is-format is-icon"
                         data-letter-clear-format="1"
                         data-bs-toggle="tooltip" data-bs-placement="top"
@@ -823,23 +953,28 @@ function render_letter_body_ruler(): void
     <?php
 }
 
-function render_letter_lang_editor(string $arId, string $enId, string $arValue, string $enValue, int $rows = 10, bool $arRequired = false, array $tokenTips = [], array $hideTokens = [], string $hint = '', array $extraTokens = [], array $channelPreviews = []): void
+function render_letter_lang_editor(string $arId, string $enId, string $arValue, string $enValue, int $rows = 10, bool $arRequired = false, array $tokenTips = [], array $hideTokens = [], string $hint = '', array $extraTokens = [], array $channelPreviews = [], string $barEndHtml = ''): void
 {
     $paneAr = $arId . '-pane';
     $paneEn = $enId . '-pane';
     ?>
-    <ul class="nav nav-tabs letter-lang-tabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#<?= e($paneAr) ?>" role="tab">
-                <?= e(__('tpl.body_ar')) ?>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#<?= e($paneEn) ?>" role="tab">
-                <?= e(__('tpl.body_en')) ?>
-            </button>
-        </li>
-    </ul>
+    <div class="letter-lang-bar">
+        <ul class="nav nav-tabs letter-lang-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#<?= e($paneAr) ?>" role="tab">
+                    <?= e(__('tpl.body_ar')) ?>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" type="button" data-bs-toggle="tab" data-bs-target="#<?= e($paneEn) ?>" role="tab">
+                    <?= e(__('tpl.body_en')) ?>
+                </button>
+            </li>
+        </ul>
+        <?php if ($barEndHtml !== ''): ?>
+            <div class="letter-lang-bar-end"><?= $barEndHtml ?></div>
+        <?php endif; ?>
+    </div>
     <div class="tab-content letter-lang-panes">
         <div class="tab-pane fade show active" id="<?= e($paneAr) ?>" role="tabpanel">
             <?php render_letter_placeholder_toolbar($arId, 'ar', $arValue, $tokenTips, $hideTokens, $extraTokens, $channelPreviews); ?>
@@ -1098,6 +1233,7 @@ function render_letter_preview_modal(): void
     }
     $done = true;
     ?>
+    <style id="letter-vspace-css"><?= letter_vspace_css() ?></style>
     <div class="modal fade" id="letterPreviewModal" tabindex="-1" aria-labelledby="letterPreviewModalLabel" aria-hidden="true"
          data-preview-url="<?= e(base_url('admin/letter_preview.php')) ?>"
          data-preview-fail="<?= e(__('tpl.preview_fail')) ?>">
@@ -1144,6 +1280,10 @@ function letter_body_plain(string $text, array $row = []): string
     $text = preg_replace('#\{font:[a-z0-9_]+\}#', '', $text) ?? $text;
     $text = preg_replace('#\{ls:[0-9]+\}#', '', $text) ?? $text;
     $text = preg_replace('#\{indent:[0-9]+\}#', '', $text) ?? $text;
+    $text = preg_replace('#\{spread:[0-9]+\}#', '', $text) ?? $text;
+    $text = preg_replace('#\{sb:[0-9]+\}#', '', $text) ?? $text;
+    $text = preg_replace('#\{sa:[0-9]+\}#', '', $text) ?? $text;
+    $text = str_replace(['{spread_sep}', '{/spread}', '{/sb}', '{/sa}'], [' ', '', '', ''], $text);
     $text = str_replace('{signature}', '', $text);
     if (str_contains($text, '{link_qr}')) {
         $url = function_exists('correspondence_letter_link_url') ? correspondence_letter_link_url($row) : '';
@@ -1159,7 +1299,7 @@ function letter_body_plain(string $text, array $row = []): string
         }
         $text = str_replace('{link_qr}', $plainLink, $text);
     }
-    $text = str_replace(['{center}', '{/center}', '{right}', '{/right}', '{left}', '{/left}', '{justify}', '{/justify}', '{ul}', '{/ul}', '{/font}', '{/ls}', '{/indent}', '{logo}', '{i}', '{/i}'], '', $text);
+    $text = str_replace(['{center}', '{/center}', '{right}', '{/right}', '{left}', '{/left}', '{justify}', '{/justify}', '{ul}', '{/ul}', '{/font}', '{/ls}', '{/indent}', '{/spread}', '{/sb}', '{/sa}', '{logo}', '{i}', '{/i}'], '', $text);
     return letter_strip_from_marks($text);
 }
 
@@ -1359,13 +1499,15 @@ function letter_collapse_redundant_wraps(string $text): string
         // إزاحة: آخر وسم فتح هو المعتمد
         '/((?:\{indent:\d+\})+)(.*?)((?:\{\/indent\})+)/su',
         '/((?:\{ls:\d+\})+)(.*?)((?:\{\/ls\})+)/su',
+        '/((?:\{sb:\d+\})+)(.*?)((?:\{\/sb\})+)/su',
+        '/((?:\{sa:\d+\})+)(.*?)((?:\{\/sa\})+)/su',
         '/((?:\{font:[a-z0-9_]+\})+)(.*?)((?:\{\/font\})+)/siu',
     ];
     foreach ($patterns as $pattern) {
         $text = preg_replace_callback($pattern, static function (array $m): string {
             $opens = $m[1];
             $inner = $m[2];
-            if (preg_match_all('/\{((?:indent|ls):\d+|font:[a-z0-9_]+)\}/i', $opens, $tags) && $tags[1] !== []) {
+            if (preg_match_all('/\{((?:indent|ls|sb|sa):\d+|font:[a-z0-9_]+)\}/i', $opens, $tags) && $tags[1] !== []) {
                 $last = (string) end($tags[1]);
 
                 return '{' . $last . '}' . $inner . '{/' . (str_contains($last, ':') ? explode(':', $last, 2)[0] : $last) . '}';
@@ -1426,7 +1568,10 @@ function letter_normalize_space_indents(string $text): string
 
 function render_letter_body_html(string $text, bool $email = false, array $row = []): string
 {
-    $text = letter_collapse_redundant_wraps(letter_normalize_space_indents($text));
+    $text = letter_normalize_indent_honorific_spread(
+        letter_collapse_redundant_wraps(letter_normalize_space_indents($text)),
+        $row
+    );
     if ($email) {
         $row['_email_font'] = letter_email_forced_family();
         $row['_email_mso'] = 'Arial';
@@ -1740,12 +1885,12 @@ function letter_text_html(string $text, bool $email = false, array $row = []): s
 {
     // وسوم تنسيق يتيمة (مثل {/font} بلا فتح) لا تُعرض كنص
     $text = preg_replace(
-        '#\{/(?:font|ls|indent|center|right|left|justify|ul|b|u|i|big)\}#i',
+        '#\{/(?:font|ls|indent|spread|sb|sa|center|right|left|justify|ul|b|u|i|big)\}#i',
         '',
         $text
     ) ?? $text;
     $text = preg_replace(
-        '#\{(?:font:[a-z0-9_]+|ls:[0-9]+|indent:[0-9]+|center|right|left|justify|ul|b|u|i|big)\}#i',
+        '#\{(?:font:[a-z0-9_]+|ls:[0-9]+|indent:[0-9]+|spread:[0-9]+|sb:[0-9]+|sa:[0-9]+|spread_sep|center|right|left|justify|ul|b|u|i|big)\}#i',
         '',
         $text
     ) ?? $text;
@@ -1803,7 +1948,7 @@ function letter_ul_html(string $innerHtml, bool $email, array $row = []): string
 
 function letter_format_segment(string $text, bool $email, array $row = []): string
 {
-    if (!preg_match('#\{(center|right|left|justify|ul|b|u|i|big|font:[a-z0-9_]+|ls:[0-9]+|indent:[0-9]+)\}#', $text, $m, PREG_OFFSET_CAPTURE)) {
+    if (!preg_match('#\{(center|right|left|justify|ul|b|u|i|big|font:[a-z0-9_]+|ls:[0-9]+|indent:[0-9]+|spread:[0-9]+|sb:[0-9]+|sa:[0-9]+)\}#', $text, $m, PREG_OFFSET_CAPTURE)) {
         return letter_text_html($text, $email, $row);
     }
     $openRaw = $m[0][0];
@@ -1816,6 +1961,12 @@ function letter_format_segment(string $text, bool $email, array $row = []): stri
         $close = '{/ls}';
     } elseif (strncmp($tag, 'indent:', 7) === 0) {
         $close = '{/indent}';
+    } elseif (strncmp($tag, 'spread:', 7) === 0) {
+        $close = '{/spread}';
+    } elseif (strncmp($tag, 'sb:', 3) === 0) {
+        $close = '{/sb}';
+    } elseif (strncmp($tag, 'sa:', 3) === 0) {
+        $close = '{/sa}';
     }
     $innerStart = $pos + strlen($openRaw);
     $closePos = strpos($text, $close, $innerStart);
@@ -1835,14 +1986,34 @@ function letter_format_segment(string $text, bool $email, array $row = []): stri
         }
     }
 
-    return letter_text_html(substr($text, 0, $pos), $email, $row)
+    $rawInner = substr($text, $innerStart, $closePos - $innerStart);
+    $before = substr($text, 0, $pos);
+    $after = substr($text, $closePos + strlen($close));
+    // لا تضف سطر Enter فوق مسافة قبل/بعد — القيمة بالسنتيمتر وحدها
+    if (strncmp($tag, 'sa:', 3) === 0 || strncmp($tag, 'sb:', 3) === 0) {
+        $after = preg_replace('/^\r?\n/', '', $after, 1) ?? $after;
+        if (strncmp($tag, 'sb:', 3) === 0) {
+            $before = preg_replace('/\r?\n$/', '', $before, 1) ?? $before;
+        }
+    }
+    if (strncmp($tag, 'spread:', 7) === 0) {
+        $bits = explode('{spread_sep}', $rawInner, 2);
+        $mainHtml = letter_format_segment((string) ($bits[0] ?? ''), $email, $innerRow);
+        $endHtml = letter_format_segment((string) ($bits[1] ?? ''), $email, $innerRow);
+
+        return letter_text_html($before, $email, $row)
+            . letter_format_wrap($tag, $mainHtml . '{spread_sep}' . $endHtml, $email, $innerRow)
+            . letter_format_segment($after, $email, $row);
+    }
+
+    return letter_text_html($before, $email, $row)
         . letter_format_wrap(
             $tag,
-            letter_format_segment(substr($text, $innerStart, $closePos - $innerStart), $email, $innerRow),
+            letter_format_segment($rawInner, $email, $innerRow),
             $email,
             $innerRow
         )
-        . letter_format_segment(substr($text, $closePos + strlen($close)), $email, $row);
+        . letter_format_segment($after, $email, $row);
 }
 
 function letter_format_wrap(string $tag, string $innerHtml, bool $email, array $row = []): string
@@ -1873,6 +2044,49 @@ function letter_format_wrap(string $tag, string $innerHtml, bool $email, array $
         return '<div class="letter-ls-' . $code . '">' . $innerHtml . '</div>';
     }
 
+    if (strncmp($tag, 'spread:', 7) === 0) {
+        $code = letter_indent_normalize_code(substr($tag, 7));
+        $opts = letter_indent_options();
+        $bits = explode('{spread_sep}', $innerHtml, 2);
+        $mainHtml = (string) ($bits[0] ?? '');
+        $endHtml = (string) ($bits[1] ?? '');
+        if ($mainHtml === '' || $endHtml === '') {
+            return $mainHtml . $endHtml;
+        }
+        $gap = ($code !== '' && isset($opts[$code])) ? (string) $opts[$code]['css'] : '2cm';
+        if ($email) {
+            return '<table class="letter-spread" width="100%" cellpadding="0" cellspacing="0" role="presentation" style="'
+                . letter_email_style($row, 'width:100%;margin:0 0 8px;border-collapse:collapse') . '"><tr>'
+                . '<td style="' . letter_email_style($row, 'text-align:right;vertical-align:baseline;padding:0') . '">' . $mainHtml . '</td>'
+                . '<td style="' . letter_email_style($row, 'width:' . $gap . ';min-width:' . $gap . ';padding:0;font-size:1px;line-height:1px') . '">&nbsp;</td>'
+                . '<td style="' . letter_email_style($row, 'text-align:left;vertical-align:baseline;padding:0;white-space:nowrap') . '">' . $endHtml . '</td>'
+                . '</tr></table>';
+        }
+
+        return '<div class="letter-spread letter-spread-' . ($code !== '' ? $code : '9') . '">'
+            . '<span class="letter-spread-main">' . $mainHtml . '</span>'
+            . '<span class="letter-spread-gap" aria-hidden="true"></span>'
+            . '<span class="letter-spread-end">' . $endHtml . '</span>'
+            . '</div>';
+    }
+
+    if (strncmp($tag, 'sb:', 3) === 0 || strncmp($tag, 'sa:', 3) === 0) {
+        $kind = strncmp($tag, 'sb:', 3) === 0 ? 'sb' : 'sa';
+        $code = letter_vspace_normalize_code(substr($tag, 3));
+        $opts = letter_vspace_options();
+        if ($code === '' || !isset($opts[$code])) {
+            return $innerHtml;
+        }
+        $css = (string) $opts[$code]['css'];
+        if ($email) {
+            $pad = ($kind === 'sb' ? 'padding-top:' : 'padding-bottom:') . $css . ';margin:0';
+
+            return '<div style="' . letter_email_style($row, $pad) . '">' . $innerHtml . '</div>';
+        }
+
+        return '<div class="letter-vspace letter-vspace-' . $kind . ' letter-vspace-' . $kind . '-' . $code . '">' . $innerHtml . '</div>';
+    }
+
     if (strncmp($tag, 'indent:', 7) === 0) {
         // الإزاحة للخطاب المطبوع فقط — البريد بمحاذاة موحّدة
         if ($email) {
@@ -1884,7 +2098,11 @@ function letter_format_wrap(string $tag, string $innerHtml, bool $email, array $
             return $innerHtml;
         }
 
-        return '<div class="letter-indent letter-indent-' . $code . '">' . $innerHtml . '</div>';
+        // فجوة قبل النص داخل نفس السطر (ليس <div> ولا سطر جديد)
+        return '<span class="letter-indent letter-indent-' . $code . '">'
+            . '<span class="letter-indent-gap" aria-hidden="true"></span>'
+            . $innerHtml
+            . '</span>';
     }
 
     if ($tag === 'ul') {

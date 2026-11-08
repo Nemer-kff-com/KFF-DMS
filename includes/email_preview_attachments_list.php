@@ -34,12 +34,12 @@ if ($emailPreviewAttachments === []) {
                 <?php if ($attUrl !== ''): ?>
                     <a class="email-preview-attachment-link" href="<?= e($attUrl) ?>" target="_blank" rel="noopener">
                         <i class="bi <?= $icon ?>" aria-hidden="true"></i>
-                        <span><?= e($attName) ?></span>
+                        <span dir="ltr"><?= e($attName) ?></span>
                     </a>
                 <?php else: ?>
                     <span class="email-preview-attachment-link email-preview-attachment-link--muted">
                         <i class="bi <?= $icon ?>" aria-hidden="true"></i>
-                        <span><?= e($attName) ?></span>
+                        <span dir="ltr"><?= e($attName) ?></span>
                     </span>
                 <?php endif; ?>
             </li>

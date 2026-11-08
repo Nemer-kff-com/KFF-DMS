@@ -107,6 +107,7 @@ $renderRsvpBlock = static function () use ($rsvpRequired, $rsvpFlash, $corr, $to
                         <?php if (!empty($corr['rsvp_note'])): ?>
                             <div class="small mt-1"><?= e($corr['rsvp_note']) ?></div>
                         <?php endif; ?>
+                        <?php require __DIR__ . '/includes/corr_meeting_join_block.php'; ?>
                     </div>
                     <?php $rsvpAllowRemote = function_exists('correspondence_rsvp_allow_remote') ? correspondence_rsvp_allow_remote($corr) : true; ?>
                     <p class="small text-muted mb-3"><?= e(__($rsvpAllowRemote ? 'rsvp.change_hint' : 'rsvp.change_hint_in_person')) ?></p>

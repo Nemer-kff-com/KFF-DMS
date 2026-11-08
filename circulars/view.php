@@ -230,8 +230,8 @@ require __DIR__ . '/../includes/header.php';
                         <div class="corr-file-row">
                             <div class="corr-file-icon"><i class="bi bi-file-earmark<?= $isPdf ? '-pdf' : '' ?>"></i></div>
                             <div class="corr-file-meta">
-                                <a class="corr-file-name" href="<?= e(file_download_url('circular', (int) $f['id'])) ?>" target="_blank"><?= e($f['file_name']) ?></a>
-                                <span class="dms-file-list-type ms-1"><?= e(dms_upload_file_type_label((string) ($f['file_name'] ?? ''), (string) ($f['file_type'] ?? ''))) ?></span>
+                                <a class="corr-file-name" dir="ltr" href="<?= e(file_download_url('circular', (int) $f['id'])) ?>" target="_blank"><?= e($f['file_name']) ?></a>
+                                <span class="dms-file-list-type" dir="ltr"><?= e(dms_upload_file_type_label((string) ($f['file_name'] ?? ''), (string) ($f['file_type'] ?? ''))) ?></span>
                                 <div class="small text-muted"><?= e($uploader !== '' ? $uploader : __('common.none')) ?> — <?= e(format_datetime($f['uploaded_at'])) ?></div>
                             </div>
                         </div>
